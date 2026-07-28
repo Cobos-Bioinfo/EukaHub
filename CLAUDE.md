@@ -1,57 +1,53 @@
-# CLAUDE.md — euka-atlas
+# CLAUDE.md — EukaHub
 
-Read this first, then the docs below. This file is the resume anchor for a
-fresh session.
+Resume anchor for a fresh session. Read this, then the docs below.
 
 ## What this is
 
-A production-grade rewrite of **Euka-Survey** (a Streamlit app that explores
-public genomic-data availability across the tree of life). The old app lives,
-intact, at `../Euka-Survey` (sibling directory) — read it when porting logic.
+A production-grade rewrite of **Euka-Survey** (a Streamlit app exploring public
+genomic-data availability across the tree of life). The old app lives intact at
+`../Euka-Survey` (sibling dir) — read it when porting logic.
 
-The app answers two questions for any user-picked taxon:
-1. **How much data is there?** (dashboard / "Genomic Resource Summary")
-2. **How is it distributed at a lower taxonomic rank?** (breakdown: table/chart
-   now, interactive Tree of Life later)
+For any user-picked taxon the app answers two questions:
+1. **How much data is there?** (the "Genomic Resource Summary" dashboard)
+2. **How is it distributed at a lower rank?** (breakdown: table/chart now,
+   interactive Tree of Life later)
 
-Data sources (unchanged): NCBI (assemblies), Annotrieve (annotations), ENA
-(RNA-Seq). Dataset is rebuilt offline on a schedule and served **read-only** —
-this single fact drives most of the design.
+Data sources: NCBI (assemblies), Annotrieve (annotations), ENA (RNA-Seq). The
+dataset is rebuilt offline on a schedule and served **read-only** — this drives
+most of the design.
 
 ## Status
 
-Greenfield. Planning is done; the stack is decided; **no application code
-exists yet.** The next work is Phase 0 + Phase 1 in `docs/roadmap.md`.
+Greenfield. Planning done, stack decided, **no application code yet.** Next work
+is Phase 0 + Phase 1 in `docs/roadmap.md`.
 
-## Read these before doing anything
+## Read before doing anything
 
-- `README.md` — overview + status.
-- `DECISIONS.md` — every settled decision (ADR-style) and the few still open.
-- `docs/data-model.md` — **the core doc.** The database design and the
-  reasoning (columnar vs relational, SQL vs graph, tree storage).
-- `docs/architecture.md` — target stack + how it maps onto the deploy host.
+- `docs/data-model.md` — **the core doc.** DB design + taxonomy-tree storage.
+- `docs/architecture.md` — target stack and how it maps to the deploy host.
 - `docs/roadmap.md` — the staged plan.
+- `DECISIONS.md` — every settled decision and the few still open.
+- `README.md` — overview + status.
 
-## Settled stack (see DECISIONS.md for the why)
+## Settled stack (why in DECISIONS.md)
 
 - **DB:** PostgreSQL. Taxonomy = `parent_id` (adjacency) + `ltree` lineage.
-  Feature rollups kept from Euka-Survey. **No ETE3. No `precomputed_taxa`.**
-- **Backend:** FastAPI (Python), REST + auto-OpenAPI. Reuse the old domain
-  logic + build pipeline.
+  Feature rollups kept from Euka-Survey.
+- **Backend:** FastAPI (Python), REST + auto-OpenAPI. Reuse old domain logic.
 - **Frontend:** React + TypeScript.
 - **Packaging:** Docker + docker-compose.
 - **Pipeline:** Python; taxonomy from NCBI taxdump; rollup via DuckDB/Polars.
 
-## Non-negotiables (do not reintroduce the old pain)
+## Non-negotiables (don't reintroduce the old pain)
 
-- Drop **ETE3** entirely (build-time and runtime). Taxonomy lives in Postgres.
-- No `precomputed_taxa`-style denormalized cache. The breakdown is one indexed
-  `ltree` query for **any** root.
-- Serving is **read-only**; the dataset is rebuilt offline. Denormalize freely.
+- **No ETE3** (build or runtime). Taxonomy lives in Postgres.
+- **No `precomputed_taxa`-style cache.** The breakdown is one indexed `ltree`
+  query for any root.
+- **Serving is read-only;** rebuilt offline. Denormalize freely.
 
-## Immediate next step
+## Immediate next step (Phase 1 + the Phase 0 scaffold it needs)
 
-Phase 1 (data foundation) + the Phase 0 scaffold it needs:
 1. Repo layout (`pipeline/`, `api/`, `web/`, `infra/`) + `docker-compose.yml`
    with Postgres.
 2. Load NCBI taxdump into `taxon` (`taxid, name, rank, parent_id, path`).
