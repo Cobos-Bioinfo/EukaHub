@@ -32,12 +32,15 @@ ADR-style. Settled decisions with a one-line why; open forks at the bottom.
 - **Python dependency management: uv** (`pyproject.toml` + `uv.lock`), as in
   Euka-Survey. A uv **workspace** splits deps per service — `core` (shared
   domain model), `api`, `pipeline`.
+- **Rollup engine: Polars** (over DuckDB; Pandas ruled out). Chosen and
+  validated at Phase 1: inputs originate in-process (parsed taxdump) plus a
+  small SQLite read, which Polars ingests natively with no extension/file
+  bridge, and the lineage fan-out reads idiomatically as `split → explode →
+  group_by`. The ~50M-row explode+group-by (1.9M species → 1.83M clades) runs
+  in ~3 s and reproduces Euka-Survey's numbers within 0.3%. DuckDB stays a
+  viable alternative; Pandas is eager/single-threaded/RAM-bound and is the tool
+  this rewrite moves away from.
 
 ## Open — still to decide
 
-- **Rollup engine:** DuckDB vs Polars — pick at Phase 1 when the roll-up is
-  written. **Pandas is ruled out**: the ~30–45M-row lineage explosion is a
-  columnar scan/join/group-by that wants a parallel, larger-than-memory engine;
-  Pandas is eager, single-threaded, RAM-bound, and is the tool this rewrite
-  moves away from. Both finalists fit; the choice is SQL-flavor (DuckDB) vs
-  dataframe-flavor (Polars).
+- None — all forks resolved.

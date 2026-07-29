@@ -19,11 +19,16 @@ most of the design.
 
 ## Status
 
-**Phase 0 scaffold in place** (2026-07-29): uv workspace (`core`/`api`/
-`pipeline`), `web/` Vite placeholder, `infra/docker-compose.yml` with Postgres +
-the `ltree` schema. `core` holds the ported metric config; `pipeline` has the
-taxdump parser + path builder (unit-tested). **Phase 1 (real data load) is the
-active work** — see `docs/roadmap.md`.
+**Phases 0–1 complete & validated** (2026-07-29). uv workspace (`core`/`api`/
+`pipeline`), `web/` Vite placeholder, `infra/docker-compose.yml` (Postgres +
+`ltree`). Phase 1 loaded the taxdump into `taxon` (2.9M nodes, `ltree` paths)
+and rolled leaf features up into `clade_features` (1.83M clades) with Polars —
+no ETE3, no `precomputed_taxa`. Matches Euka-Survey within 0.3%; summary lookup
+and worst-case (Eukaryota→phylum) breakdown both run in <1 ms server-side.
+**Phase 2 (the API) is next** — see `docs/roadmap.md`.
+
+Run the build (Postgres up): `uv run --package eukahub-pipeline python -m
+eukahub_pipeline.build` (add `--skip-download` to reuse an unpacked taxdump).
 
 ## Read before doing anything
 
@@ -50,17 +55,16 @@ active work** — see `docs/roadmap.md`.
   query for any root.
 - **Serving is read-only;** rebuilt offline. Denormalize freely.
 
-## Immediate next step (Phase 1 + the Phase 0 scaffold it needs)
+## Immediate next step (Phase 2 — the API)
 
-1. ~~Repo layout + `docker-compose.yml` with Postgres.~~ **Done** (Phase 0).
-2. Load NCBI taxdump into `taxon` (`taxid, name, rank, parent_id, path`).
-   Parser + path builder exist in `pipeline/…/taxdump.py`; still to do is the
-   download + Postgres COPY load and a node-count check vs the old DB.
-3. Port the rollup into `clade_features`; validate against Euka-Survey numbers
-   (e.g. Eukaryota taxid 2759).
-4. Prove both questions answer fast with no ETE3 and no `precomputed_taxa`.
+Phases 0–1 are done (scaffold + validated data foundation; see Status). Next:
+FastAPI read endpoints — `summary`, `breakdown` (filter/sort/limit pushed down
+via the `ltree` query), `taxon`/lineage breadcrumb, `export.tsv`, name search.
+Generate OpenAPI + TS types from the `core` metric config, and reuse
+Euka-Survey's `src/database.py` filter/sort/limit semantics. See
+`docs/roadmap.md` Phase 2.
 
-## Still open (decide at Phase 1)
+## Still open
 
-Rollup engine: **DuckDB vs Polars** (Pandas ruled out). Frontend (Vite + React
-Router), tree encoding (`ltree`), and uv are now settled — see DECISIONS.md.
+Nothing — all forks resolved. Rollup engine settled on **Polars** at Phase 1
+(DuckDB remains a viable alternative). See DECISIONS.md.
