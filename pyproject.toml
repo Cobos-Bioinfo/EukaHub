@@ -1,0 +1,40 @@
+[project]
+name = "eukahub"
+version = "0.1.0"
+description = "EukaHub — a genomic-resource explorer across the eukaryotic tree of life."
+readme = "README.md"
+requires-python = ">=3.12"
+# The root is a meta-package that pulls in the workspace members, so
+# `uv sync` at the repo root provisions everything. Real code lives in
+# core/, api/, and pipeline/.
+dependencies = [
+    "eukahub-core",
+    "eukahub-api",
+    "eukahub-pipeline",
+]
+
+[tool.uv.workspace]
+members = ["core", "api", "pipeline"]
+
+[tool.uv.sources]
+eukahub-core = { workspace = true }
+eukahub-api = { workspace = true }
+eukahub-pipeline = { workspace = true }
+
+[dependency-groups]
+# Shared dev tooling for the whole workspace.
+dev = [
+    "pytest>=8",
+    "ruff>=0.6",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+# The root ships no code of its own — it only aggregates the members.
+bypass-selection = true
+
+[tool.ruff]
+line-length = 100

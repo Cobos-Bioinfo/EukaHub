@@ -64,13 +64,19 @@ WebGL/canvas problem where React's ecosystem is deep (deck.gl, react-three-fiber
 visx, D3). The DB already supports it: `parent_id` gives lazy-expand-on-click,
 the materialized lineage gives bulk-subtree fetches.
 
+Shipped as a **Vite + React Router SPA** (no SSR need yet — see
+[`../DECISIONS.md`](../DECISIONS.md)).
+
 ## Build pipeline (mostly kept from Euka-Survey)
 
 Stays in Python. Changes:
 
 - **Taxonomy from NCBI taxdump** (`nodes.dmp`, `names.dmp`) instead of ETE3;
   compute `parent_id` + materialized path at build time.
+- **Assemblies via the NCBI `datasets` CLI** (installed in the dev
+  environment) — the `get_assemblies` fetch step ports mostly as-is.
 - **Rollup with DuckDB/Polars** instead of the dict-accumulation loop.
+  (Pandas is deliberately excluded — see `../DECISIONS.md`.)
 - **Target the live DB** (load Postgres) instead of shipping a 400 MB SQLite file.
 - Keep the resumable-snapshot and atomic-swap discipline. Consider Nextflow later
   for deeper guigolab alignment.
