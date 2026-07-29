@@ -1,0 +1,49 @@
+name: eukahub
+
+# Phase 0 scaffold: Postgres (with ltree) + a placeholder API + web.
+# The dataset is loaded offline by the pipeline (Phase 1); serving is read-only.
+
+services:
+  db:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: eukahub
+      POSTGRES_PASSWORD: eukahub
+      POSTGRES_DB: eukahub
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      # Schema (incl. CREATE EXTENSION ltree) is applied on first init.
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U eukahub -d eukahub"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: ..
+      dockerfile: api/Dockerfile
+    environment:
+      DATABASE_URL: postgresql://eukahub:eukahub@db:5432/eukahub
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+
+  web:
+    build:
+      context: ../web
+    environment:
+      # Dev proxy target for /api (see web/vite.config.ts).
+      VITE_API_URL: http://localhost:8000
+    depends_on:
+      - api
+    ports:
+      - "5173:5173"
+
+volumes:
+  pgdata:

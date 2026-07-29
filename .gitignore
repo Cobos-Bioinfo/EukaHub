@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+
+# uv
+# (uv.lock IS committed for reproducibility)
+
+# Node / Vite
+node_modules/
+web/dist/
+*.local
+
+# Data artifacts — never commit source dumps or built DBs
+*.db
+*.db.partial
+*.sqlite
+taxdump/
+*.tar.gz
+data/
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/

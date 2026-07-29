@@ -1,0 +1,14 @@
+.git/
+**/__pycache__/
+**/*.py[cod]
+.venv/
+**/node_modules/
+web/dist/
+.pytest_cache/
+.ruff_cache/
+*.db
+*.db.partial
+taxdump/
+data/
+.env
+.env.*

@@ -19,8 +19,11 @@ most of the design.
 
 ## Status
 
-Greenfield. Planning done, stack decided, **no application code yet.** Next work
-is Phase 0 + Phase 1 in `docs/roadmap.md`.
+**Phase 0 scaffold in place** (2026-07-29): uv workspace (`core`/`api`/
+`pipeline`), `web/` Vite placeholder, `infra/docker-compose.yml` with Postgres +
+the `ltree` schema. `core` holds the ported metric config; `pipeline` has the
+taxdump parser + path builder (unit-tested). **Phase 1 (real data load) is the
+active work** — see `docs/roadmap.md`.
 
 ## Read before doing anything
 
@@ -35,9 +38,10 @@ is Phase 0 + Phase 1 in `docs/roadmap.md`.
 - **DB:** PostgreSQL. Taxonomy = `parent_id` (adjacency) + `ltree` lineage.
   Feature rollups kept from Euka-Survey.
 - **Backend:** FastAPI (Python), REST + auto-OpenAPI. Reuse old domain logic.
-- **Frontend:** React + TypeScript.
-- **Packaging:** Docker + docker-compose.
-- **Pipeline:** Python; taxonomy from NCBI taxdump; rollup via DuckDB/Polars.
+- **Frontend:** React + TypeScript (Vite + React Router SPA).
+- **Packaging:** Docker + docker-compose. Python deps via **uv** (workspace).
+- **Pipeline:** Python; taxonomy from NCBI taxdump; assemblies via the NCBI
+  `datasets` CLI (installed in the dev env); rollup via DuckDB/Polars.
 
 ## Non-negotiables (don't reintroduce the old pain)
 
@@ -48,13 +52,15 @@ is Phase 0 + Phase 1 in `docs/roadmap.md`.
 
 ## Immediate next step (Phase 1 + the Phase 0 scaffold it needs)
 
-1. Repo layout (`pipeline/`, `api/`, `web/`, `infra/`) + `docker-compose.yml`
-   with Postgres.
+1. ~~Repo layout + `docker-compose.yml` with Postgres.~~ **Done** (Phase 0).
 2. Load NCBI taxdump into `taxon` (`taxid, name, rank, parent_id, path`).
+   Parser + path builder exist in `pipeline/…/taxdump.py`; still to do is the
+   download + Postgres COPY load and a node-count check vs the old DB.
 3. Port the rollup into `clade_features`; validate against Euka-Survey numbers
    (e.g. Eukaryota taxid 2759).
 4. Prove both questions answer fast with no ETE3 and no `precomputed_taxa`.
 
-## Still open (decide at scaffold time)
+## Still open (decide at Phase 1)
 
-Next.js vs Vite · `ltree` vs integer-array ancestors · DuckDB vs Polars.
+Rollup engine: **DuckDB vs Polars** (Pandas ruled out). Frontend (Vite + React
+Router), tree encoding (`ltree`), and uv are now settled — see DECISIONS.md.

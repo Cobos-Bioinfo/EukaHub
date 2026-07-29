@@ -19,10 +19,40 @@ this single fact drives most design decisions.
 
 ## Status
 
-Planning / greenfield. No application code yet — only design docs:
+**Phase 0 scaffold in place**; Phase 1 (loading the real dataset) is the active
+work. Design docs:
 
 - [`docs/data-model.md`](docs/data-model.md) — the core doc: database design and
   taxonomy-tree storage. **Start here.**
 - [`docs/architecture.md`](docs/architecture.md) — target stack and deploy host.
 - [`docs/roadmap.md`](docs/roadmap.md) — staged plan and what we reuse.
 - [`DECISIONS.md`](DECISIONS.md) — settled decisions and the few still open.
+
+## Repository layout
+
+```
+core/      shared domain model — the metric config (single source of truth)
+api/       FastAPI service (placeholder; real endpoints in Phase 2)
+pipeline/  offline build: NCBI taxdump loader + clade-feature roll-up
+web/       React + TypeScript SPA (Vite; placeholder until Phases 3–4)
+infra/     docker-compose.yml + Postgres init schema (taxon + clade_features)
+docs/      design docs
+```
+
+Python is a **uv workspace** (`core` / `api` / `pipeline`); the frontend is a
+Vite SPA.
+
+## Development
+
+```bash
+# Python workspace (installs core + api + pipeline and dev tools)
+uv sync
+
+# Run the pipeline's unit tests (taxdump parser + ltree path builder)
+uv run pytest pipeline
+
+# Bring up Postgres (with ltree) + placeholder API + web
+docker compose -f infra/docker-compose.yml up --build
+# API:  http://localhost:8000/health   ·   http://localhost:8000/docs
+# Web:  http://localhost:5173
+```

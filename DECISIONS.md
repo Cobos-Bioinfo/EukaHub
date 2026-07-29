@@ -22,10 +22,22 @@ ADR-style. Settled decisions with a one-line why; open forks at the bottom.
   the deepest ecosystem for the eventual WebGL Tree of Life.
 - **Packaging: Docker + docker-compose.** Matches the deploy host.
 
+## Settled (2026-07-29)
+
+- **Tree encoding: `ltree` path** (over integer-array ancestors). The GiST
+  index plus the `@>`/`<@` ancestor/descendant operators are purpose-built for
+  this; integer arrays buy nothing here.
+- **Frontend build: Vite + React Router** (over Next.js). Pure API-backed SPA;
+  no SSR need today. Revisit only if server-rendering clade pages matters.
+- **Python dependency management: uv** (`pyproject.toml` + `uv.lock`), as in
+  Euka-Survey. A uv **workspace** splits deps per service — `core` (shared
+  domain model), `api`, `pipeline`.
+
 ## Open — still to decide
 
-- **React meta-framework:** Next.js vs Vite + React Router. Lean Vite (pure
-  API-backed SPA); revisit if SSR of clade pages matters.
-- **Tree encoding in Postgres:** `ltree` path vs integer-array ancestors
-  (`ltree` preferred for its operators + GiST index).
-- **Rollup engine:** DuckDB vs Polars (pick at Phase 1).
+- **Rollup engine:** DuckDB vs Polars — pick at Phase 1 when the roll-up is
+  written. **Pandas is ruled out**: the ~30–45M-row lineage explosion is a
+  columnar scan/join/group-by that wants a parallel, larger-than-memory engine;
+  Pandas is eager, single-threaded, RAM-bound, and is the tool this rewrite
+  moves away from. Both finalists fit; the choice is SQL-flavor (DuckDB) vs
+  dataframe-flavor (Polars).
