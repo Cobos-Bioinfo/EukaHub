@@ -9,8 +9,41 @@ render one card per resource.
 
 from __future__ import annotations
 
-from eukahub_core.metrics import METRIC_KEYS, CladeMetadata
+from eukahub_core.metrics import METRIC_KEYS, CladeMetadata, Metric
 from pydantic import BaseModel
+
+
+class MetricConfig(BaseModel):
+    """Static per-resource card chrome — served once by ``/metrics-config`` and
+    joined client-side to the numbers in each per-clade payload (by ``key``)."""
+
+    key: str
+    card_title: str
+    card_title_help: str | None
+    species_help: str
+    total_label: str
+    total_help: str
+    color: str
+    external_source_name: str
+    external_url_template: str  # contains "{taxid}"; the client substitutes
+    coverage_column: str
+    total_column: str
+
+    @classmethod
+    def from_metric(cls, m: Metric) -> MetricConfig:
+        return cls(
+            key=m.key,
+            card_title=m.card_title,
+            card_title_help=m.card_title_help,
+            species_help=m.species_help,
+            total_label=m.total_label,
+            total_help=m.total_help,
+            color=m.color,
+            external_source_name=m.external_source_name,
+            external_url_template=m.external_url_template,
+            coverage_column=m.coverage_key,
+            total_column=m.total_key,
+        )
 
 
 class ResourceSummary(BaseModel):
