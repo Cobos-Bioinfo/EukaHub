@@ -1,19 +1,23 @@
 """EukaHub API — read-only serving of the genomic-resource dataset.
 
-Phase 2 (the API) is landing endpoint by endpoint. Live so far:
+Phase 2 read endpoints:
 
-- ``GET /clade/{taxid}/summary``   — the Genomic Resource Summary (Q1).
-- ``GET /clade/{taxid}/breakdown`` — descendants at a target rank (Q2).
+- ``GET /clade/{taxid}/summary``    — the Genomic Resource Summary (Q1).
+- ``GET /clade/{taxid}/breakdown``  — descendants at a target rank (Q2).
+- ``GET /clade/{taxid}/export.tsv`` — the full breakdown as a TSV download.
+- ``GET /taxon/{taxid}``            — the root→node lineage breadcrumb.
+- ``GET /search``                   — name search for the root picker.
 
-Still to come (see docs/roadmap.md): taxon/lineage breadcrumb, export.tsv,
-name search. ``/health`` and ``/metrics-config`` remain from the scaffold.
+``/health`` and ``/metrics-config`` remain from the scaffold. Next: generate
+OpenAPI + TS types from the metric config for the frontend (Phase 3).
 """
 
 import os
 from typing import Annotated
 
 from eukahub_core.metrics import METRICS
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi.responses import StreamingResponse
 
 from eukahub_api.db import Conn, lifespan
 from eukahub_api.queries import (
@@ -24,7 +28,10 @@ from eukahub_api.queries import (
     TaxonNotFound,
     fetch_breakdown,
     fetch_lineage,
+    fetch_root,
     fetch_summary,
+    iter_export_tsv,
+    search_taxa,
 )
 from eukahub_api.schemas import Breakdown, CladeSummary, TaxonLineage, TaxonRef
 
@@ -118,3 +125,56 @@ def taxon_lineage(taxid: int, conn: Conn) -> TaxonLineage:
     lineage = [TaxonRef(taxid=t, name=n, rank=r) for t, n, r in rows]
     node = lineage[-1]  # deepest = the requested taxon
     return TaxonLineage(taxid=node.taxid, name=node.name, rank=node.rank, lineage=lineage)
+
+
+@app.get("/clade/{taxid}/export.tsv")
+def clade_export(
+    taxid: int,
+    conn: Conn,
+    request: Request,
+    rank: Annotated[TargetRank, Query(description="Rank to break the root down by.")],
+    sort: SortColumn = SortColumn.n_rows,
+    filter: Annotated[list[MetricFilter] | None, Query()] = None,
+    logic: FilterLogic = FilterLogic.AND,
+    exclude_empty: bool = False,
+) -> StreamingResponse:
+    """The full breakdown at `rank` as a streamed TSV download.
+
+    Same subtree query as `breakdown` but unlimited and streamed via a
+    server-side cursor. Defaults to the complete breakdown (empties included);
+    pass filter/exclude_empty/sort to export exactly what the table shows.
+    """
+    # Resolve the root first so a bad taxid is a clean 404 (can't change the
+    # status once the stream has started) and to name the download.
+    try:
+        root_name, _root_rank, root_path = fetch_root(conn, taxid)
+    except TaxonNotFound:
+        raise HTTPException(status_code=404, detail=f"taxon {taxid} not found")
+
+    filter_keys = [f.value for f in (filter or [])]
+    rows = iter_export_tsv(
+        request.app.state.pool,
+        root_path=root_path,
+        rank=rank.value,
+        sort=sort.value,
+        filter_keys=filter_keys,
+        logic=logic,
+        exclude_empty=exclude_empty,
+    )
+    filename = f"{root_name.replace(' ', '_')}_{rank.value}_data.tsv"
+    return StreamingResponse(
+        rows,
+        media_type="text/tab-separated-values",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@app.get("/search", response_model=list[TaxonRef])
+def search(
+    conn: Conn,
+    q: Annotated[str, Query(min_length=1, max_length=100, description="Name query.")],
+    limit: Annotated[int, Query(ge=1, le=50)] = 20,
+) -> list[TaxonRef]:
+    """Case-insensitive taxon-name search for the root picker. Substring match,
+    prefix-matches first (served by the `pg_trgm` GIN index on `taxon.name`)."""
+    return [TaxonRef(taxid=t, name=n, rank=r) for t, n, r in search_taxa(conn, q, limit)]

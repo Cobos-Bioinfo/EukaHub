@@ -26,18 +26,19 @@ and rolled leaf features up into `clade_features` (1.83M clades) with Polars —
 no ETE3, no `precomputed_taxa`. Matches Euka-Survey within 0.3%; summary lookup
 and worst-case (Eukaryota→phylum) breakdown both run in <1 ms server-side.
 
-**Phase 2 (the API) in progress** (2026-07-30). Two read endpoints live:
-`GET /clade/{taxid}/summary` (Q1) and `GET /clade/{taxid}/breakdown` (Q2 —
-descendants at a target rank via one `ltree` subtree query, with
-filter/sort/limit pushed into SQL; `COUNT(*) OVER ()` returns the pre-limit
-total in the same query). Structure: pooled `psycopg` (`api/…/db.py`), SQL
-in `queries.py`, Pydantic responses derived from `METRICS` (`schemas.py`),
-query-param enums (`SortColumn`/`MetricFilter`/`TargetRank`/`FilterLogic`)
-derived from the metric config too. Breakdown defaults mirror Euka-Survey
-(sort `n_rows`, exclude-empty, AND, top 25; ranks = ALLOWED_RANKS). 20
-end-to-end tests vs the live DB (shared `client` fixture in
-`api/tests/conftest.py`). **Next: `taxon`/lineage breadcrumb**, then
-`export.tsv`, name search — see `docs/roadmap.md`.
+**Phase 2 (the API) — all five read endpoints done** (2026-07-30):
+`summary` (Q1), `breakdown` (Q2 — descendants at a rank via one `ltree`
+subtree query, filter/sort/limit pushed into SQL, `COUNT(*) OVER ()` for the
+pre-limit total), `export.tsv` (full breakdown streamed via a server-side
+cursor; old public TSV schema), `taxon/{taxid}` (root→node lineage via
+`path @>` + `nlevel`), and `search` (name search, `pg_trgm` GIN index on
+`taxon.name` — added to the schema and the live DB). Structure: pooled
+`psycopg` (`api/…/db.py`), SQL in `queries.py`, Pydantic responses +
+query-param enums both derived from `METRICS`. Breakdown defaults mirror
+Euka-Survey (sort `n_rows`, exclude-empty, AND, top 25; ranks =
+ALLOWED_RANKS). 35 end-to-end tests vs the live DB (shared `client` fixture
+in `api/tests/conftest.py`). **Next: generate OpenAPI + TS types from the
+metric config, then Phase 3 (the dashboard frontend)** — see `docs/roadmap.md`.
 
 Run the build (Postgres up): `uv run --package eukahub-pipeline python -m
 eukahub_pipeline.build` (add `--skip-download` to reuse an unpacked taxdump).
@@ -69,17 +70,22 @@ Tests (whole workspace, DB up): `uv run pytest`.
   query for any root.
 - **Serving is read-only;** rebuilt offline. Denormalize freely.
 
-## Immediate next step (Phase 2 — the API)
+## Immediate next step (finish Phase 2 → start Phase 3)
 
-`summary` and `breakdown` are done (see Status). Next endpoint:
-**`taxon`/lineage breadcrumb** — walk the stored `ltree` `path` to return the
-root→node lineage (taxid, name, rank per hop) for the header breadcrumb. The
-path is already materialized on every `taxon` row, so it's a single lookup +
-an `ancestor` `ltree` query (or `string_to_array(path)` unnest) — no
-recursion. Then `export.tsv` (full breakdown, TSV; reuse the metric config's
-`tsv_*` column names) and name search (prefix/substring on `taxon.name`).
-Still to wire: generate OpenAPI + TS types from the `core` metric config for
-the frontend. See `docs/roadmap.md` Phase 2.
+All five read endpoints are done and tested (see Status). Two things remain
+before the frontend:
+
+1. **OpenAPI → TS types.** Generate the TypeScript client/types from the
+   API's OpenAPI schema so the React app can't drift from the metric config
+   (`METRICS` already drives the responses + query-param enums). Wire it as a
+   `web/` build step.
+2. **Phase 3 — the dashboard.** Rebuild the "Genomic Resource Summary": metric
+   cards (from `/metrics-config` + `/clade/{taxid}/summary`), total-species,
+   coverage bars, lineage breadcrumb (`/taxon/{taxid}`), root picker
+   (`/search`). See `docs/roadmap.md` Phase 3.
+
+Consider response caching for the common clades (Eukaryota, Metazoa, …) — the
+data is read-only between rebuilds, so it's cache-friendly.
 
 ## Still open
 
