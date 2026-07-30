@@ -23,9 +23,10 @@ from eukahub_api.queries import (
     TargetRank,
     TaxonNotFound,
     fetch_breakdown,
+    fetch_lineage,
     fetch_summary,
 )
-from eukahub_api.schemas import Breakdown, CladeSummary, TaxonRef
+from eukahub_api.schemas import Breakdown, CladeSummary, TaxonLineage, TaxonRef
 
 app = FastAPI(title="EukaHub API", version="0.1.0", lifespan=lifespan)
 
@@ -104,3 +105,16 @@ def clade_breakdown(
         returned=len(items),
         items=[CladeSummary.from_metadata(name, rk, meta) for name, rk, meta in items],
     )
+
+
+@app.get("/taxon/{taxid}", response_model=TaxonLineage)
+def taxon_lineage(taxid: int, conn: Conn) -> TaxonLineage:
+    """The taxon and its root→node lineage (breadcrumb). One indexed `ltree`
+    ancestor query on the materialized path."""
+    try:
+        rows = fetch_lineage(conn, taxid)
+    except TaxonNotFound:
+        raise HTTPException(status_code=404, detail=f"taxon {taxid} not found")
+    lineage = [TaxonRef(taxid=t, name=n, rank=r) for t, n, r in rows]
+    node = lineage[-1]  # deepest = the requested taxon
+    return TaxonLineage(taxid=node.taxid, name=node.name, rank=node.rank, lineage=lineage)

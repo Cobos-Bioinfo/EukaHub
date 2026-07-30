@@ -56,6 +56,15 @@ class TaxonRef(BaseModel):
     rank: str
 
 
+class TaxonLineage(BaseModel):
+    """A taxon plus its root→node lineage (for the header breadcrumb)."""
+
+    taxid: int
+    name: str
+    rank: str
+    lineage: list[TaxonRef]  # root first, this taxon last (inclusive)
+
+
 class Breakdown(BaseModel):
     """The breakdown (Q2) payload: a root's descendants at a target rank."""
 
