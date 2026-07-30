@@ -74,6 +74,25 @@ def fetch_summary(conn: psycopg.Connection, taxid: int) -> tuple[str, str, Clade
     return name, rank, CladeMetadata(taxid, *features)
 
 
+def fetch_lineage(conn: psycopg.Connection, taxid: int) -> list[tuple[int, str, str]]:
+    """Return the root→taxon lineage as ``(taxid, name, rank)`` rows, inclusive
+    of the taxon itself, ordered root-first.
+
+    One indexed query: ``path @>`` selects the ancestors-or-self via the GiST
+    index, ``nlevel(path)`` orders them by depth. No recursion, no ETE3. Raises
+    ``TaxonNotFound`` if the taxid is absent (a present taxon always yields at
+    least its own row)."""
+    rows = conn.execute(
+        "SELECT t.taxid, t.name, t.rank FROM taxon t "
+        "WHERE t.path @> (SELECT path FROM taxon WHERE taxid = %s) "
+        "ORDER BY nlevel(t.path)",
+        (taxid,),
+    ).fetchall()
+    if not rows:
+        raise TaxonNotFound(taxid)
+    return rows
+
+
 def _secondary_sort_key(sort_by_key: str) -> str:
     """Tiebreaker column for a primary sort column (ported verbatim from
     Euka-Survey): a ``c_*`` sort tie-breaks by its matching ``s_*``, anything
