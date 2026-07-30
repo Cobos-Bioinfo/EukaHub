@@ -25,10 +25,18 @@ most of the design.
 and rolled leaf features up into `clade_features` (1.83M clades) with Polars —
 no ETE3, no `precomputed_taxa`. Matches Euka-Survey within 0.3%; summary lookup
 and worst-case (Eukaryota→phylum) breakdown both run in <1 ms server-side.
-**Phase 2 (the API) is next** — see `docs/roadmap.md`.
+
+**Phase 2 (the API) in progress** (2026-07-30). First endpoint live:
+`GET /clade/{taxid}/summary` (the Q1 dashboard payload) — pooled `psycopg`
+(`api/…/db.py`), `ltree`-table read (`queries.py`), Pydantic response derived
+from `METRICS` (`schemas.py`), tested end-to-end vs the live DB
+(`api/tests/test_summary.py`). **Next: `breakdown`**, then `taxon`/lineage,
+`export.tsv`, name search — see `docs/roadmap.md`.
 
 Run the build (Postgres up): `uv run --package eukahub-pipeline python -m
 eukahub_pipeline.build` (add `--skip-download` to reuse an unpacked taxdump).
+Run the API: `uv run --package eukahub-api uvicorn eukahub_api.main:app`.
+Tests (whole workspace, DB up): `uv run pytest`.
 
 ## Read before doing anything
 
@@ -57,12 +65,15 @@ eukahub_pipeline.build` (add `--skip-download` to reuse an unpacked taxdump).
 
 ## Immediate next step (Phase 2 — the API)
 
-Phases 0–1 are done (scaffold + validated data foundation; see Status). Next:
-FastAPI read endpoints — `summary`, `breakdown` (filter/sort/limit pushed down
-via the `ltree` query), `taxon`/lineage breadcrumb, `export.tsv`, name search.
-Generate OpenAPI + TS types from the `core` metric config, and reuse
-Euka-Survey's `src/database.py` filter/sort/limit semantics. See
-`docs/roadmap.md` Phase 2.
+`summary` is done (see Status). Next endpoint: **`breakdown`** —
+descendants of a root at a target rank via the `ltree` subtree query, with
+filter/sort/limit pushed down into SQL. Reuse Euka-Survey's
+`src/database.py` semantics (the `_secondary_sort_key` tiebreaker, the
+`FilterLogic` AND/OR enum) — now expressed as one indexed `ltree` predicate
+instead of the deleted `precomputed_taxa` cache. Then `taxon`/lineage
+breadcrumb, `export.tsv`, name search. Still to wire: generate OpenAPI + TS
+types from the `core` metric config for the frontend. See `docs/roadmap.md`
+Phase 2.
 
 ## Still open
 
