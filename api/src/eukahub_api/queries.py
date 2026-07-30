@@ -9,10 +9,18 @@ field order, guarded by a test.
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from enum import Enum
 
 import psycopg
-from eukahub_core.metrics import COVERAGE_KEYS, METRIC_KEYS, TOTAL_KEYS, CladeMetadata
+from eukahub_core.metrics import (
+    COVERAGE_KEYS,
+    METRIC_KEYS,
+    METRICS,
+    TOTAL_KEYS,
+    CladeMetadata,
+)
+from psycopg_pool import ConnectionPool
 
 # n_rows, then c_* (COVERAGE_KEYS), then s_* (TOTAL_KEYS) — the exact tail of
 # CladeMetadata's constructor after taxid.
@@ -56,6 +64,19 @@ class TaxonNotFound(Exception):
     def __init__(self, taxid: int) -> None:
         super().__init__(f"taxon {taxid} not found")
         self.taxid = taxid
+
+
+def fetch_root(conn: psycopg.Connection, taxid: int) -> tuple[str, str, str]:
+    """Return a root taxon's ``(name, rank, path)`` or raise ``TaxonNotFound``.
+
+    Shared by the breakdown and export paths — both need the root's name (for
+    the response / filename) and its ``ltree`` path (the subtree anchor)."""
+    row = conn.execute(
+        "SELECT name, rank, path FROM taxon WHERE taxid = %s", (taxid,)
+    ).fetchone()
+    if row is None:
+        raise TaxonNotFound(taxid)
+    return row
 
 
 def fetch_summary(conn: psycopg.Connection, taxid: int) -> tuple[str, str, CladeMetadata]:
@@ -102,6 +123,30 @@ def _secondary_sort_key(sort_by_key: str) -> str:
     return "c_ass"
 
 
+def _breakdown_where(
+    root_path: str,
+    rank: str,
+    exclude_empty: bool,
+    filter_keys: list[str],
+    logic: FilterLogic,
+) -> tuple[list[str], list]:
+    """Build the shared WHERE for the breakdown/export subtree query.
+
+    ``path <@ root_path`` = the whole subtree; the rank filter picks the level
+    (both ride indexes: GiST on path, btree on rank). ``exclude_empty`` and the
+    resource filters push down as ``f.<col> > 0`` predicates. ``rank`` and the
+    filter columns are interpolated, so callers must pass enum-validated values.
+    """
+    where = ["t.path <@ %s::ltree", "t.rank = %s"]
+    params: list = [root_path, rank]
+    if exclude_empty:
+        where.append("(" + " OR ".join(f"f.{c} > 0" for c in COVERAGE_KEYS) + ")")
+    if filter_keys:
+        joiner = " AND " if logic is FilterLogic.AND else " OR "
+        where.append("(" + joiner.join(f"f.c_{k} > 0" for k in filter_keys) + ")")
+    return where, params
+
+
 def fetch_breakdown(
     conn: psycopg.Connection,
     *,
@@ -125,22 +170,8 @@ def fetch_breakdown(
     so callers must pass values validated by the TargetRank / SortColumn /
     MetricFilter enums (the endpoint does).
     """
-    root = conn.execute(
-        "SELECT name, rank, path FROM taxon WHERE taxid = %s", (root_taxid,)
-    ).fetchone()
-    if root is None:
-        raise TaxonNotFound(root_taxid)
-    root_name, root_rank, root_path = root
-
-    # `path <@ root_path` = the whole subtree; the rank filter picks the level.
-    # Both ride indexes (GiST on path, btree on rank).
-    where = ["t.path <@ %s::ltree", "t.rank = %s"]
-    params: list = [root_path, rank]
-    if exclude_empty:
-        where.append("(" + " OR ".join(f"f.{c} > 0" for c in COVERAGE_KEYS) + ")")
-    if filter_keys:
-        joiner = " AND " if logic is FilterLogic.AND else " OR "
-        where.append("(" + joiner.join(f"f.c_{k} > 0" for k in filter_keys) + ")")
+    root_name, root_rank, root_path = fetch_root(conn, root_taxid)
+    where, params = _breakdown_where(root_path, rank, exclude_empty, filter_keys, logic)
 
     secondary = _secondary_sort_key(sort)
     feature_cols = ", ".join(f"f.{c}" for c in _FEATURE_COLS)
@@ -165,3 +196,80 @@ def fetch_breakdown(
         for taxid, name, item_rank, *features in (row[:-1] for row in rows)
     ]
     return root_ref, items, total
+
+
+# Public TSV schema (ported from Euka-Survey's generate_tsv): fixed prefix, then
+# every per-metric species-covered count, then every per-metric total — all in
+# METRICS order, so header and row stay aligned with the SELECT below.
+EXPORT_HEADER: tuple[str, ...] = (
+    ("taxon_id", "name", "total_species")
+    + tuple(m.tsv_count_column for m in METRICS)
+    + tuple(m.tsv_total_column for m in METRICS)
+)
+# SELECT columns matching EXPORT_HEADER position-for-position.
+_EXPORT_COLS: str = ", ".join(
+    ("t.taxid", "t.name", "f.n_rows")
+    + tuple(f"f.{c}" for c in COVERAGE_KEYS)
+    + tuple(f"f.{c}" for c in TOTAL_KEYS)
+)
+
+
+def _tsv_cell(value: object) -> str:
+    """Render one TSV cell; neutralize any tab/newline so rows can't break."""
+    return str(value).replace("\t", " ").replace("\n", " ").replace("\r", " ")
+
+
+def iter_export_tsv(
+    pool: ConnectionPool,
+    *,
+    root_path: str,
+    rank: str,
+    sort: str,
+    filter_keys: list[str],
+    logic: FilterLogic,
+    exclude_empty: bool,
+) -> Iterator[str]:
+    """Stream the full breakdown at ``rank`` as TSV lines (no limit).
+
+    The generator owns its pooled connection and a **server-side** cursor for
+    the whole stream, so even a huge export (e.g. a big root at species rank,
+    >1M rows) never materializes in memory. Callers validate ``rank``/``sort``/
+    ``filter_keys`` via the enums; ``root_path`` comes from ``fetch_root``.
+    """
+    where, params = _breakdown_where(root_path, rank, exclude_empty, filter_keys, logic)
+    secondary = _secondary_sort_key(sort)
+    sql = (
+        f"SELECT {_EXPORT_COLS} "
+        "FROM taxon t "
+        "JOIN clade_features f USING (taxid) "
+        f"WHERE {' AND '.join(where)} "
+        f"ORDER BY f.{sort} DESC, f.{secondary} DESC"
+    )
+
+    yield "\t".join(EXPORT_HEADER) + "\n"
+    with pool.connection() as conn, conn.cursor(name="export") as cur:
+        cur.itersize = 2000  # server-side fetch chunk
+        cur.execute(sql, params)
+        for row in cur:
+            yield "\t".join(_tsv_cell(v) for v in row) + "\n"
+
+
+def search_taxa(
+    conn: psycopg.Connection, query: str, limit: int
+) -> list[tuple[int, str, str]]:
+    """Case-insensitive name search → ``(taxid, name, rank)`` rows.
+
+    Substring match (``ILIKE %q%``, served by the ``pg_trgm`` GIN index on
+    ``name``), ordered prefix-matches-first, then shortest, then alphabetical —
+    the useful order for a root picker. Wildcards in ``query`` are escaped so
+    they match literally.
+    """
+    escaped = query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    rows = conn.execute(
+        "SELECT taxid, name, rank FROM taxon "
+        "WHERE name ILIKE %(sub)s "
+        "ORDER BY (name ILIKE %(pre)s) DESC, length(name), name "
+        "LIMIT %(lim)s",
+        {"sub": f"%{escaped}%", "pre": f"{escaped}%", "lim": limit},
+    ).fetchall()
+    return rows
