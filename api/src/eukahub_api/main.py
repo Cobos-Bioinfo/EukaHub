@@ -33,7 +33,13 @@ from eukahub_api.queries import (
     iter_export_tsv,
     search_taxa,
 )
-from eukahub_api.schemas import Breakdown, CladeSummary, TaxonLineage, TaxonRef
+from eukahub_api.schemas import (
+    Breakdown,
+    CladeSummary,
+    MetricConfig,
+    TaxonLineage,
+    TaxonRef,
+)
 
 app = FastAPI(title="EukaHub API", version="0.1.0", lifespan=lifespan)
 
@@ -43,19 +49,11 @@ def health() -> dict[str, object]:
     return {"status": "ok", "database_configured": "DATABASE_URL" in os.environ}
 
 
-@app.get("/metrics-config")
-def metrics_config() -> list[dict[str, str]]:
+@app.get("/metrics-config", response_model=list[MetricConfig])
+def metrics_config() -> list[MetricConfig]:
     """The tracked metrics — static card chrome the frontend renders once,
     keyed by the same metric keys the per-clade payloads use."""
-    return [
-        {
-            "key": m.key,
-            "card_title": m.card_title,
-            "coverage_column": m.coverage_key,
-            "total_column": m.total_key,
-        }
-        for m in METRICS
-    ]
+    return [MetricConfig.from_metric(m) for m in METRICS]
 
 
 @app.get("/clade/{taxid}/summary", response_model=CladeSummary)

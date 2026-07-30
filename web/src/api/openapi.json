@@ -1,0 +1,725 @@
+{
+  "components": {
+    "schemas": {
+      "Breakdown": {
+        "description": "The breakdown (Q2) payload: a root's descendants at a target rank.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CladeSummary"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "rank": {
+            "title": "Rank",
+            "type": "string"
+          },
+          "returned": {
+            "title": "Returned",
+            "type": "integer"
+          },
+          "root": {
+            "$ref": "#/components/schemas/TaxonRef"
+          },
+          "total_matches": {
+            "title": "Total Matches",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "root",
+          "rank",
+          "total_matches",
+          "returned",
+          "items"
+        ],
+        "title": "Breakdown",
+        "type": "object"
+      },
+      "CladeSummary": {
+        "description": "The Genomic Resource Summary (Q1) payload for one taxon.",
+        "properties": {
+          "n_rows": {
+            "title": "N Rows",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "rank": {
+            "title": "Rank",
+            "type": "string"
+          },
+          "resources": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/ResourceSummary"
+            },
+            "title": "Resources",
+            "type": "object"
+          },
+          "taxid": {
+            "title": "Taxid",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "taxid",
+          "name",
+          "rank",
+          "n_rows",
+          "resources"
+        ],
+        "title": "CladeSummary",
+        "type": "object"
+      },
+      "FilterLogic": {
+        "description": "How multiple resource-presence filters combine (ported verbatim).",
+        "enum": [
+          "AND",
+          "OR"
+        ],
+        "title": "FilterLogic",
+        "type": "string"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "MetricConfig": {
+        "description": "Static per-resource card chrome \u2014 served once by ``/metrics-config`` and\njoined client-side to the numbers in each per-clade payload (by ``key``).",
+        "properties": {
+          "card_title": {
+            "title": "Card Title",
+            "type": "string"
+          },
+          "card_title_help": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Card Title Help"
+          },
+          "color": {
+            "title": "Color",
+            "type": "string"
+          },
+          "coverage_column": {
+            "title": "Coverage Column",
+            "type": "string"
+          },
+          "external_source_name": {
+            "title": "External Source Name",
+            "type": "string"
+          },
+          "external_url_template": {
+            "title": "External Url Template",
+            "type": "string"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "species_help": {
+            "title": "Species Help",
+            "type": "string"
+          },
+          "total_column": {
+            "title": "Total Column",
+            "type": "string"
+          },
+          "total_help": {
+            "title": "Total Help",
+            "type": "string"
+          },
+          "total_label": {
+            "title": "Total Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "card_title",
+          "card_title_help",
+          "species_help",
+          "total_label",
+          "total_help",
+          "color",
+          "external_source_name",
+          "external_url_template",
+          "coverage_column",
+          "total_column"
+        ],
+        "title": "MetricConfig",
+        "type": "object"
+      },
+      "MetricFilter": {
+        "enum": [
+          "ass",
+          "ann",
+          "rna",
+          "lng"
+        ],
+        "title": "MetricFilter",
+        "type": "string"
+      },
+      "ResourceSummary": {
+        "description": "Per-resource rollup for one clade.",
+        "properties": {
+          "covered": {
+            "title": "Covered",
+            "type": "integer"
+          },
+          "percent": {
+            "title": "Percent",
+            "type": "number"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "covered",
+          "total",
+          "percent"
+        ],
+        "title": "ResourceSummary",
+        "type": "object"
+      },
+      "SortColumn": {
+        "enum": [
+          "n_rows",
+          "c_ass",
+          "c_ann",
+          "c_rna",
+          "c_lng",
+          "s_ass",
+          "s_ann",
+          "s_rna",
+          "s_lng"
+        ],
+        "title": "SortColumn",
+        "type": "string"
+      },
+      "TargetRank": {
+        "enum": [
+          "phylum",
+          "class",
+          "order",
+          "family",
+          "genus",
+          "species"
+        ],
+        "title": "TargetRank",
+        "type": "string"
+      },
+      "TaxonLineage": {
+        "description": "A taxon plus its root\u2192node lineage (for the header breadcrumb).",
+        "properties": {
+          "lineage": {
+            "items": {
+              "$ref": "#/components/schemas/TaxonRef"
+            },
+            "title": "Lineage",
+            "type": "array"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "rank": {
+            "title": "Rank",
+            "type": "string"
+          },
+          "taxid": {
+            "title": "Taxid",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "taxid",
+          "name",
+          "rank",
+          "lineage"
+        ],
+        "title": "TaxonLineage",
+        "type": "object"
+      },
+      "TaxonRef": {
+        "description": "Minimal taxon reference (breadcrumb / breakdown root).",
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "rank": {
+            "title": "Rank",
+            "type": "string"
+          },
+          "taxid": {
+            "title": "Taxid",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "taxid",
+          "name",
+          "rank"
+        ],
+        "title": "TaxonRef",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "title": "EukaHub API",
+    "version": "0.1.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/clade/{taxid}/breakdown": {
+      "get": {
+        "description": "How a clade's data is distributed at a lower rank (Q2).\n\nDescendants of `taxid` at `rank`, with filter/sort/limit pushed into a\nsingle indexed `ltree` query. Defaults mirror Euka-Survey: sort by species\ncount, exclude empty taxa, AND-combine filters, top 25.",
+        "operationId": "clade_breakdown_clade__taxid__breakdown_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "taxid",
+            "required": true,
+            "schema": {
+              "title": "Taxid",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Rank to break the root down by.",
+            "in": "query",
+            "name": "rank",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/TargetRank",
+              "description": "Rank to break the root down by."
+            }
+          },
+          {
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/SortColumn",
+              "default": "n_rows"
+            }
+          },
+          {
+            "description": "Keep only taxa with data for these resource(s).",
+            "in": "query",
+            "name": "filter",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "$ref": "#/components/schemas/MetricFilter"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Keep only taxa with data for these resource(s).",
+              "title": "Filter"
+            }
+          },
+          {
+            "in": "query",
+            "name": "logic",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/FilterLogic",
+              "default": "AND"
+            }
+          },
+          {
+            "in": "query",
+            "name": "exclude_empty",
+            "required": false,
+            "schema": {
+              "default": true,
+              "title": "Exclude Empty",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 25,
+              "maximum": 1000,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Breakdown"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Clade Breakdown"
+      }
+    },
+    "/clade/{taxid}/export.tsv": {
+      "get": {
+        "description": "The full breakdown at `rank` as a streamed TSV download.\n\nSame subtree query as `breakdown` but unlimited and streamed via a\nserver-side cursor. Defaults to the complete breakdown (empties included);\npass filter/exclude_empty/sort to export exactly what the table shows.",
+        "operationId": "clade_export_clade__taxid__export_tsv_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "taxid",
+            "required": true,
+            "schema": {
+              "title": "Taxid",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Rank to break the root down by.",
+            "in": "query",
+            "name": "rank",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/TargetRank",
+              "description": "Rank to break the root down by."
+            }
+          },
+          {
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/SortColumn",
+              "default": "n_rows"
+            }
+          },
+          {
+            "in": "query",
+            "name": "filter",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "$ref": "#/components/schemas/MetricFilter"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Filter"
+            }
+          },
+          {
+            "in": "query",
+            "name": "logic",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/FilterLogic",
+              "default": "AND"
+            }
+          },
+          {
+            "in": "query",
+            "name": "exclude_empty",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Exclude Empty",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Clade Export"
+      }
+    },
+    "/clade/{taxid}/summary": {
+      "get": {
+        "description": "Genomic Resource Summary for one taxon: species count + per-resource\ncoverage/total/percent. One indexed lookup on `clade_features`.",
+        "operationId": "clade_summary_clade__taxid__summary_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "taxid",
+            "required": true,
+            "schema": {
+              "title": "Taxid",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CladeSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Clade Summary"
+      }
+    },
+    "/health": {
+      "get": {
+        "operationId": "health_health_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Health Health Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Health"
+      }
+    },
+    "/metrics-config": {
+      "get": {
+        "description": "The tracked metrics \u2014 static card chrome the frontend renders once,\nkeyed by the same metric keys the per-clade payloads use.",
+        "operationId": "metrics_config_metrics_config_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/MetricConfig"
+                  },
+                  "title": "Response Metrics Config Metrics Config Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Metrics Config"
+      }
+    },
+    "/search": {
+      "get": {
+        "description": "Case-insensitive taxon-name search for the root picker. Substring match,\nprefix-matches first (served by the `pg_trgm` GIN index on `taxon.name`).",
+        "operationId": "search_search_get",
+        "parameters": [
+          {
+            "description": "Name query.",
+            "in": "query",
+            "name": "q",
+            "required": true,
+            "schema": {
+              "description": "Name query.",
+              "maxLength": 100,
+              "minLength": 1,
+              "title": "Q",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 50,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/TaxonRef"
+                  },
+                  "title": "Response Search Search Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Search"
+      }
+    },
+    "/taxon/{taxid}": {
+      "get": {
+        "description": "The taxon and its root\u2192node lineage (breadcrumb). One indexed `ltree`\nancestor query on the materialized path.",
+        "operationId": "taxon_lineage_taxon__taxid__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "taxid",
+            "required": true,
+            "schema": {
+              "title": "Taxid",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaxonLineage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Taxon Lineage"
+      }
+    }
+  }
+}
