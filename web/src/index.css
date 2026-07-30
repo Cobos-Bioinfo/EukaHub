@@ -1,0 +1,316 @@
+/* EukaHub — Genomic Resource Summary dashboard.
+   Light theme. Data-encoding color (per-metric) is confined to the identity
+   dot + coverage meter; all text uses ink tokens so identity is never
+   color-alone (each card is also titled and shows its percent numerically). */
+
+:root {
+  --surface: #fcfcfb; /* page + card surface family */
+  --card: #ffffff;
+  --border: #e6e8ec;
+  --track: #eceef1; /* recessive meter track */
+  --ink: #1a1d21; /* primary text */
+  --ink-2: #4b5563; /* secondary text */
+  --muted: #6b7280; /* labels / captions */
+  --link: #1f6feb;
+  --accent: #0f172a;
+  --radius: 12px;
+  --shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 1px 3px rgba(16, 24, 40, 0.06);
+  --maxw: 1100px;
+
+  color: var(--ink);
+  background: var(--surface);
+  font-family: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-size: 16px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+a {
+  color: var(--link);
+  text-decoration: none;
+}
+a:hover {
+  text-decoration: underline;
+}
+
+/* ---- App shell ------------------------------------------------------- */
+.app {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.app__bar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  padding: 0.75rem clamp(1rem, 4vw, 2rem);
+  background: rgba(252, 252, 251, 0.85);
+  backdrop-filter: saturate(1.2) blur(8px);
+  border-bottom: 1px solid var(--border);
+}
+
+.app__brand {
+  font-weight: 700;
+  font-size: 1.15rem;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+}
+.app__brand:hover {
+  text-decoration: none;
+}
+.app__brand span {
+  color: var(--link);
+}
+
+.app__main {
+  flex: 1;
+  width: 100%;
+  max-width: var(--maxw);
+  margin: 0 auto;
+  padding: clamp(1.25rem, 3vw, 2.25rem) clamp(1rem, 4vw, 2rem);
+}
+
+.app__foot {
+  max-width: var(--maxw);
+  margin: 0 auto;
+  padding: 1.5rem clamp(1rem, 4vw, 2rem) 2.5rem;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+/* ---- Root picker (search) ------------------------------------------- */
+.picker {
+  position: relative;
+  margin-left: auto;
+  width: min(360px, 48vw);
+}
+
+.picker__input {
+  width: 100%;
+  padding: 0.5rem 0.85rem;
+  font-size: 0.95rem;
+  color: var(--ink);
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  outline: none;
+}
+.picker__input:focus {
+  border-color: var(--link);
+  box-shadow: 0 0 0 3px rgba(31, 111, 235, 0.15);
+}
+
+.picker__menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  margin: 0;
+  padding: 0.25rem;
+  list-style: none;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+  max-height: 340px;
+  overflow-y: auto;
+}
+
+.picker__item {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  width: 100%;
+  padding: 0.5rem 0.65rem;
+  background: none;
+  border: none;
+  border-radius: 7px;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  color: var(--ink);
+}
+.picker__item:hover {
+  background: var(--track);
+}
+.picker__name {
+  font-weight: 500;
+}
+.picker__rank {
+  font-size: 0.78rem;
+  color: var(--muted);
+  text-transform: lowercase;
+}
+
+/* ---- Dashboard ------------------------------------------------------- */
+.breadcrumb {
+  font-size: 0.85rem;
+  color: var(--muted);
+  margin-bottom: 1rem;
+}
+.breadcrumb__sep {
+  margin: 0 0.4rem;
+  color: var(--border);
+}
+.breadcrumb__current {
+  color: var(--ink-2);
+  font-weight: 600;
+}
+
+.dashboard__head {
+  margin-bottom: 1.5rem;
+}
+.dashboard__title {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+.dashboard__name {
+  margin: 0;
+  font-size: clamp(1.6rem, 4vw, 2.2rem);
+  letter-spacing: -0.02em;
+}
+.rank-badge {
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ink-2);
+  background: var(--track);
+  border: 1px solid var(--border);
+  padding: 0.15rem 0.55rem;
+  border-radius: 999px;
+}
+.dashboard__species {
+  margin: 0.5rem 0 0;
+  color: var(--ink-2);
+}
+.dashboard__species strong {
+  color: var(--ink);
+}
+
+/* ---- Metric cards ---------------------------------------------------- */
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 1rem;
+}
+
+.card {
+  position: relative;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.1rem 1.15rem 1.2rem;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+/* Thin identity accent along the card top. */
+.card::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 3px;
+  background: var(--metric-color);
+}
+
+.card__head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.85rem;
+}
+.card__dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--metric-color);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.12); /* keep pale hues visible */
+  flex: none;
+}
+.card__title {
+  margin: 0;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--ink-2);
+  flex: 1;
+}
+.card__source {
+  font-size: 0.75rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.card__stat {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  margin: 0;
+}
+.card__count {
+  font-size: 1.85rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.card__pct {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.card__caption {
+  margin: 0.1rem 0 0.9rem;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+/* Coverage meter: recessive track, rounded baseline-anchored fill with a
+   faint edge so even the palest hues read against the track. */
+.card__bar {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--track);
+  overflow: hidden;
+}
+.card__bar-fill {
+  height: 100%;
+  min-width: 3px;
+  border-radius: 999px;
+  background: var(--metric-color);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.08);
+}
+
+.card__total {
+  margin: 0.85rem 0 0;
+  font-size: 0.85rem;
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+.card__total strong {
+  color: var(--ink);
+}
+
+/* ---- Notices --------------------------------------------------------- */
+.notice {
+  color: var(--muted);
+  padding: 2rem 0;
+}
+.notice--error {
+  color: #b42318;
+}

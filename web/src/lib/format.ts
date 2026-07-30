@@ -1,0 +1,27 @@
+// Small presentation helpers shared across the dashboard.
+
+/** Thousands-separated integer, e.g. 1647009 -> "1,647,009". */
+export const fmt = (n: number): string => n.toLocaleString("en-US");
+
+/** A coverage percentage: 2 decimals under 1%, else 1 (keeps tiny values visible). */
+export const fmtPct = (p: number): string => p.toFixed(p < 1 ? 2 : 1);
+
+/** Substitute the taxid into a metric's external URL template. */
+export const externalUrl = (template: string, taxid: number): string =>
+  template.replace("{taxid}", String(taxid));
+
+// The canonical Linnaean ranks worth showing in the breadcrumb — NCBI lineages
+// are padded with many unranked "clade"/"no rank" nodes we hide.
+const CANONICAL_RANKS = new Set([
+  "domain",
+  "superkingdom",
+  "kingdom",
+  "phylum",
+  "class",
+  "order",
+  "family",
+  "genus",
+  "species",
+]);
+
+export const isCanonicalRank = (rank: string): boolean => CANONICAL_RANKS.has(rank);
