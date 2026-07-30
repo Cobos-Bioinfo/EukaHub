@@ -26,6 +26,8 @@ eukahub-pipeline = { workspace = true }
 dev = [
     "pytest>=8",
     "ruff>=0.6",
+    # Starlette's TestClient (used by the api tests) is httpx-backed.
+    "httpx>=0.27",
 ]
 
 [build-system]
@@ -38,3 +40,10 @@ bypass-selection = true
 
 [tool.ruff]
 line-length = 100
+
+[tool.pytest.ini_options]
+# importlib mode + no __init__.py in test dirs lets same-named test packages
+# (core/api/pipeline each have a `tests/`) coexist when the whole workspace
+# suite is collected from the repo root.
+addopts = "--import-mode=importlib"
+testpaths = ["core", "api", "pipeline"]
