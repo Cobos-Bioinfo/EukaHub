@@ -46,3 +46,21 @@ class CladeSummary(BaseModel):
                 for key in METRIC_KEYS
             },
         )
+
+
+class TaxonRef(BaseModel):
+    """Minimal taxon reference (breadcrumb / breakdown root)."""
+
+    taxid: int
+    name: str
+    rank: str
+
+
+class Breakdown(BaseModel):
+    """The breakdown (Q2) payload: a root's descendants at a target rank."""
+
+    root: TaxonRef
+    rank: str  # the target rank the root was broken down by
+    total_matches: int  # taxa matching the filter, before `limit`
+    returned: int  # rows actually included (== len(items) <= limit)
+    items: list[CladeSummary]  # sorted, limited

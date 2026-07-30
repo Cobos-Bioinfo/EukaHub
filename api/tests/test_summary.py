@@ -1,8 +1,8 @@
-"""End-to-end tests for GET /clade/{taxid}/summary against the live DB.
+"""Tests for GET /clade/{taxid}/summary.
 
-These hit the docker-compose Postgres (the Phase 1 dataset). If it isn't
-reachable the whole module skips, so the suite stays green without infra.
-Run with the stack up:  uv run --package eukahub-api pytest api/tests
+DB-backed tests use the shared ``client`` fixture (see conftest.py), which
+skips when Postgres is down. The column-order guard needs no DB and always
+runs.
 """
 
 from __future__ import annotations
@@ -12,9 +12,7 @@ from dataclasses import fields
 import psycopg
 import pytest
 from eukahub_api.db import database_url
-from eukahub_api.main import app
 from eukahub_core.metrics import COVERAGE_KEYS, TOTAL_KEYS, CladeMetadata
-from fastapi.testclient import TestClient
 
 # Eukaryota (2759) — the Phase-1-validated reference row, column order
 # taxid, n_rows, c_ass, c_ann, c_rna, c_lng, s_ass, s_ann, s_rna, s_lng.
@@ -28,24 +26,6 @@ EUKARYOTA = {
     "rna": {"covered": 34718, "total": 8081230},
     "lng": {"covered": 2010, "total": 118584},
 }
-
-
-def _db_available() -> bool:
-    try:
-        with psycopg.connect(database_url(), connect_timeout=3):
-            return True
-    except Exception:  # noqa: BLE001 — any connection failure means "skip"
-        return False
-
-
-pytestmark = pytest.mark.skipif(not _db_available(), reason="serving Postgres not reachable")
-
-
-@pytest.fixture(scope="module")
-def client():
-    # `with` triggers the lifespan, opening the connection pool.
-    with TestClient(app) as c:
-        yield c
 
 
 def test_summary_eukaryota(client):

@@ -26,11 +26,17 @@ and rolled leaf features up into `clade_features` (1.83M clades) with Polars —
 no ETE3, no `precomputed_taxa`. Matches Euka-Survey within 0.3%; summary lookup
 and worst-case (Eukaryota→phylum) breakdown both run in <1 ms server-side.
 
-**Phase 2 (the API) in progress** (2026-07-30). First endpoint live:
-`GET /clade/{taxid}/summary` (the Q1 dashboard payload) — pooled `psycopg`
-(`api/…/db.py`), `ltree`-table read (`queries.py`), Pydantic response derived
-from `METRICS` (`schemas.py`), tested end-to-end vs the live DB
-(`api/tests/test_summary.py`). **Next: `breakdown`**, then `taxon`/lineage,
+**Phase 2 (the API) in progress** (2026-07-30). Two read endpoints live:
+`GET /clade/{taxid}/summary` (Q1) and `GET /clade/{taxid}/breakdown` (Q2 —
+descendants at a target rank via one `ltree` subtree query, with
+filter/sort/limit pushed into SQL; `COUNT(*) OVER ()` returns the pre-limit
+total in the same query). Structure: pooled `psycopg` (`api/…/db.py`), SQL
+in `queries.py`, Pydantic responses derived from `METRICS` (`schemas.py`),
+query-param enums (`SortColumn`/`MetricFilter`/`TargetRank`/`FilterLogic`)
+derived from the metric config too. Breakdown defaults mirror Euka-Survey
+(sort `n_rows`, exclude-empty, AND, top 25; ranks = ALLOWED_RANKS). 20
+end-to-end tests vs the live DB (shared `client` fixture in
+`api/tests/conftest.py`). **Next: `taxon`/lineage breadcrumb**, then
 `export.tsv`, name search — see `docs/roadmap.md`.
 
 Run the build (Postgres up): `uv run --package eukahub-pipeline python -m
@@ -65,15 +71,15 @@ Tests (whole workspace, DB up): `uv run pytest`.
 
 ## Immediate next step (Phase 2 — the API)
 
-`summary` is done (see Status). Next endpoint: **`breakdown`** —
-descendants of a root at a target rank via the `ltree` subtree query, with
-filter/sort/limit pushed down into SQL. Reuse Euka-Survey's
-`src/database.py` semantics (the `_secondary_sort_key` tiebreaker, the
-`FilterLogic` AND/OR enum) — now expressed as one indexed `ltree` predicate
-instead of the deleted `precomputed_taxa` cache. Then `taxon`/lineage
-breadcrumb, `export.tsv`, name search. Still to wire: generate OpenAPI + TS
-types from the `core` metric config for the frontend. See `docs/roadmap.md`
-Phase 2.
+`summary` and `breakdown` are done (see Status). Next endpoint:
+**`taxon`/lineage breadcrumb** — walk the stored `ltree` `path` to return the
+root→node lineage (taxid, name, rank per hop) for the header breadcrumb. The
+path is already materialized on every `taxon` row, so it's a single lookup +
+an `ancestor` `ltree` query (or `string_to_array(path)` unnest) — no
+recursion. Then `export.tsv` (full breakdown, TSV; reuse the metric config's
+`tsv_*` column names) and name search (prefix/substring on `taxon.name`).
+Still to wire: generate OpenAPI + TS types from the `core` metric config for
+the frontend. See `docs/roadmap.md` Phase 2.
 
 ## Still open
 
