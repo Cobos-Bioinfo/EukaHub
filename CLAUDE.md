@@ -36,13 +36,25 @@ cursor; old public TSV schema), `taxon/{taxid}` (root→node lineage via
 `psycopg` (`api/…/db.py`), SQL in `queries.py`, Pydantic responses +
 query-param enums both derived from `METRICS`. Breakdown defaults mirror
 Euka-Survey (sort `n_rows`, exclude-empty, AND, top 25; ranks =
-ALLOWED_RANKS). 35 end-to-end tests vs the live DB (shared `client` fixture
-in `api/tests/conftest.py`). **Next: generate OpenAPI + TS types from the
-metric config, then Phase 3 (the dashboard frontend)** — see `docs/roadmap.md`.
+ALLOWED_RANKS). 36 end-to-end tests vs the live DB (shared `client` fixture
+in `api/tests/conftest.py`).
+
+**Phase 3 (the dashboard) — Q1 done** (2026-07-30). Typed API bridge:
+`export_openapi.py` dumps `app.openapi()` → `web/src/api/openapi.json`;
+`openapi-typescript` generates `schema.ts`; `openapi-fetch` client in
+`client.ts` (`npm run gen` regenerates both). The React SPA renders the
+Genomic Resource Summary for `/clade/:taxid` — metric cards + coverage meters
+(`/metrics-config` joined to `summary`), total species, lineage breadcrumb
+(`/taxon/{id}`), and a name-search root picker (`/search`). Verified via
+typecheck + vite build + the Vite `/api` proxy against a live API; **not yet
+screenshotted** (no headless browser in the dev env). **Next: Phase 4 — the
+breakdown table/chart (Q2).** See `docs/roadmap.md`.
 
 Run the build (Postgres up): `uv run --package eukahub-pipeline python -m
 eukahub_pipeline.build` (add `--skip-download` to reuse an unpacked taxdump).
 Run the API: `uv run --package eukahub-api uvicorn eukahub_api.main:app`.
+Run the web app (dev, proxies `/api` → API): `cd web && npm install && npm run
+dev`. Regenerate TS types after API changes: `cd web && npm run gen`.
 Tests (whole workspace, DB up): `uv run pytest`.
 
 ## Read before doing anything
@@ -70,22 +82,21 @@ Tests (whole workspace, DB up): `uv run pytest`.
   query for any root.
 - **Serving is read-only;** rebuilt offline. Denormalize freely.
 
-## Immediate next step (finish Phase 2 → start Phase 3)
+## Immediate next step (Phase 4 — the breakdown view, Q2)
 
-All five read endpoints are done and tested (see Status). Two things remain
-before the frontend:
+The API (all five endpoints) and the Q1 dashboard are done (see Status). Next:
+**Phase 4 — the breakdown table/chart.** Add a `/clade/:taxid/breakdown` view
+(or a section on the dashboard) driven by `GET /clade/{taxid}/breakdown`: a
+rank selector + filter/sort/limit controls, a table of child taxa with
+coverage bars, and a download (the displayed rows + the full-breakdown TSV via
+`/clade/{taxid}/export.tsv`). A divergent bar chart comes next — load the
+**dataviz** skill before building it. See `docs/roadmap.md` Phase 4.
 
-1. **OpenAPI → TS types.** Generate the TypeScript client/types from the
-   API's OpenAPI schema so the React app can't drift from the metric config
-   (`METRICS` already drives the responses + query-param enums). Wire it as a
-   `web/` build step.
-2. **Phase 3 — the dashboard.** Rebuild the "Genomic Resource Summary": metric
-   cards (from `/metrics-config` + `/clade/{taxid}/summary`), total-species,
-   coverage bars, lineage breadcrumb (`/taxon/{taxid}`), root picker
-   (`/search`). See `docs/roadmap.md` Phase 3.
-
-Consider response caching for the common clades (Eukaryota, Metazoa, …) — the
-data is read-only between rebuilds, so it's cache-friendly.
+Two smaller follow-ups worth doing along the way:
+- **Screenshot/verify the Q1 dashboard in a browser** — this env had no
+  headless browser, so the UI was build- and integration-verified only.
+- **Response caching** for common clades (Eukaryota, Metazoa, …) — read-only
+  between rebuilds, so it's cache-friendly.
 
 ## Still open
 
