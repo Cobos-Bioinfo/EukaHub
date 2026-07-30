@@ -38,8 +38,10 @@ services:
     build:
       context: ../web
     environment:
-      # Dev proxy target for /api (see web/vite.config.ts).
-      VITE_API_URL: http://localhost:8000
+      # Dev proxy target for /api (see web/vite.config.ts). The Vite proxy runs
+      # inside this container, so the API is reached over the compose network as
+      # http://api:8000 — NOT localhost (which would be this container itself).
+      VITE_API_URL: http://api:8000
     depends_on:
       - api
     ports:
