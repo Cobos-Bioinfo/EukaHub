@@ -2,14 +2,20 @@ name: eukahub
 
 # Phase 0 scaffold: Postgres (with ltree) + a placeholder API + web.
 # The dataset is loaded offline by the pipeline (Phase 1); serving is read-only.
+#
+# Credentials come from the environment via ${VAR:-default} substitution: with
+# no config, the "eukahub" dev defaults below apply (local dev "just works");
+# a real deploy overrides them without committing secrets — export the vars or
+# pass an env file, e.g. `--env-file infra/.env` (see infra/.env.example).
+# infra/.env is gitignored; never commit real credentials.
 
 services:
   db:
     image: postgres:17
     environment:
-      POSTGRES_USER: eukahub
-      POSTGRES_PASSWORD: eukahub
-      POSTGRES_DB: eukahub
+      POSTGRES_USER: ${POSTGRES_USER:-eukahub}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-eukahub}
+      POSTGRES_DB: ${POSTGRES_DB:-eukahub}
     ports:
       - "5432:5432"
     volumes:
@@ -17,7 +23,8 @@ services:
       # Schema (incl. CREATE EXTENSION ltree) is applied on first init.
       - ./postgres/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U eukahub -d eukahub"]
+      test:
+        ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-eukahub} -d ${POSTGRES_DB:-eukahub}"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -27,7 +34,7 @@ services:
       context: ..
       dockerfile: api/Dockerfile
     environment:
-      DATABASE_URL: postgresql://eukahub:eukahub@db:5432/eukahub
+      DATABASE_URL: postgresql://${POSTGRES_USER:-eukahub}:${POSTGRES_PASSWORD:-eukahub}@db:5432/${POSTGRES_DB:-eukahub}
     depends_on:
       db:
         condition: service_healthy
