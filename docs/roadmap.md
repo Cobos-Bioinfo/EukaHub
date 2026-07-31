@@ -34,6 +34,14 @@ that depend on them.
 
 ## Phase 5 — Productionization
 
+> **Deployment target — deferred (2026-07-31).** The app will be deployed on
+> CRG/guigolab's (Docker-based) server once it's more functionally interesting,
+> decided with Guigó + the team's IT expert. The items below that depend on the
+> actual deploy environment — the scheduled rebuild run against the live DB,
+> TLS, staging-vs-prod DB, gateway rate limiting — are **on hold** until then.
+> Everything deploy-agnostic is already done (prod compose, healthchecks,
+> secrets, CORS, response caching). See `../DECISIONS.md`.
+
 ### Deploy & runtime
 - **[done]** Full Dockerized deploy: `web/Dockerfile.prod` (multi-stage —
   `node:22-slim` build → `nginx:alpine` serving the SPA + proxying `/api`) and

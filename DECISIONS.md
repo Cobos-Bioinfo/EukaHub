@@ -57,6 +57,13 @@ ADR-style. Settled decisions with a one-line why; open forks at the bottom.
   buys nothing. If scraping/abuse appears, add **gateway rate limiting** and/or
   **optional API keys for quota**, not login. Revisit only if a non-public
   dataset or a write path is introduced.
+- **Deployment target: CRG / guigolab server — deferred.** Deploy only once the
+  app is more functionally interesting; then, with **Guigó** and the team's **IT
+  expert**, deploy on CRG/guigolab's Docker-based infra (matches our
+  docker-compose; intended shape = "small VPS + Docker"). Until that
+  conversation the deploy-dependent Phase 5 items (scheduled rebuild vs. the
+  live DB, TLS, staging/prod DB, gateway rate limiting) are on hold — they
+  depend on CRG's environment. The app is already deploy-agnostic-ready.
 
 ## Open — still to decide
 
