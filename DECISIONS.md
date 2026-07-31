@@ -51,6 +51,12 @@ ADR-style. Settled decisions with a one-line why; open forks at the bottom.
   CORS, rate limiting, security headers, the read-only-API auth decision) is
   scheduled and enumerated in roadmap Phase 5 — **the assistant owns security
   and credentials** and must action those steps when Phase 5 reaches them.
+- **No user auth on the API (public, read-only, public data).** The API serves
+  only publicly-available genomic-resource counts derived from NCBI / Annotrieve
+  / ENA — nothing user-specific or sensitive, no write path — so authentication
+  buys nothing. If scraping/abuse appears, add **gateway rate limiting** and/or
+  **optional API keys for quota**, not login. Revisit only if a non-public
+  dataset or a write path is introduced.
 
 ## Open — still to decide
 

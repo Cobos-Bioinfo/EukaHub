@@ -69,8 +69,9 @@ in this phase:
 - **[done] CORS** — configurable allowlist via `CORS_ALLOW_ORIGINS` (FastAPI
   CORSMiddleware, GET-only, no credentials). **Rate limiting** at the gateway
   still to add.
-- **Auth decision:** the API serves public, read-only data — confirm no user auth
-  is needed (vs. optional API keys purely for abuse control) and record it.
+- **[done] Auth decision:** no user auth — the API serves only public, read-only
+  data; if abuse appears, add gateway rate limiting / optional API keys, not
+  login. Recorded in DECISIONS.md (2026-07-31).
 - **[done] Security headers**: baseline (`X-Content-Type-Options`,
   `X-Frame-Options`, `Referrer-Policy`) on API responses (middleware) and on the
   static SPA (`web/nginx.conf`, in `location /` so `/api` isn't double-set).
