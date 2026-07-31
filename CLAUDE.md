@@ -134,29 +134,27 @@ token`, no `--show-token`); redact anything sensitive before showing output.
   query for any root.
 - **Serving is read-only;** rebuilt offline. Denormalize freely.
 
-## Immediate next step (Phase 5 — continue productionization)
+## Immediate next step (pivot to functional work)
 
-Phases 0–4 are done. **Phase 5 is underway on `dev`** (see Status): structured
-logging + health checks, the Dockerized deploy, CORS + security headers, CI, and
-response caching are shipped. Remaining, in order: the **scheduled offline
-dataset rebuild** (GitHub Actions cron — keep the resumable-snapshot + atomic-swap
-discipline) and **staging-vs-prod DB**. Then the tracked follow-ups: the
-**react-router 6→7 / vite 5→8 dependency upgrade** (browser-verified — clears the
-open npm-audit advisories), seeding a **small CI database** so the API tests run
-in CI, and caching layers (nginx `proxy_cache`/CDN, ETag/304). Remaining security
-items the assistant owns (no public `5432` + CORS + headers + secret/dep scan
-done; still to do: **TLS**, **rate limiting**, the **read-only-API auth
-decision**) are enumerated in `docs/roadmap.md` Phase 5 and actioned as reached.
-(Phase 6 is the stretch interactive Tree of Life — the DB already supports it via
-`parent_id` lazy-expand + materialized lineage.)
+Phases 0–4 done; **Phase 5's deploy-agnostic work is shipped on `dev`** (logging
++ health, secrets, Dockerized deploy, no public `5432`, CORS + headers, CI +
+secret/dep scan, response caching, auth decision). **Deployment is deferred**
+(DECISIONS.md, 2026-07-31): it happens on CRG/guigolab's server, decided with
+Guigó + the team's IT expert, once the app is more functionally interesting — so
+the remaining Phase 5 items depend on CRG's env and are **on hold** (scheduled
+rebuild vs. the live DB, TLS, staging/prod DB, rate limiting).
 
-Smaller follow-ups worth doing along the way:
-- **Screenshot/verify Q1 + Q2 in a browser** — the dev env has no headless
-  browser, so the UI is build- and curl-verified only (user eyeballed Q1; Q2
-  table + chart still need a human look).
-- **Response caching** for common clades (Eukaryota, Metazoa, …) — read-only
-  between rebuilds, so it's cache-friendly.
-- **App-wide dark mode** — currently light-only; the chart defers to that.
+**So the next focus is functional** — the gate the user set for deploying.
+Candidates: **Phase 6 — interactive Tree of Life** (the headline showcase; DB
+already supports it via `parent_id` lazy-expand + materialized lineage), the
+**Wikipedia "About" card** (ported idea from Euka-Survey), and UX polish. Ask the
+user which to take.
+
+Tracked non-functional follow-ups (do when relevant): **react-router 6→7 / vite
+5→8 upgrade** (browser-verified — clears the open npm-audit advisories), seed a
+**small CI database** so the API tests run in CI, caching layers (nginx
+`proxy_cache`/CDN, ETag/304), and **app-wide dark mode** (currently light-only).
+Verify Q1 + Q2 in a browser (dev env has no headless browser; user eyeballed Q1).
 
 ## Still open
 
