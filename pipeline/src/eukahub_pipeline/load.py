@@ -36,9 +36,11 @@ def load_taxon(conn: psycopg.Connection, rows: Iterable[tuple]) -> int:
 def load_clade_features(conn: psycopg.Connection, clade: pl.DataFrame) -> int:
     """COPY the rollup DataFrame into ``clade_features`` (column order = df)."""
     cols = clade.columns
-    with conn.cursor() as cur:
-        with cur.copy(f"COPY clade_features ({', '.join(cols)}) FROM STDIN") as cp:
-            for row in clade.iter_rows():
-                cp.write_row(row)
+    with (
+        conn.cursor() as cur,
+        cur.copy(f"COPY clade_features ({', '.join(cols)}) FROM STDIN") as cp,
+    ):
+        for row in clade.iter_rows():
+            cp.write_row(row)
     conn.commit()
     return clade.height

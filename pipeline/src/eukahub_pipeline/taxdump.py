@@ -5,7 +5,7 @@ Input: an unpacked taxdump directory containing ``nodes.dmp`` and
 
 Output: ``TaxonRow(taxid, name, rank, parent_id, path)`` where ``path`` is a
 materialized ``ltree`` lineage — the root->node chain of taxids joined by
-dots (e.g. Homo sapiens -> ``1.131567.2759.…​.9606``). Numeric ltree labels
+dots (e.g. Homo sapiens -> ``1.131567.2759.….9606``). Numeric ltree labels
 are valid, so taxids are used verbatim.
 
 Phase 1 streams these rows into Postgres via COPY, then the roll-up sums
@@ -37,8 +37,7 @@ def _iter_dmp(path: Path) -> Iterator[list[str]]:
     with open(path, encoding="utf-8") as fh:
         for line in fh:
             line = line.rstrip("\n")
-            if line.endswith("\t|"):
-                line = line[:-2]
+            line = line.removesuffix("\t|")
             yield line.split("\t|\t")
 
 

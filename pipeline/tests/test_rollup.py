@@ -3,7 +3,6 @@ the per-metric derivations without a database or the real taxdump.
 """
 
 import polars as pl
-
 from eukahub_pipeline.rollup import rollup_from_frames
 
 

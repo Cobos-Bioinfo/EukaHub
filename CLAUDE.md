@@ -86,9 +86,11 @@ healthchecks, **only web published on 8080** — Postgres + API stay internal).
 User-verified end-to-end: full stack builds, all three containers healthy,
 nginx→api→db path works. (3) CORS (configurable `CORS_ALLOW_ORIGINS`, GET-only)
 + baseline security headers (nosniff / frame-DENY / referrer-policy) on API
-responses and the static SPA. 37 API tests; secrets externalized (DECISIONS
-2026-07-31). **Next: scheduled rebuild + CI, then response caching** — full
-checklist (incl. remaining security items) in `docs/roadmap.md`.
+responses and the static SPA. (4) CI (`.github/workflows/ci.yml`): ruff + pytest
++ web build, gitleaks secret scan + pip-audit / npm audit + Dependabot (and
+fixed 8 pre-existing repo-wide lint errors). 42 tests (36 API skip without a DB
+in CI); secrets externalized (DECISIONS 2026-07-31). **Next: scheduled dataset
+rebuild, then response caching** — full checklist in `docs/roadmap.md`.
 
 Run the build (Postgres up): `uv run --package eukahub-pipeline python -m
 eukahub_pipeline.build` (add `--skip-download` to reuse an unpacked taxdump).
@@ -128,16 +130,17 @@ Prod smoke test (full stack in containers, web on `:8080`; needs `sudo` here):
 ## Immediate next step (Phase 5 — continue productionization)
 
 Phases 0–4 are done. **Phase 5 is underway on `dev`** (see Status): structured
-logging + health checks, the Dockerized deploy, and CORS + security headers are
-shipped. Remaining, in order: the **scheduled offline rebuild + CI** (GitHub
-Actions — a ruff+pytest gate and dependency/secret scan; keep the atomic-swap
-discipline) and **staging-vs-prod DB**, then **response caching** for common
-clades. Remaining security items — the assistant owns these (no public `5432` +
-CORS + baseline headers already done; still to do: **TLS**, **rate limiting**,
-and the **read-only-API auth decision**) — are enumerated in `docs/roadmap.md`
-Phase 5 and must be actioned as reached. (Phase 6 is the stretch interactive
-Tree of Life — the DB already supports it via `parent_id` lazy-expand +
-materialized lineage.)
+logging + health checks, the Dockerized deploy, CORS + security headers, and CI
+are shipped. Remaining, in order: the **scheduled offline dataset rebuild**
+(GitHub Actions cron — keep the resumable-snapshot + atomic-swap discipline) and
+**staging-vs-prod DB**, then **response caching** for common clades. A useful CI
+follow-up: seed a small CI database so the DB-backed API tests run (they skip
+today). Remaining security items — the assistant owns these (no public `5432` +
+CORS + baseline headers + secret/dep scan already done; still to do: **TLS**,
+**rate limiting**, and the **read-only-API auth decision**) — are enumerated in
+`docs/roadmap.md` Phase 5 and must be actioned as reached. (Phase 6 is the
+stretch interactive Tree of Life — the DB already supports it via `parent_id`
+lazy-expand + materialized lineage.)
 
 Smaller follow-ups worth doing along the way:
 - **Screenshot/verify Q1 + Q2 in a browser** — the dev env has no headless
