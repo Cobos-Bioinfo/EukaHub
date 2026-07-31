@@ -1,0 +1,83 @@
+name: eukahub-prod
+
+# Production-style full stack: Postgres + api + nginx-served web, all
+# containerized. Designed to run ALONGSIDE the dev stack for a deploy smoke
+# test — its own project name, its own volume, and no clashing published
+# ports, so the dev db (host 5432) and native api/web keep running untouched.
+#
+# Security posture (roadmap Phase 5):
+#   - Postgres is NOT published — it stays on the internal network.
+#   - The api is NOT published — it's reached only through the web/nginx proxy.
+#   - Only the web port (8080) is exposed.
+# Credentials come from the environment via ${VAR:-default}, exactly like the
+# dev compose (see infra/.env.example). The DB starts EMPTY: this validates the
+# deploy wiring (build, health, proxy). To demo with the real dataset, see the
+# commented volume-reuse note at the bottom, or load it with the pipeline.
+
+services:
+  db:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-eukahub}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-eukahub}
+      POSTGRES_DB: ${POSTGRES_DB:-eukahub}
+    # No `ports:` — internal network only.
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test:
+        ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-eukahub} -d ${POSTGRES_DB:-eukahub}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: ..
+      dockerfile: api/Dockerfile
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-eukahub}:${POSTGRES_PASSWORD:-eukahub}@db:5432/${POSTGRES_DB:-eukahub}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    depends_on:
+      db:
+        condition: service_healthy
+    # No published port — reached only via the web/nginx proxy.
+    # Healthy == DB-ready: the container probe hits /health/ready (SELECT 1).
+    healthcheck:
+      test:
+        ["CMD", "python", "-c",
+         "import urllib.request; urllib.request.urlopen('http://localhost:8000/health/ready').read()"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 15s
+
+  web:
+    build:
+      context: ../web
+      dockerfile: Dockerfile.prod
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "8080:80"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://localhost/"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+
+volumes:
+  pgdata:
+
+# --- Demo with the dev-loaded data instead of an empty DB --------------------
+# The dataset is expensive to rebuild, so reuse the dev volume:
+#   1. Free it (the dev db locks it):  docker compose -f infra/docker-compose.yml stop db
+#   2. Replace the `volumes:` block above with:
+#        volumes:
+#          pgdata:
+#            external: true
+#            name: eukahub_pgdata
+#   3. Bring this stack up. Restore dev afterwards with `up -d db`.

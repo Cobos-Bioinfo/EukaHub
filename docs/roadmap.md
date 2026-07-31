@@ -35,9 +35,12 @@ that depend on them.
 ## Phase 5 — Productionization
 
 ### Deploy & runtime
-- Full Dockerized deploy: build + run the `api` and `web` containers (dev runs
-  them natively today) alongside Postgres via docker-compose; health checks on
-  every service; structured (JSON) logging.
+- **[done]** Full Dockerized deploy: `web/Dockerfile.prod` (multi-stage —
+  `node:22-slim` build → `nginx:alpine` serving the SPA + proxying `/api`) and
+  `infra/docker-compose.prod.yml` (all three services containerized, container
+  healthchecks, only web published). User-verified end-to-end.
+- **[done]** Health checks (`/health` liveness, `/health/ready` DB) + structured
+  JSON logging (`logging_config.py`, per-request middleware).
 - Scheduled offline rebuild (GitHub Actions or Nextflow) keeping the
   resumable-snapshot + atomic-swap discipline; staging vs prod DB; basic metrics.
 - Response caching for common clades (Eukaryota, Metazoa, …) — read-only between
@@ -47,9 +50,10 @@ that depend on them.
 Credential externalization is **done** (compose reads `${POSTGRES_*:-eukahub}`,
 `infra/.env.example` committed, `infra/.env` gitignored). Remaining, to action
 in this phase:
-- **Do not publish Postgres `5432` in prod.** The `ports: 5432:5432` mapping is a
-  local-dev convenience only — keep Postgres on the internal compose network in
-  the prod compose file.
+- **[done] Postgres `5432` not published in prod.** `infra/docker-compose.prod.yml`
+  keeps Postgres (and the API) on the internal network — only web is published
+  (8080). The `5432:5432` mapping remains a local-dev convenience in the dev
+  compose only.
 - **Real prod credentials from a secret store** (GitHub Actions secrets / host
   env), never committed. Gotcha: Postgres applies `POSTGRES_PASSWORD` only on
   first volume init — a real password needs a fresh volume or `ALTER USER`.
@@ -57,8 +61,9 @@ in this phase:
 - **CORS** locked to the known web origin(s); **rate limiting** at the gateway.
 - **Auth decision:** the API serves public, read-only data — confirm no user auth
   is needed (vs. optional API keys purely for abuse control) and record it.
-- **Security headers** (HSTS, X-Content-Type-Options, referrer-policy, …) and a
-  **dependency / secret scan** in CI.
+- **Security headers**: baseline (`X-Content-Type-Options`, `X-Frame-Options`,
+  `Referrer-Policy`) shipped in `web/nginx.conf`; **HSTS + a CSP** still to add
+  (with TLS). Plus a **dependency / secret scan** in CI.
 
 ### Verify
 - `docker compose config` resolves; a fresh clone comes up on dev defaults with

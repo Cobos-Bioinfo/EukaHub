@@ -75,12 +75,28 @@ Verified via typecheck + vite build + full API suite (31 passed) + curl;
 **not yet screenshotted** (no headless browser), and the app is light-only so
 chart dark mode is deferred with the rest. See `docs/roadmap.md`.
 
+**Phase 5 (productionization) — in progress on `dev`** (2026-07-31). Two slices
+done. (1) Observability: structured JSON logging (`logging_config.py`, `LOG_LEVEL`
+env) + a per-request middleware; `/health` = liveness, `/health/ready` = DB
+readiness (`SELECT 1`, 503 when unreachable); 33 API tests. (2) Dockerized
+deploy: `web/Dockerfile.prod` (multi-stage — `node:22-slim` build →
+`nginx:alpine` serving the built SPA and proxying `/api`) + `web/nginx.conf`;
+`infra/docker-compose.prod.yml` (project `eukahub-prod`, own volume, container
+healthchecks, **only web published on 8080** — Postgres + API stay internal).
+User-verified end-to-end: full stack builds, all three containers healthy,
+nginx→api→db path works. Secrets already externalized (DECISIONS 2026-07-31).
+**Next: CORS + security headers, then scheduled rebuild + CI, then response
+caching** — full checklist (incl. remaining security items) in `docs/roadmap.md`.
+
 Run the build (Postgres up): `uv run --package eukahub-pipeline python -m
 eukahub_pipeline.build` (add `--skip-download` to reuse an unpacked taxdump).
 Run the API: `uv run --package eukahub-api uvicorn eukahub_api.main:app`.
 Run the web app (dev, proxies `/api` → API): `cd web && npm install && npm run
 dev`. Regenerate TS types after API changes: `cd web && npm run gen`.
 Tests (whole workspace, DB up): `uv run pytest`.
+Prod smoke test (full stack in containers, web on `:8080`; needs `sudo` here):
+`docker compose -f infra/docker-compose.prod.yml up --build -d` · tear down with
+`... down -v`.
 
 ## Read before doing anything
 
@@ -107,17 +123,20 @@ Tests (whole workspace, DB up): `uv run pytest`.
   query for any root.
 - **Serving is read-only;** rebuilt offline. Denormalize freely.
 
-## Immediate next step (Phase 5 — productionization)
+## Immediate next step (Phase 5 — continue productionization)
 
-Phases 0–4 are done: data foundation, all five read endpoints, and both the Q1
-dashboard and the Q2 breakdown (table + divergent chart). Next is **Phase 5**:
-a real Dockerized deploy (the `api`/`web` containers exist but dev runs them
-natively), health checks, structured logging, a scheduled offline rebuild
-(GitHub Actions or Nextflow), staging-vs-prod DB, and basic metrics. See
-`docs/roadmap.md` Phase 5. (Phase 6 is the stretch interactive Tree of Life —
-the DB already supports it via `parent_id` lazy-expand + materialized lineage.)
+Phases 0–4 are done. **Phase 5 is underway on `dev`** (see Status): structured
+logging + health checks and the Dockerized deploy are shipped. Remaining, in
+order: **CORS + security headers** (API-side, testable solo — the assistant owns
+this; see the Phase 5 security checklist), then the **scheduled offline rebuild
++ CI** (GitHub Actions; keep the atomic-swap discipline) and **staging-vs-prod
+DB**, then **response caching** for common clades. Remaining security items
+(no public `5432` — done in prod compose; TLS, rate limiting, the read-only-API
+auth decision) are enumerated in `docs/roadmap.md` Phase 5 and must be actioned
+as reached. (Phase 6 is the stretch interactive Tree of Life — the DB already
+supports it via `parent_id` lazy-expand + materialized lineage.)
 
-Smaller follow-ups worth doing first:
+Smaller follow-ups worth doing along the way:
 - **Screenshot/verify Q1 + Q2 in a browser** — the dev env has no headless
   browser, so the UI is build- and curl-verified only (user eyeballed Q1; Q2
   table + chart still need a human look).
