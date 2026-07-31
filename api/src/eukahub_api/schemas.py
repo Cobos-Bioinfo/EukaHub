@@ -115,6 +115,37 @@ class TaxonLineage(BaseModel):
     lineage: list[TaxonRef]  # root first, this taxon last (inclusive)
 
 
+class TaxonNode(CladeSummary):
+    """One node in the interactive tree: a taxon's summary metrics plus a
+    ``has_children`` hint, so the UI can show an expand affordance for a node
+    without a second round-trip to discover it's a leaf."""
+
+    has_children: bool
+
+    @classmethod
+    def from_child(
+        cls, name: str, rank: str, meta: CladeMetadata, has_children: bool
+    ) -> TaxonNode:
+        s = CladeSummary.from_metadata(name, rank, meta)
+        return cls(
+            taxid=s.taxid,
+            name=s.name,
+            rank=s.rank,
+            n_rows=s.n_rows,
+            resources=s.resources,
+            has_children=has_children,
+        )
+
+
+class TaxonChildren(BaseModel):
+    """A taxon's direct children (adjacency) for lazy-expanding the tree."""
+
+    parent: TaxonRef
+    total: int  # total children before limit/offset (for "load more")
+    returned: int  # rows actually returned (== len(items) <= limit)
+    items: list[TaxonNode]  # sorted by species count desc
+
+
 class TaxonAbout(BaseModel):
     """Wikipedia summary for a taxon's "About" card (decorative, non-load-bearing).
 

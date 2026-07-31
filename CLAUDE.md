@@ -122,6 +122,23 @@ against real Wikipedia through the SPA `/api` proxy (Metazoa→"Animal",
 Eukaryota→"Eukaryote"). API-proxy rationale + the **CSP `img-src`
 follow-up** (needed when TLS+CSP land) in DECISIONS.md / roadmap.md.
 
+**Phase 6 — interactive radial "Tree of Life" — done** (2026-08-01, on `dev`).
+The headline showcase. New `GET /taxon/{taxid}/children` (adjacency `parent_id`
+lazy-expand: sorted by species count, `count(*) OVER ()` total + `has_children`
+`EXISTS` flag, limit/offset paging for the max-47,783-child nodes; mirrors
+`fetch_breakdown`). Frontend: `useTree` reducer (loaded-hierarchy state, lazy
+fetch, expand/collapse/load-more, node guardrail) drives `RadialTree` — an SVG
+radial dendrogram using **`d3-hierarchy`/`d3-shape` for layout math only**
+(node size ∝ √species, colour = sequential assembly-coverage ramp per the
+**dataviz** skill), with hover tooltip (reuses `.chart-tip`), click-to-expand,
+"load more", hand-rolled pan/zoom, and a keyboard/SR **text-outline fallback**
+(`TreeOutline`). `/tree/:taxid` route + nav link, cross-linked with the
+dashboard both ways. 52 API tests (+5 children, network-free); web
+typecheck+build clean; verified live through the SPA `/api` proxy
+(Eukaryota→Opisthokonta/Viridiplantae/Sar). Radial-form + `d3-hierarchy`
+decisions in DECISIONS.md (2026-08-01). Still **light-only** (dark mode deferred
+project-wide); Canvas/WebGL is a future scale-up path.
+
 ## Read before doing anything
 
 - `docs/data-model.md` — **the core doc.** DB design + taxonomy-tree storage.
@@ -157,20 +174,22 @@ Guigó + the team's IT expert, once the app is more functionally interesting —
 the remaining Phase 5 items depend on CRG's env and are **on hold** (scheduled
 rebuild vs. the live DB, TLS, staging/prod DB, rate limiting).
 
-**So the next focus is functional** — the gate the user set for deploying. The
-**Wikipedia "About" card** is now done (see above). Remaining candidates:
-**Phase 6 — interactive Tree of Life** (the headline showcase; DB already
-supports it via `parent_id` lazy-expand + materialized lineage), the **data-
-refresh pipeline** (port NCBI/Annotrieve/ENA fetches — independent of deploy,
-unblocks the scheduled rebuild), and **UX polish** (app-wide dark mode, browser
-verification of Q1/Q2). Ask the user which to take.
+**So the next focus is functional** — the gate the user set for deploying. Two
+headline pieces now done (see above): the **Wikipedia "About" card** and
+**Phase 6 — the interactive radial Tree of Life**. Remaining candidates: the
+**data-refresh pipeline** (port NCBI/Annotrieve/ENA fetches — independent of
+deploy, unblocks the scheduled rebuild), **app-wide dark mode** (would light up
+the chart + tree, both currently light-only), and further **tree polish**
+(in-tree search-to-node, animated expand, a `child_count` rollup column). Ask
+the user which to take — or whether the app is now "functionally interesting"
+enough to open the CRG deployment conversation.
 
-Tracked non-functional follow-ups (do when relevant): frontend deps are now on
-latest majors (react-router 7, vite 8, done 2026-07-31) — **6 npm-audit highs
-remain with no forward fix** (dev-tooling + low-risk react-router; revisit when
-upstream patches); seed a **small CI database** so the API tests run in CI,
-caching layers (nginx `proxy_cache`/CDN, ETag/304), and **app-wide dark mode**.
-Verify Q1 + Q2 in a browser (dev env has no headless browser; user eyeballed Q1).
+Tracked non-functional follow-ups (do when relevant): frontend deps on latest
+majors — **npm audit now shows 2 highs** (react-router runtime, low practical
+risk; the dev-only openapi-typescript chain cleared upstream); seed a **small CI
+database** so the API tests run in CI, caching layers (nginx `proxy_cache`/CDN,
+ETag/304), and **app-wide dark mode**. Verify Q1 + Q2 + the tree in a browser
+(dev env has no headless browser; user eyeballed Q1, and the Wikipedia card).
 
 ## Still open
 

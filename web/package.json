@@ -12,12 +12,16 @@
     "gen": "npm run gen:openapi && npm run gen:api"
   },
   "dependencies": {
+    "d3-hierarchy": "^3.1.2",
+    "d3-shape": "^3.2.0",
     "openapi-fetch": "^0.13.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^7.18.2"
   },
   "devDependencies": {
+    "@types/d3-hierarchy": "^3.1.7",
+    "@types/d3-shape": "^3.1.8",
     "@types/node": "^22.5.0",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",

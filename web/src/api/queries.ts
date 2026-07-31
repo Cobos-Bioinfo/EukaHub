@@ -11,6 +11,7 @@ import type {
   SortColumn,
   TargetRank,
   TaxonAbout,
+  TaxonChildren,
   TaxonLineage,
   TaxonRef,
 } from "./types";
@@ -44,6 +45,24 @@ export const getSummary = async (taxid: number): Promise<CladeSummary> =>
 
 export const getLineage = async (taxid: number): Promise<TaxonLineage> =>
   unwrap(await api.GET("/taxon/{taxid}", { params: { path: { taxid } } }));
+
+// Direct children of a taxon, for lazy-expanding the interactive tree. Sorted
+// by species count by default; `offset` pages through a big node's children.
+export interface ChildrenParams {
+  sort?: SortColumn;
+  limit?: number;
+  offset?: number;
+}
+
+export const getChildren = async (
+  taxid: number,
+  params: ChildrenParams = {},
+): Promise<TaxonChildren> =>
+  unwrap(
+    await api.GET("/taxon/{taxid}/children", {
+      params: { path: { taxid }, query: params },
+    }),
+  );
 
 // The decorative Wikipedia "About" summary. The endpoint returns a null body
 // when the taxon has no usable article, so this resolves to null rather than

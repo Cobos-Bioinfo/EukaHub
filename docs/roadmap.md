@@ -120,9 +120,23 @@ in this phase:
 - `docker compose config` resolves; a fresh clone comes up on dev defaults with
   no committed secret; prod overrides via `--env-file`.
 
-## Phase 6 — Stretch: interactive Tree of Life
-- WebGL/canvas hierarchical view with lazy-expand (`parent_id`) and subtree fetch
-  (materialized lineage). The ambitious showcase piece.
+## Phase 6 — Interactive Tree of Life
+
+- **[done] Radial "Tree of Life" (2026-08-01).** The showcase piece: a radial
+  dendrogram at `/tree/:taxid` that lazy-expands via a new
+  `GET /taxon/{taxid}/children` endpoint (adjacency `parent_id`, sorted by
+  species count, `count(*) OVER ()` total + `has_children` flag, limit/offset
+  paging for the huge-fan-out nodes). Frontend: `useTree` state reducer +
+  `RadialTree` (SVG, `d3-hierarchy`/`d3-shape` for layout only; node size ∝
+  √species, colour = sequential assembly-coverage ramp per the dataviz skill),
+  hover tooltip, click-to-expand, "load more", pan/zoom, and a keyboard/
+  screen-reader **text-outline fallback** (`TreeOutline`). Cross-linked with the
+  dashboard both ways. See `../DECISIONS.md` (radial form + `d3-hierarchy` dep).
+- **Scale-up path (future):** a Canvas/WebGL renderer if we ever want thousands
+  of nodes on screen at once — the SVG MVP is bounded by lazy-expand + a
+  visible-node guardrail, so it isn't needed yet. Also future: a `child_count`
+  rollup column (drop the per-row `EXISTS` probe), in-tree search highlighting,
+  animated expand/collapse transitions.
 
 ## Reuse vs rebuild vs delete
 

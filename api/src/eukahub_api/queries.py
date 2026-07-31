@@ -114,6 +114,64 @@ def fetch_lineage(conn: psycopg.Connection, taxid: int) -> list[tuple[int, str, 
     return rows
 
 
+def fetch_children(
+    conn: psycopg.Connection,
+    *,
+    taxid: int,
+    sort: str,
+    limit: int,
+    offset: int,
+) -> tuple[tuple[int, str, str], list[tuple[str, str, CladeMetadata, bool]], int]:
+    """Direct children of ``taxid`` (adjacency via ``parent_id``) — the cheap
+    lookup the schema reserved for lazy-expanding the interactive tree.
+
+    Sorted by ``sort`` (species count by default, so the biggest clades surface
+    first) and paginated with ``limit``/``offset`` so a node with tens of
+    thousands of children loads a screenful at a time. Returns
+    ``((taxid, name, rank), [(name, rank, metadata, has_children), ...], total)``
+    where ``total`` is the child count *before* limit/offset. Raises
+    ``TaxonNotFound`` if ``taxid`` is absent; a present-but-childless taxon
+    (e.g. a species leaf) returns an empty list, not an error.
+
+    ``sort`` is interpolated as an identifier, so callers must pass a
+    SortColumn-validated value (the endpoint does). A LEFT JOIN keeps children
+    that lack a rollup row (zero-filled), and each child carries a
+    ``has_children`` flag (one indexed EXISTS probe) so the UI shows an expand
+    affordance without another round-trip.
+    """
+    parent_name, parent_rank, _path = fetch_root(conn, taxid)
+
+    feature_cols = ", ".join(f"f.{c}" for c in _FEATURE_COLS)
+    # COUNT(*) OVER () rides along for the total child count (before paging);
+    # `taxid <> parent_id` drops the root's self-parent when listing its children.
+    sql = (
+        f"SELECT t.taxid, t.name, t.rank, {feature_cols}, "
+        "EXISTS (SELECT 1 FROM taxon c WHERE c.parent_id = t.taxid) AS has_children, "
+        "COUNT(*) OVER () "
+        "FROM taxon t "
+        "LEFT JOIN clade_features f USING (taxid) "
+        "WHERE t.parent_id = %s AND t.taxid <> t.parent_id "
+        f"ORDER BY COALESCE(f.{sort}, 0) DESC, t.name "
+        "LIMIT %s OFFSET %s"
+    )
+    rows = conn.execute(sql, (taxid, limit, offset)).fetchall()
+
+    parent_ref = (taxid, parent_name, parent_rank)
+    if not rows:
+        return parent_ref, [], 0
+    total = rows[0][-1]
+    items: list[tuple[str, str, CladeMetadata, bool]] = []
+    for taxid_, name, rank, *rest in rows:
+        *features, has_children, _row_total = rest
+        meta = (
+            CladeMetadata.zero(taxid_)  # LEFT JOIN NULLs — no clade_features row
+            if features[0] is None
+            else CladeMetadata(taxid_, *features)
+        )
+        items.append((name, rank, meta, has_children))
+    return parent_ref, items, total
+
+
 def _secondary_sort_key(sort_by_key: str) -> str:
     """Tiebreaker column for a primary sort column (ported verbatim from
     Euka-Survey): a ``c_*`` sort tie-breaks by its matching ``s_*``, anything
