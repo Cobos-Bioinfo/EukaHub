@@ -75,18 +75,20 @@ Verified via typecheck + vite build + full API suite (31 passed) + curl;
 **not yet screenshotted** (no headless browser), and the app is light-only so
 chart dark mode is deferred with the rest. See `docs/roadmap.md`.
 
-**Phase 5 (productionization) — in progress on `dev`** (2026-07-31). Two slices
-done. (1) Observability: structured JSON logging (`logging_config.py`, `LOG_LEVEL`
-env) + a per-request middleware; `/health` = liveness, `/health/ready` = DB
-readiness (`SELECT 1`, 503 when unreachable); 33 API tests. (2) Dockerized
+**Phase 5 (productionization) — in progress on `dev`** (2026-07-31). Three
+slices done. (1) Observability: structured JSON logging (`logging_config.py`,
+`LOG_LEVEL` env) + a per-request middleware; `/health` = liveness,
+`/health/ready` = DB readiness (`SELECT 1`, 503 when unreachable). (2) Dockerized
 deploy: `web/Dockerfile.prod` (multi-stage — `node:22-slim` build →
 `nginx:alpine` serving the built SPA and proxying `/api`) + `web/nginx.conf`;
 `infra/docker-compose.prod.yml` (project `eukahub-prod`, own volume, container
 healthchecks, **only web published on 8080** — Postgres + API stay internal).
 User-verified end-to-end: full stack builds, all three containers healthy,
-nginx→api→db path works. Secrets already externalized (DECISIONS 2026-07-31).
-**Next: CORS + security headers, then scheduled rebuild + CI, then response
-caching** — full checklist (incl. remaining security items) in `docs/roadmap.md`.
+nginx→api→db path works. (3) CORS (configurable `CORS_ALLOW_ORIGINS`, GET-only)
++ baseline security headers (nosniff / frame-DENY / referrer-policy) on API
+responses and the static SPA. 37 API tests; secrets externalized (DECISIONS
+2026-07-31). **Next: scheduled rebuild + CI, then response caching** — full
+checklist (incl. remaining security items) in `docs/roadmap.md`.
 
 Run the build (Postgres up): `uv run --package eukahub-pipeline python -m
 eukahub_pipeline.build` (add `--skip-download` to reuse an unpacked taxdump).
@@ -126,15 +128,16 @@ Prod smoke test (full stack in containers, web on `:8080`; needs `sudo` here):
 ## Immediate next step (Phase 5 — continue productionization)
 
 Phases 0–4 are done. **Phase 5 is underway on `dev`** (see Status): structured
-logging + health checks and the Dockerized deploy are shipped. Remaining, in
-order: **CORS + security headers** (API-side, testable solo — the assistant owns
-this; see the Phase 5 security checklist), then the **scheduled offline rebuild
-+ CI** (GitHub Actions; keep the atomic-swap discipline) and **staging-vs-prod
-DB**, then **response caching** for common clades. Remaining security items
-(no public `5432` — done in prod compose; TLS, rate limiting, the read-only-API
-auth decision) are enumerated in `docs/roadmap.md` Phase 5 and must be actioned
-as reached. (Phase 6 is the stretch interactive Tree of Life — the DB already
-supports it via `parent_id` lazy-expand + materialized lineage.)
+logging + health checks, the Dockerized deploy, and CORS + security headers are
+shipped. Remaining, in order: the **scheduled offline rebuild + CI** (GitHub
+Actions — a ruff+pytest gate and dependency/secret scan; keep the atomic-swap
+discipline) and **staging-vs-prod DB**, then **response caching** for common
+clades. Remaining security items — the assistant owns these (no public `5432` +
+CORS + baseline headers already done; still to do: **TLS**, **rate limiting**,
+and the **read-only-API auth decision**) — are enumerated in `docs/roadmap.md`
+Phase 5 and must be actioned as reached. (Phase 6 is the stretch interactive
+Tree of Life — the DB already supports it via `parent_id` lazy-expand +
+materialized lineage.)
 
 Smaller follow-ups worth doing along the way:
 - **Screenshot/verify Q1 + Q2 in a browser** — the dev env has no headless
