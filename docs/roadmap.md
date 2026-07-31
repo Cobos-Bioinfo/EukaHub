@@ -74,6 +74,14 @@ in this phase:
   static SPA (`web/nginx.conf`, in `location /` so `/api` isn't double-set).
   **HSTS + a CSP** still to add with TLS. Plus a **dependency / secret scan** in
   CI **(done)**: gitleaks secret scan + pip-audit / npm audit + Dependabot.
+- **Dependency advisories (open, from CI `npm audit`, non-blocking):** 8 total —
+  **7 are build/dev tooling only** (`vite`, `esbuild`, `openapi-typescript`,
+  `@redocly/openapi-core`, `brace-expansion`, `minimatch`; not in the shipped
+  bundle, dev server not exposed) and **1 is runtime** (`react-router-dom`:
+  open-redirect + SSR-hydration injection — low practical risk here: SPA does
+  internal numeric-taxid nav only, no SSR). All fixes are **major bumps**
+  (react-router 6→7, vite 5→8), so do them as a **dedicated, browser-verified
+  upgrade** rather than `npm audit fix --force`.
 
 ### Verify
 - `docker compose config` resolves; a fresh clone comes up on dev defaults with

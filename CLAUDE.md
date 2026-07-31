@@ -102,6 +102,11 @@ Prod smoke test (full stack in containers, web on `:8080`; needs `sudo` here):
 `docker compose -f infra/docker-compose.prod.yml up --build -d` · tear down with
 `... down -v`.
 
+**Tooling:** the `gh` CLI is installed and authenticated in this dev env — use
+it for GitHub operations (CI/Actions status, PRs, issues). **Never** print, log,
+or commit the user's credentials, secrets, or the auth token (no `gh auth
+token`, no `--show-token`); redact anything sensitive before showing output.
+
 ## Read before doing anything
 
 - `docs/data-model.md` — **the core doc.** DB design + taxonomy-tree storage.
