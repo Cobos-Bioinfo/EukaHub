@@ -14,12 +14,14 @@ round out the service. Every request is logged as one structured JSON line (see
 """
 
 import logging
+import os
 import time
 from contextlib import asynccontextmanager
 from typing import Annotated
 
 from eukahub_core.metrics import METRICS
 from fastapi import FastAPI, HTTPException, Query, Request, Response
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
 from eukahub_api.db import Conn
@@ -48,6 +50,25 @@ from eukahub_api.schemas import (
 
 log = logging.getLogger("eukahub.api")
 
+# CORS: the SPA calls /api same-origin via the nginx/Vite proxy, so browsers
+# don't hit the API cross-origin in normal use. This allowlist is for direct
+# API consumers / alternate origins — set CORS_ALLOW_ORIGINS (comma-separated)
+# per deploy; the default covers local dev + the prod web container.
+_DEFAULT_CORS_ORIGINS = "http://localhost:5173,http://localhost:8080"
+
+# Baseline security headers on every API response (defense-in-depth; nginx sets
+# its own on the static SPA it serves). HSTS/CSP belong with the TLS terminator.
+_SECURITY_HEADERS = {
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "strict-origin-when-cross-origin",
+}
+
+
+def cors_allow_origins() -> list[str]:
+    raw = os.environ.get("CORS_ALLOW_ORIGINS", _DEFAULT_CORS_ORIGINS)
+    return [origin.strip() for origin in raw.split(",") if origin.strip()]
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -59,6 +80,26 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="EukaHub API", version="0.1.0", lifespan=lifespan)
+
+# Read-only public API: allow cross-origin GETs from the configured origins; no
+# credentials (no cookies/auth), so the allowlist stays an explicit set.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=cors_allow_origins(),
+    allow_methods=["GET"],
+    allow_headers=["*"],
+    allow_credentials=False,
+)
+
+
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    """Set baseline security headers on every response (setdefault so anything
+    that already set one — a handler or proxy — keeps precedence)."""
+    response = await call_next(request)
+    for header, value in _SECURITY_HEADERS.items():
+        response.headers.setdefault(header, value)
+    return response
 
 
 @app.middleware("http")
