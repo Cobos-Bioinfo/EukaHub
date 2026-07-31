@@ -130,8 +130,32 @@
             "title": "External Url Template",
             "type": "string"
           },
+          "filter_label": {
+            "title": "Filter Label",
+            "type": "string"
+          },
           "key": {
             "title": "Key",
+            "type": "string"
+          },
+          "legend_label": {
+            "title": "Legend Label",
+            "type": "string"
+          },
+          "overlay": {
+            "title": "Overlay",
+            "type": "boolean"
+          },
+          "side": {
+            "title": "Side",
+            "type": "string"
+          },
+          "sort_count_label": {
+            "title": "Sort Count Label",
+            "type": "string"
+          },
+          "sort_total_label": {
+            "title": "Sort Total Label",
             "type": "string"
           },
           "species_help": {
@@ -162,7 +186,13 @@
           "external_source_name",
           "external_url_template",
           "coverage_column",
-          "total_column"
+          "total_column",
+          "filter_label",
+          "sort_count_label",
+          "sort_total_label",
+          "side",
+          "overlay",
+          "legend_label"
         ],
         "title": "MetricConfig",
         "type": "object"

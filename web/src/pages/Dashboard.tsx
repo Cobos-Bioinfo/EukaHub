@@ -2,6 +2,7 @@ import { useParams } from "react-router-dom";
 
 import { getLineage, getMetricsConfig, getSummary } from "../api/queries";
 import Breadcrumb from "../components/Breadcrumb";
+import BreakdownSection from "../components/BreakdownSection";
 import MetricCard from "../components/MetricCard";
 import { useAsync } from "../hooks/useAsync";
 import { fmt } from "../lib/format";
@@ -45,6 +46,14 @@ export default function Dashboard() {
           ) : null;
         })}
       </div>
+
+      <BreakdownSection
+        key={taxid}
+        taxid={taxid}
+        rootName={s.name}
+        rootRank={s.rank}
+        metrics={metrics.data}
+      />
     </section>
   );
 }
