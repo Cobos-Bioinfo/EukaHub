@@ -41,7 +41,7 @@ export default function Dashboard() {
           <strong>{fmt(s.n_rows)}</strong> species in this clade
         </p>
         <Link className="dashboard__tree-link" to={`/tree/${taxid}`}>
-          Explore in the Tree of Life →
+          🌳 Explore <em>this clade</em> in the Tree of Life →
         </Link>
       </header>
 

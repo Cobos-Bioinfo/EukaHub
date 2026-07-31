@@ -825,11 +825,25 @@ a:hover {
   color: var(--link);
 }
 .dashboard__tree-link {
-  display: inline-block;
-  margin-top: 0.6rem;
-  font-size: 0.9rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-top: 0.85rem;
+  padding: 0.5rem 0.9rem;
+  font-size: 0.92rem;
   font-weight: 600;
-  color: var(--link);
+  color: #fff;
+  background: var(--link);
+  border-radius: 999px;
+  box-shadow: var(--shadow);
+}
+.dashboard__tree-link em {
+  font-style: italic;
+  opacity: 0.92;
+}
+.dashboard__tree-link:hover {
+  text-decoration: none;
+  filter: brightness(1.06);
 }
 
 /* ---- Tree page ------------------------------------------------------- */
@@ -1062,4 +1076,189 @@ a:hover {
   cursor: pointer;
   color: var(--link);
   font-size: 0.82rem;
+}
+
+/* ---- Tree: controls, zoom, selection, details panel ------------------ */
+.tree-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.6rem;
+}
+.tree-controls__label {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+.tree-controls__seg {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  overflow: hidden;
+  background: var(--card);
+}
+.seg-btn {
+  padding: 0.32rem 0.7rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--ink-2);
+  background: none;
+  border: none;
+  border-right: 1px solid var(--border);
+  cursor: pointer;
+}
+.seg-btn:last-child {
+  border-right: none;
+}
+.seg-btn:hover {
+  background: var(--track);
+}
+.seg-btn--on {
+  color: #fff;
+  background: var(--link);
+}
+.seg-btn--on:hover {
+  background: var(--link);
+  filter: brightness(1.05);
+}
+
+.tree-zoom {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.tree-zoom button {
+  width: 32px;
+  height: 32px;
+  font-size: 1.1rem;
+  line-height: 1;
+  color: var(--ink-2);
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+  backdrop-filter: blur(4px);
+}
+.tree-zoom button:hover {
+  border-color: var(--link);
+  color: var(--link);
+}
+
+.tree__dot--selected {
+  stroke: var(--link);
+  stroke-width: 2.5;
+}
+
+/* Details panel for the clicked node. */
+.tree-panel {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  width: min(280px, 70vw);
+  padding: 0.85rem 0.95rem 0.95rem;
+  background: rgba(255, 255, 255, 0.97);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 6px 20px rgba(16, 24, 40, 0.16);
+  backdrop-filter: blur(6px);
+}
+.tree-panel__close {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  border: none;
+  background: none;
+  font-size: 1.2rem;
+  line-height: 1;
+  color: var(--muted);
+  cursor: pointer;
+}
+.tree-panel__close:hover {
+  color: var(--ink);
+}
+.tree-panel__name {
+  margin: 0 1rem 0.35rem 0;
+  font-size: 1.05rem;
+  letter-spacing: -0.01em;
+}
+.tree-panel__sub {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0 0 0.65rem;
+  font-size: 0.82rem;
+  color: var(--ink-2);
+}
+.tree-panel__metrics {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin-bottom: 0.8rem;
+}
+.tree-panel__metric {
+  display: grid;
+  grid-template-columns: 1fr 70px 34px;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.78rem;
+  color: var(--ink-2);
+}
+.tree-panel__mlabel {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+.tree-panel__dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.12);
+}
+.tree-panel__bar {
+  height: 7px;
+  background: var(--track);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.tree-panel__fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+}
+.tree-panel__mval {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+.tree-panel__actions {
+  display: flex;
+  gap: 0.5rem;
+}
+.tree-panel__btn {
+  flex: 1;
+  padding: 0.45rem 0.6rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--ink-2);
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+}
+.tree-panel__btn:hover {
+  border-color: var(--link);
+  color: var(--link);
+}
+.tree-panel__btn--primary {
+  color: #fff;
+  background: var(--link);
+  border-color: var(--link);
+}
+.tree-panel__btn--primary:hover {
+  color: #fff;
+  filter: brightness(1.06);
 }

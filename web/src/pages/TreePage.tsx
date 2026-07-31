@@ -35,8 +35,10 @@ export default function TreePage() {
             Tree of Life{node ? <> — <em>{node.name}</em></> : null}
           </h1>
           <p className="tree-page__sub">
-            Explore the eukaryotic tree outward from this clade. Node size ∝ species,
-            colour ∝ assembly coverage. Click a node to expand, a name to open it.
+            Explore the eukaryotic tree outward from this clade. Node size ∝ species;
+            colour by a resource of your choice. Click a node to expand it and see its
+            details, then open its dashboard from there. Scroll or use the buttons to zoom;
+            drag to pan.
           </p>
         </div>
         <Link className="tree-page__back" to={`/clade/${taxid}`}>
