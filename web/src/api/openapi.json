@@ -299,6 +299,37 @@
         "title": "TaxonAbout",
         "type": "object"
       },
+      "TaxonChildren": {
+        "description": "A taxon's direct children (adjacency) for lazy-expanding the tree.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/TaxonNode"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "parent": {
+            "$ref": "#/components/schemas/TaxonRef"
+          },
+          "returned": {
+            "title": "Returned",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "parent",
+          "total",
+          "returned",
+          "items"
+        ],
+        "title": "TaxonChildren",
+        "type": "object"
+      },
       "TaxonLineage": {
         "description": "A taxon plus its root\u2192node lineage (for the header breadcrumb).",
         "properties": {
@@ -329,6 +360,48 @@
           "lineage"
         ],
         "title": "TaxonLineage",
+        "type": "object"
+      },
+      "TaxonNode": {
+        "description": "One node in the interactive tree: a taxon's summary metrics plus a\n``has_children`` hint, so the UI can show an expand affordance for a node\nwithout a second round-trip to discover it's a leaf.",
+        "properties": {
+          "has_children": {
+            "title": "Has Children",
+            "type": "boolean"
+          },
+          "n_rows": {
+            "title": "N Rows",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "rank": {
+            "title": "Rank",
+            "type": "string"
+          },
+          "resources": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/ResourceSummary"
+            },
+            "title": "Resources",
+            "type": "object"
+          },
+          "taxid": {
+            "title": "Taxid",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "taxid",
+          "name",
+          "rank",
+          "n_rows",
+          "resources",
+          "has_children"
+        ],
+        "title": "TaxonNode",
         "type": "object"
       },
       "TaxonRef": {
@@ -864,6 +937,78 @@
           }
         },
         "summary": "Taxon About"
+      }
+    },
+    "/taxon/{taxid}/children": {
+      "get": {
+        "description": "A taxon's direct children (adjacency), for lazy-expanding the tree.\n\nOne indexed `parent_id` lookup, sorted by species count by default (biggest\nclades first) and paginated via limit/offset so a node with tens of\nthousands of children loads a screenful at a time. Each child carries a\n`has_children` flag. 404 if the taxid is unknown; a childless taxon (e.g. a\nspecies leaf) returns an empty list.",
+        "operationId": "taxon_children_taxon__taxid__children_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "taxid",
+            "required": true,
+            "schema": {
+              "title": "Taxid",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/SortColumn",
+              "default": "n_rows"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 10,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaxonChildren"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Taxon Children"
       }
     }
   }

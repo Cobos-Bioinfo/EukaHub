@@ -1,7 +1,8 @@
-import { Link, Navigate, Route, Routes } from "react-router-dom";
+import { Link, Navigate, NavLink, Route, Routes } from "react-router-dom";
 
 import RootPicker from "./components/RootPicker";
 import Dashboard from "./pages/Dashboard";
+import TreePage from "./pages/TreePage";
 
 // Default landing clade: Eukaryota (the whole surveyed tree).
 const DEFAULT_TAXID = 2759;
@@ -13,6 +14,12 @@ export default function App() {
         <Link className="app__brand" to={`/clade/${DEFAULT_TAXID}`}>
           Euka<span>Hub</span>
         </Link>
+        <NavLink
+          className={({ isActive }) => "app__nav" + (isActive ? " app__nav--active" : "")}
+          to={`/tree/${DEFAULT_TAXID}`}
+        >
+          Tree of Life
+        </NavLink>
         <RootPicker />
       </header>
 
@@ -20,6 +27,7 @@ export default function App() {
         <Routes>
           <Route path="/" element={<Navigate to={`/clade/${DEFAULT_TAXID}`} replace />} />
           <Route path="/clade/:taxid" element={<Dashboard />} />
+          <Route path="/tree/:taxid" element={<TreePage />} />
           <Route path="*" element={<p className="notice notice--error">Page not found.</p>} />
         </Routes>
       </main>

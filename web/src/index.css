@@ -810,3 +810,256 @@ a:hover {
 .notice--error {
   color: #b42318;
 }
+
+/* ---- Tree: nav + cross-links ----------------------------------------- */
+.app__nav {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--ink-2);
+}
+.app__nav:hover {
+  text-decoration: none;
+  color: var(--link);
+}
+.app__nav--active {
+  color: var(--link);
+}
+.dashboard__tree-link {
+  display: inline-block;
+  margin-top: 0.6rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--link);
+}
+
+/* ---- Tree page ------------------------------------------------------- */
+.tree-page__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+.tree-page__title {
+  margin: 0;
+  font-size: clamp(1.5rem, 3.5vw, 2rem);
+  letter-spacing: -0.02em;
+}
+.tree-page__title em {
+  font-style: italic;
+  color: var(--ink-2);
+}
+.tree-page__sub {
+  margin: 0.35rem 0 0;
+  max-width: 62ch;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+.tree-page__back {
+  flex: none;
+  padding: 0.35rem 0.8rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--ink-2);
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+}
+.tree-page__back:hover {
+  text-decoration: none;
+  border-color: var(--link);
+  color: var(--link);
+}
+
+/* ---- Radial tree ----------------------------------------------------- */
+.tree {
+  position: relative;
+  overflow: hidden;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+.tree__svg {
+  display: block;
+  width: 100%;
+  height: min(72vh, 720px);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  background: radial-gradient(circle at 50% 50%, #ffffff 0%, var(--surface) 78%);
+}
+.tree__svg:active {
+  cursor: grabbing;
+}
+.tree__links path {
+  stroke: var(--grid);
+  stroke-width: 1.4;
+}
+.tree__dot {
+  stroke: rgba(15, 23, 42, 0.28);
+  stroke-width: 1;
+  transition: stroke-width 0.1s ease;
+}
+.tree__dot--expandable {
+  cursor: pointer;
+}
+.tree__dot--expandable:hover {
+  stroke: var(--accent);
+  stroke-width: 2;
+}
+.tree__dot--expanded {
+  stroke: var(--accent);
+}
+.tree__dot--loading {
+  opacity: 0.5;
+}
+.tree__label {
+  font-size: 11px;
+  fill: var(--ink-2);
+  cursor: pointer;
+  paint-order: stroke; /* draw the halo behind the glyphs */
+  stroke: var(--card);
+  stroke-width: 3px; /* halo so labels stay legible over links */
+  stroke-linejoin: round;
+}
+.tree__label:hover {
+  fill: var(--link);
+}
+.tree__label--root {
+  font-size: 14px;
+  font-weight: 700;
+  fill: var(--ink);
+  text-anchor: middle;
+}
+.tree__more {
+  cursor: pointer;
+}
+.tree__more-dot {
+  fill: var(--track);
+  stroke: var(--muted);
+  stroke-width: 1;
+  stroke-dasharray: 2 2;
+}
+.tree__more:hover .tree__more-dot {
+  stroke: var(--link);
+}
+.tree__more-label {
+  font-size: 9px;
+  font-weight: 600;
+  fill: var(--ink-2);
+  pointer-events: none;
+}
+
+/* ---- Tree legend ----------------------------------------------------- */
+.tree-legend {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 0.5rem 0.65rem;
+  font-size: 0.72rem;
+  color: var(--ink-2);
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  backdrop-filter: blur(4px);
+}
+.tree-legend__title {
+  font-weight: 600;
+  color: var(--ink);
+}
+.tree-legend__ramp {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+.tree-legend__step {
+  width: 16px;
+  height: 10px;
+  border-radius: 2px;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.08);
+}
+.tree-legend__cap {
+  color: var(--muted);
+}
+.tree-legend__item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.tree-legend__hint {
+  color: var(--muted);
+}
+
+/* ---- Tree outline (accessible fallback) ------------------------------ */
+.tree-details {
+  margin-top: 1rem;
+  padding: 0.5rem 0.9rem;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.tree-details > summary {
+  padding: 0.25rem 0;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: var(--ink-2);
+}
+.tree-outline,
+.tree-outline ul {
+  list-style: none;
+  margin: 0;
+  padding-left: 1.1rem;
+}
+.tree-outline {
+  padding-left: 0;
+  padding-top: 0.4rem;
+}
+.tree-outline__row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  padding: 2px 0;
+}
+.tree-outline__toggle {
+  flex: none;
+  width: 1.4rem;
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: var(--ink-2);
+  font-size: 0.8rem;
+}
+.tree-outline__leaf {
+  flex: none;
+  width: 1.4rem;
+  text-align: center;
+  color: var(--border);
+}
+.tree-outline__name {
+  font-weight: 600;
+}
+.tree-outline__rank {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--muted);
+}
+.tree-outline__meta {
+  font-size: 0.78rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.tree-outline__more {
+  padding: 2px 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: var(--link);
+  font-size: 0.82rem;
+}

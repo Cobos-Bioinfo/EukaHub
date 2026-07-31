@@ -6,6 +6,7 @@ Phase 2 read endpoints:
 - ``GET /clade/{taxid}/breakdown``  — descendants at a target rank (Q2).
 - ``GET /clade/{taxid}/export.tsv`` — the full breakdown as a TSV download.
 - ``GET /taxon/{taxid}``            — the root→node lineage breadcrumb.
+- ``GET /taxon/{taxid}/children``   — direct children for the interactive tree.
 - ``GET /taxon/{taxid}/about``      — Wikipedia "About" summary (decorative).
 - ``GET /search``                   — name search for the root picker.
 
@@ -35,6 +36,7 @@ from eukahub_api.queries import (
     TargetRank,
     TaxonNotFound,
     fetch_breakdown,
+    fetch_children,
     fetch_lineage,
     fetch_root,
     fetch_summary,
@@ -46,7 +48,9 @@ from eukahub_api.schemas import (
     CladeSummary,
     MetricConfig,
     TaxonAbout,
+    TaxonChildren,
     TaxonLineage,
+    TaxonNode,
     TaxonRef,
 )
 from eukahub_api.wikipedia import fetch_about
@@ -235,6 +239,41 @@ def taxon_lineage(taxid: int, conn: Conn) -> TaxonLineage:
     lineage = [TaxonRef(taxid=t, name=n, rank=r) for t, n, r in rows]
     node = lineage[-1]  # deepest = the requested taxon
     return TaxonLineage(taxid=node.taxid, name=node.name, rank=node.rank, lineage=lineage)
+
+
+@app.get("/taxon/{taxid}/children", response_model=TaxonChildren)
+def taxon_children(
+    taxid: int,
+    conn: Conn,
+    sort: SortColumn = SortColumn.n_rows,
+    limit: Annotated[int, Query(ge=1, le=500)] = 10,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> TaxonChildren:
+    """A taxon's direct children (adjacency), for lazy-expanding the tree.
+
+    One indexed `parent_id` lookup, sorted by species count by default (biggest
+    clades first) and paginated via limit/offset so a node with tens of
+    thousands of children loads a screenful at a time. Each child carries a
+    `has_children` flag. 404 if the taxid is unknown; a childless taxon (e.g. a
+    species leaf) returns an empty list.
+    """
+    try:
+        parent_ref, items, total = fetch_children(
+            conn, taxid=taxid, sort=sort.value, limit=limit, offset=offset
+        )
+    except TaxonNotFound:
+        raise HTTPException(status_code=404, detail=f"taxon {taxid} not found")
+
+    p_taxid, p_name, p_rank = parent_ref
+    return TaxonChildren(
+        parent=TaxonRef(taxid=p_taxid, name=p_name, rank=p_rank),
+        total=total,
+        returned=len(items),
+        items=[
+            TaxonNode.from_child(name, rank, meta, has_children)
+            for name, rank, meta, has_children in items
+        ],
+    )
 
 
 @app.get("/taxon/{taxid}/about", response_model=TaxonAbout | None)

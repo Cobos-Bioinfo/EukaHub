@@ -1,4 +1,4 @@
-import { useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 
 import { getAbout, getLineage, getMetricsConfig, getSummary } from "../api/queries";
 import AboutCard from "../components/AboutCard";
@@ -40,6 +40,9 @@ export default function Dashboard() {
         <p className="dashboard__species">
           <strong>{fmt(s.n_rows)}</strong> species in this clade
         </p>
+        <Link className="dashboard__tree-link" to={`/tree/${taxid}`}>
+          Explore in the Tree of Life →
+        </Link>
       </header>
 
       {about.data && <AboutCard about={about.data} />}

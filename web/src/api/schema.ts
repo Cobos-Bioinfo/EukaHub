@@ -206,6 +206,32 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/taxon/{taxid}/children": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Taxon Children
+         * @description A taxon's direct children (adjacency), for lazy-expanding the tree.
+         *
+         *     One indexed `parent_id` lookup, sorted by species count by default (biggest
+         *     clades first) and paginated via limit/offset so a node with tens of
+         *     thousands of children loads a screenful at a time. Each child carries a
+         *     `has_children` flag. 404 if the taxid is unknown; a childless taxon (e.g. a
+         *     species leaf) returns an empty list.
+         */
+        get: operations["taxon_children_taxon__taxid__children_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -343,6 +369,19 @@ export interface components {
             url: string;
         };
         /**
+         * TaxonChildren
+         * @description A taxon's direct children (adjacency) for lazy-expanding the tree.
+         */
+        TaxonChildren: {
+            /** Items */
+            items: components["schemas"]["TaxonNode"][];
+            parent: components["schemas"]["TaxonRef"];
+            /** Returned */
+            returned: number;
+            /** Total */
+            total: number;
+        };
+        /**
          * TaxonLineage
          * @description A taxon plus its root→node lineage (for the header breadcrumb).
          */
@@ -353,6 +392,28 @@ export interface components {
             name: string;
             /** Rank */
             rank: string;
+            /** Taxid */
+            taxid: number;
+        };
+        /**
+         * TaxonNode
+         * @description One node in the interactive tree: a taxon's summary metrics plus a
+         *     ``has_children`` hint, so the UI can show an expand affordance for a node
+         *     without a second round-trip to discover it's a leaf.
+         */
+        TaxonNode: {
+            /** Has Children */
+            has_children: boolean;
+            /** N Rows */
+            n_rows: number;
+            /** Name */
+            name: string;
+            /** Rank */
+            rank: string;
+            /** Resources */
+            resources: {
+                [key: string]: components["schemas"]["ResourceSummary"];
+            };
             /** Taxid */
             taxid: number;
         };
@@ -645,6 +706,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TaxonAbout"] | null;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    taxon_children_taxon__taxid__children_get: {
+        parameters: {
+            query?: {
+                sort?: components["schemas"]["SortColumn"];
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path: {
+                taxid: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaxonChildren"];
                 };
             };
             /** @description Validation Error */

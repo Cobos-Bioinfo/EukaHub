@@ -9,6 +9,8 @@ export type Breakdown = components["schemas"]["Breakdown"];
 export type TaxonRef = components["schemas"]["TaxonRef"];
 export type TaxonLineage = components["schemas"]["TaxonLineage"];
 export type TaxonAbout = components["schemas"]["TaxonAbout"];
+export type TaxonNode = components["schemas"]["TaxonNode"];
+export type TaxonChildren = components["schemas"]["TaxonChildren"];
 
 // Breakdown (Q2) query-param enums — the closed sets the API validates against.
 export type TargetRank = components["schemas"]["TargetRank"];

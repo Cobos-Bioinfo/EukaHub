@@ -78,6 +78,32 @@ ADR-style. Settled decisions with a one-line why; open forks at the bottom.
   live DB, TLS, staging/prod DB, gateway rate limiting) are on hold — they
   depend on CRG's environment. The app is already deploy-agnostic-ready.
 
+## Settled (2026-08-01)
+
+- **Phase 6 tree = radial dendrogram, rendered in SVG.** The interactive Tree of
+  Life is a *radial* node-link tree (the iconic, most recognizable "tree of
+  life" form for a biology audience), chosen with the user over an
+  indented outliner / icicle-sunburst / horizontal dendrogram. Rendered as
+  **React-controlled SVG** (accessible, themeable, consistent with the hand-built
+  divergent chart), bounded by lazy-expand + a visible-node guardrail — so
+  Canvas/WebGL (the roadmap's original aspiration) is deferred as a scale-up
+  path, not needed for the MVP.
+- **New runtime dep: `d3-hierarchy` + `d3-shape` (layout math only).** Radial
+  tidy-tree geometry + curved-link generators are error-prone to hand-roll; these
+  two focused modules (~19 KB gz, TS types) do just the math while we keep all
+  rendering in our SVG. Vetted: they add **zero** npm-audit advisories (the only
+  2 highs remain react-router; the dev-only openapi-typescript chain has since
+  cleared upstream). A hand-rolled polar layout was the zero-dep alternative.
+- **Tree lazy-expand via a dedicated `GET /taxon/{taxid}/children`.** Direct
+  children by adjacency (`parent_id`), sorted by species count, paginated
+  (limit/offset), with a per-child `has_children` flag (an indexed `EXISTS`
+  probe) so the UI shows an expand affordance without a round-trip. This is the
+  cheap adjacency lookup the schema reserved `parent_id` for. The `EXISTS` probe
+  is fine for the MVP; a precomputed `child_count` rollup column is a future
+  optimization (needs a pipeline change + rebuild). Node **colour** encodes a
+  single sequential metric (assembly coverage %), not a categorical palette, so
+  the dataviz categorical-separation validator doesn't apply.
+
 ## Open — still to decide
 
 - None — all forks resolved.
