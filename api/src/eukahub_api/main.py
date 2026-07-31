@@ -6,6 +6,7 @@ Phase 2 read endpoints:
 - ``GET /clade/{taxid}/breakdown``  — descendants at a target rank (Q2).
 - ``GET /clade/{taxid}/export.tsv`` — the full breakdown as a TSV download.
 - ``GET /taxon/{taxid}``            — the root→node lineage breadcrumb.
+- ``GET /taxon/{taxid}/about``      — Wikipedia "About" summary (decorative).
 - ``GET /search``                   — name search for the root picker.
 
 ``/health`` (liveness) + ``/health/ready`` (DB readiness) and ``/metrics-config``
@@ -44,9 +45,11 @@ from eukahub_api.schemas import (
     Breakdown,
     CladeSummary,
     MetricConfig,
+    TaxonAbout,
     TaxonLineage,
     TaxonRef,
 )
+from eukahub_api.wikipedia import fetch_about
 
 log = logging.getLogger("eukahub.api")
 
@@ -232,6 +235,24 @@ def taxon_lineage(taxid: int, conn: Conn) -> TaxonLineage:
     lineage = [TaxonRef(taxid=t, name=n, rank=r) for t, n, r in rows]
     node = lineage[-1]  # deepest = the requested taxon
     return TaxonLineage(taxid=node.taxid, name=node.name, rank=node.rank, lineage=lineage)
+
+
+@app.get("/taxon/{taxid}/about", response_model=TaxonAbout | None)
+def taxon_about(taxid: int, conn: Conn) -> TaxonAbout | None:
+    """A Wikipedia "About" summary for the taxon — the decorative dashboard card.
+
+    Resolves the taxon's scientific name, then does one cached, server-side GET
+    against Wikipedia's REST summary endpoint (so we can send the User-Agent
+    Wikipedia's policy wants and cache across viewers). ``404`` if the taxid is
+    unknown; otherwise the summary, or ``null`` when there's no usable article —
+    the frontend omits the card either way. The ``null`` result caches as a
+    normal 200, so taxa without a page don't re-hit the network downstream.
+    """
+    try:
+        name, _rank, _path = fetch_root(conn, taxid)
+    except TaxonNotFound:
+        raise HTTPException(status_code=404, detail=f"taxon {taxid} not found")
+    return fetch_about(name)
 
 
 @app.get("/clade/{taxid}/export.tsv")

@@ -1,6 +1,7 @@
 import { useParams } from "react-router-dom";
 
-import { getLineage, getMetricsConfig, getSummary } from "../api/queries";
+import { getAbout, getLineage, getMetricsConfig, getSummary } from "../api/queries";
+import AboutCard from "../components/AboutCard";
 import Breadcrumb from "../components/Breadcrumb";
 import BreakdownSection from "../components/BreakdownSection";
 import MetricCard from "../components/MetricCard";
@@ -16,6 +17,9 @@ export default function Dashboard() {
   const summary = useAsync(() => getSummary(taxid), [taxid]);
   const lineage = useAsync(() => getLineage(taxid), [taxid]);
   const metrics = useAsync(() => getMetricsConfig(), []);
+  // Decorative Wikipedia context — never gates the page; rendered only if it
+  // resolves to a summary, its error deliberately ignored.
+  const about = useAsync(() => getAbout(taxid), [taxid]);
 
   if (!validId) return <p className="notice notice--error">Invalid taxon id.</p>;
   if (summary.error) return <p className="notice notice--error">{summary.error}</p>;
@@ -37,6 +41,8 @@ export default function Dashboard() {
           <strong>{fmt(s.n_rows)}</strong> species in this clade
         </p>
       </header>
+
+      {about.data && <AboutCard about={about.data} />}
 
       <div className="card-grid">
         {metrics.data.map((m) => {

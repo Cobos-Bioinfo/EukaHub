@@ -43,6 +43,12 @@ read a frozen file. Keep the resumable-snapshot + atomic-swap discipline.
 ## Phase 3 — Frontend: the dashboard (Q1)
 - Rebuild the "Genomic Resource Summary": metric cards, total-species, coverage
   bars, Wikipedia "About" card, lineage breadcrumb, root picker.
+- **[done] Wikipedia "About" card** (2026-07-31): `GET /taxon/{taxid}/about`
+  proxies Wikipedia's REST summary server-side (User-Agent + caching + typed
+  bridge; see `../DECISIONS.md`), returning `TaxonAbout | null`. `AboutCard`
+  renders thumbnail + blurb + link on `/clade/:taxid`, decorative (omitted on
+  null/error). **CSP follow-up:** allow `img-src upload.wikimedia.org` when TLS
+  + CSP land, or proxy the thumbnail.
 
 ## Phase 4 — Frontend: the breakdown (Q2)
 - The filter/sort/limit **table** with coverage bars, plus a bar chart.

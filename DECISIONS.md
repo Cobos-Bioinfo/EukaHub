@@ -57,6 +57,19 @@ ADR-style. Settled decisions with a one-line why; open forks at the bottom.
   buys nothing. If scraping/abuse appears, add **gateway rate limiting** and/or
   **optional API keys for quota**, not login. Revisit only if a non-public
   dataset or a write path is introduced.
+- **Wikipedia "About" card fetched via the API, not the browser.** The
+  decorative summary (`GET /taxon/{taxid}/about`) is proxied server-side rather
+  than fetched client-side, for four reasons: (1) Wikipedia's REST policy wants
+  a descriptive `User-Agent`, a header browser `fetch` can't set; (2) it fits
+  the typed-bridge pattern (OpenAPI → TS → `getAbout(taxid)`); (3) it rides the
+  existing `Cache-Control` middleware plus a 24h in-process TTL cache, so at
+  most one Wikipedia hit per taxon — the "no article" (`null`) result caches
+  too; (4) same-origin `/api` avoids a CSP `connect-src` change. This is the
+  **first external call in the read path** — kept non-load-bearing (any failure
+  → `null` → the card is omitted) and SSRF-free (URL fixed to the summary
+  endpoint, name URL-encoded; stdlib `urllib`, no new dep). **Follow-up:** when
+  a CSP lands (with TLS), allow `img-src https://upload.wikimedia.org` for the
+  thumbnail, or proxy the image too.
 - **Deployment target: CRG / guigolab server — deferred.** Deploy only once the
   app is more functionally interesting; then, with **Guigó** and the team's **IT
   expert**, deploy on CRG/guigolab's Docker-based infra (matches our

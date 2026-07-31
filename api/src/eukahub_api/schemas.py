@@ -115,6 +115,21 @@ class TaxonLineage(BaseModel):
     lineage: list[TaxonRef]  # root first, this taxon last (inclusive)
 
 
+class TaxonAbout(BaseModel):
+    """Wikipedia summary for a taxon's "About" card (decorative, non-load-bearing).
+
+    Sourced live from Wikipedia's REST summary endpoint and cached server-side.
+    The endpoint returns ``null`` instead of this model when the taxon has no
+    usable article, in which case the frontend simply omits the card.
+    """
+
+    title: str  # article title (may differ from the NCBI name via redirect)
+    description: str  # short one-line descriptor ("" when Wikipedia has none)
+    extract: str  # first-paragraph plain-text summary
+    thumbnail: str | None  # image URL (upload.wikimedia.org), if any
+    url: str  # canonical desktop article URL
+
+
 class Breakdown(BaseModel):
     """The breakdown (Q2) payload: a root's descendants at a target rank."""
 
