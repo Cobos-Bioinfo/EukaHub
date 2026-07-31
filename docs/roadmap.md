@@ -138,6 +138,24 @@ in this phase:
   rollup column (drop the per-row `EXISTS` probe), in-tree search highlighting,
   animated expand/collapse transitions.
 
+## Phase 7 — Layout & space-usage overhaul (major; not yet started)
+
+Flagged by the user 2026-08-01. The whole app reads "almost vertical" — every
+page is a centered column capped at `--maxw: 1100px`, so wide screens waste a lot
+of left/right space. A dedicated pass, big enough for its own session:
+
+- Rework the app-wide layout to use horizontal space (a wider cap, or a genuinely
+  different layout — multi-column dashboard / sidebar / full-bleed sections — not
+  just a stretched column). Keep it responsive (don't break narrow/mobile).
+- Make the **Tree of Life near-fullscreen** (it benefits from all the space and
+  this removes the wasted-side feeling there). Likely let that page escape
+  `.app__main`'s max-width (full-bleed) and enlarge `.tree__svg`
+  (`height: min(72vh, 720px)` today). The radial geometry constants in
+  `RadialTree.tsx` (`VW/VH/FILL_R/RING`, tuned to today's container) should be
+  revisited — probably measure the container instead of the fixed viewBox.
+- **Keep the `TreeOutline` text-outline accessible view** when going fullscreen.
+- Natural to pair with app-wide **dark mode** (still deferred).
+
 ## Reuse vs rebuild vs delete
 
 | Reuse (port) | Rebuild | Delete |

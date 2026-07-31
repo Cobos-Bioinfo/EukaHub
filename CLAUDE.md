@@ -177,12 +177,18 @@ rebuild vs. the live DB, TLS, staging/prod DB, rate limiting).
 
 **So the next focus is functional** — the gate the user set for deploying. Two
 headline pieces now done (see above): the **Wikipedia "About" card** and
-**Phase 6 — the interactive radial Tree of Life**. Remaining candidates: the
-**data-refresh pipeline** (port NCBI/Annotrieve/ENA fetches — independent of
-deploy, unblocks the scheduled rebuild), **app-wide dark mode** (would light up
-the chart + tree, both currently light-only), and further **tree polish**
-(in-tree search-to-node, animated expand, a `child_count` rollup column). Ask
-the user which to take — or whether the app is now "functionally interesting"
+**Phase 6 — the interactive radial Tree of Life**. Candidates:
+- **Phase 7 — layout & space-usage overhaul** (user-flagged 2026-08-01, **major**,
+  own session): the app reads too vertical / wastes horizontal space; make the
+  Tree of Life near-fullscreen (keep the `TreeOutline` view). See `docs/roadmap.md`
+  Phase 7 + the `layout-space-overhaul` memory.
+- **data-refresh pipeline** (port NCBI/Annotrieve/ENA fetches — independent of
+  deploy, unblocks the scheduled rebuild).
+- **app-wide dark mode** (chart + tree are light-only; pairs with the layout pass).
+- **tree polish** (in-tree search-to-node, animated expand, a `child_count`
+  rollup column).
+
+Ask the user which to take — or whether the app is now "functionally interesting"
 enough to open the CRG deployment conversation.
 
 Tracked non-functional follow-ups (do when relevant): frontend deps on latest
