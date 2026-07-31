@@ -64,6 +64,11 @@ _SECURITY_HEADERS = {
     "Referrer-Policy": "strict-origin-when-cross-origin",
 }
 
+# The dataset is read-only and rebuilt offline, so a GET response is valid until
+# the next rebuild — safe to cache downstream (browser / CDN / reverse proxy).
+# Tune CACHE_MAX_AGE (seconds) to the rebuild cadence; health stays uncached.
+_CACHE_MAX_AGE = int(os.environ.get("CACHE_MAX_AGE", "3600"))
+
 
 def cors_allow_origins() -> list[str]:
     raw = os.environ.get("CORS_ALLOW_ORIGINS", _DEFAULT_CORS_ORIGINS)
@@ -93,12 +98,20 @@ app.add_middleware(
 
 
 @app.middleware("http")
-async def add_security_headers(request: Request, call_next):
-    """Set baseline security headers on every response (setdefault so anything
-    that already set one — a handler or proxy — keeps precedence)."""
+async def add_response_headers(request: Request, call_next):
+    """Baseline security headers on every response, plus Cache-Control on
+    cacheable GETs (setdefault so a handler that set its own keeps precedence)."""
     response = await call_next(request)
     for header, value in _SECURITY_HEADERS.items():
         response.headers.setdefault(header, value)
+    # Health must stay fresh; other successful GETs are cacheable until rebuild.
+    if request.method == "GET":
+        if request.url.path.startswith("/health"):
+            response.headers.setdefault("Cache-Control", "no-store")
+        elif response.status_code == 200:
+            response.headers.setdefault(
+                "Cache-Control", f"public, max-age={_CACHE_MAX_AGE}"
+            )
     return response
 
 

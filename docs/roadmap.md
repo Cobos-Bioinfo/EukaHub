@@ -49,8 +49,10 @@ that depend on them.
   the resumable-snapshot + atomic-swap discipline; staging vs prod DB; basic
   metrics.
   resumable-snapshot + atomic-swap discipline; staging vs prod DB; basic metrics.
-- Response caching for common clades (Eukaryota, Metazoa, …) — read-only between
-  rebuilds, so cache-friendly.
+- **[done]** Response caching: `Cache-Control: public, max-age=$CACHE_MAX_AGE`
+  on cacheable GETs (health = `no-store`), so browsers / a CDN / a reverse proxy
+  cache between rebuilds. Follow-ups: nginx `proxy_cache` or a CDN in front,
+  ETag/304 conditional requests, and an in-process LRU for the hottest clades.
 
 ### Security & secrets — assistant owns this; acknowledge & fix each when reached
 Credential externalization is **done** (compose reads `${POSTGRES_*:-eukahub}`,
