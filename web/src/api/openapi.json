@@ -258,6 +258,47 @@
         "title": "TargetRank",
         "type": "string"
       },
+      "TaxonAbout": {
+        "description": "Wikipedia summary for a taxon's \"About\" card (decorative, non-load-bearing).\n\nSourced live from Wikipedia's REST summary endpoint and cached server-side.\nThe endpoint returns ``null`` instead of this model when the taxon has no\nusable article, in which case the frontend simply omits the card.",
+        "properties": {
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "extract": {
+            "title": "Extract",
+            "type": "string"
+          },
+          "thumbnail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Thumbnail"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "description",
+          "extract",
+          "thumbnail",
+          "url"
+        ],
+        "title": "TaxonAbout",
+        "type": "object"
+      },
       "TaxonLineage": {
         "description": "A taxon plus its root\u2192node lineage (for the header breadcrumb).",
         "properties": {
@@ -775,6 +816,54 @@
           }
         },
         "summary": "Taxon Lineage"
+      }
+    },
+    "/taxon/{taxid}/about": {
+      "get": {
+        "description": "A Wikipedia \"About\" summary for the taxon \u2014 the decorative dashboard card.\n\nResolves the taxon's scientific name, then does one cached, server-side GET\nagainst Wikipedia's REST summary endpoint (so we can send the User-Agent\nWikipedia's policy wants and cache across viewers). ``404`` if the taxid is\nunknown; otherwise the summary, or ``null`` when there's no usable article \u2014\nthe frontend omits the card either way. The ``null`` result caches as a\nnormal 200, so taxa without a page don't re-hit the network downstream.",
+        "operationId": "taxon_about_taxon__taxid__about_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "taxid",
+            "required": true,
+            "schema": {
+              "title": "Taxid",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/TaxonAbout"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "Response Taxon About Taxon  Taxid  About Get"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Taxon About"
       }
     }
   }

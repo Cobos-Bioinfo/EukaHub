@@ -10,6 +10,7 @@ import type {
   MetricFilter,
   SortColumn,
   TargetRank,
+  TaxonAbout,
   TaxonLineage,
   TaxonRef,
 } from "./types";
@@ -43,6 +44,18 @@ export const getSummary = async (taxid: number): Promise<CladeSummary> =>
 
 export const getLineage = async (taxid: number): Promise<TaxonLineage> =>
   unwrap(await api.GET("/taxon/{taxid}", { params: { path: { taxid } } }));
+
+// The decorative Wikipedia "About" summary. The endpoint returns a null body
+// when the taxon has no usable article, so this resolves to null rather than
+// throwing — the card is omitted, never load-bearing. (A real request failure
+// still throws; the Dashboard ignores it and drops the card.)
+export const getAbout = async (taxid: number): Promise<TaxonAbout | null> => {
+  const { data, error, response } = await api.GET("/taxon/{taxid}/about", {
+    params: { path: { taxid } },
+  });
+  if (error !== undefined) throw new Error(`Request failed (${response.status})`);
+  return data ?? null;
+};
 
 export const searchTaxa = async (q: string, limit = 10): Promise<TaxonRef[]> =>
   unwrap(await api.GET("/search", { params: { query: { q, limit } } }));

@@ -109,6 +109,19 @@ it for GitHub operations (CI/Actions status, PRs, issues). **Never** print, log,
 or commit the user's credentials, secrets, or the auth token (no `gh auth
 token`, no `--show-token`); redact anything sensitive before showing output.
 
+**Wikipedia "About" card — done** (2026-07-31, on `dev`). First functional
+work past Phase 5. `GET /taxon/{taxid}/about` proxies Wikipedia's REST summary
+**server-side** (`wikipedia.py`: stdlib `urllib` + 24h in-process TTL cache;
+`TaxonAbout` schema) — resolves the taxon name via `fetch_root`, returns
+`TaxonAbout | null` (404 only if the taxid is unknown; `null` = no article,
+cached as a normal 200). Frontend: `getAbout()` + `AboutCard` render thumbnail
++ blurb + Wikipedia link between the header and the metric cards on
+`/clade/:taxid`, decorative (omitted on null/error). 5 API tests (network
+monkeypatched); full suite 47 passed; web typecheck+build clean; verified live
+against real Wikipedia through the SPA `/api` proxy (Metazoa→"Animal",
+Eukaryota→"Eukaryote"). API-proxy rationale + the **CSP `img-src`
+follow-up** (needed when TLS+CSP land) in DECISIONS.md / roadmap.md.
+
 ## Read before doing anything
 
 - `docs/data-model.md` — **the core doc.** DB design + taxonomy-tree storage.
@@ -144,11 +157,13 @@ Guigó + the team's IT expert, once the app is more functionally interesting —
 the remaining Phase 5 items depend on CRG's env and are **on hold** (scheduled
 rebuild vs. the live DB, TLS, staging/prod DB, rate limiting).
 
-**So the next focus is functional** — the gate the user set for deploying.
-Candidates: **Phase 6 — interactive Tree of Life** (the headline showcase; DB
-already supports it via `parent_id` lazy-expand + materialized lineage), the
-**Wikipedia "About" card** (ported idea from Euka-Survey), and UX polish. Ask the
-user which to take.
+**So the next focus is functional** — the gate the user set for deploying. The
+**Wikipedia "About" card** is now done (see above). Remaining candidates:
+**Phase 6 — interactive Tree of Life** (the headline showcase; DB already
+supports it via `parent_id` lazy-expand + materialized lineage), the **data-
+refresh pipeline** (port NCBI/Annotrieve/ENA fetches — independent of deploy,
+unblocks the scheduled rebuild), and **UX polish** (app-wide dark mode, browser
+verification of Q1/Q2). Ask the user which to take.
 
 Tracked non-functional follow-ups (do when relevant): frontend deps are now on
 latest majors (react-router 7, vite 8, done 2026-07-31) — **6 npm-audit highs
