@@ -11,19 +11,35 @@ import { fmt, fmtPct } from "../lib/format";
 // coverage % — a magnitude (dataviz skill: magnitude → one hue light→dark). The
 // resource is user-selectable (see the "Colour by" control); the details panel
 // carries all four. Grey = no species tracked in the clade.
+//
+// Coverage is heavily right-skewed (most clades sit at 0–10%, a few reach 100%),
+// so a linear scale would paint almost everything the same pale blue. We map with
+// a gamma curve (pct^0.4) that spreads the low end, then interpolate the ramp
+// continuously — so a 2% vs 9% clade actually differ in shade.
 const NO_DATA = "#cbd5e1";
 const RAMP = ["#e7f0fc", "#bcd4f6", "#7fb0ee", "#4287e0", "#1d4ed8"] as const;
+const hexRgb = (h: string): [number, number, number] => [
+  parseInt(h.slice(1, 3), 16),
+  parseInt(h.slice(3, 5), 16),
+  parseInt(h.slice(5, 7), 16),
+];
+const STOPS = RAMP.map(hexRgb);
 
 function coverageColor(node: TaxonNode, key: string): string {
   if (node.n_rows <= 0) return NO_DATA;
   const pct = node.resources[key]?.percent ?? 0;
-  const i = pct <= 0 ? 0 : pct < 25 ? 1 : pct < 50 ? 2 : pct < 75 ? 3 : 4;
-  return RAMP[i];
+  if (pct <= 0) return RAMP[0];
+  const t = Math.min(1, Math.pow(pct / 100, 0.35)); // gamma-spread the low end
+  const x = t * (STOPS.length - 1);
+  const i = Math.min(STOPS.length - 2, Math.floor(x));
+  const f = x - i;
+  const [r, g, b] = STOPS[i].map((v, k) => Math.round(v + (STOPS[i + 1][k] - v) * f));
+  return `rgb(${r}, ${g}, ${b})`;
 }
 
 // Node SIZE = √(species count), clamped and scaled to the largest node in view.
-const R_MIN = 4;
-const R_MAX = 16;
+const R_MIN = 7;
+const R_MAX = 26;
 function nodeRadius(n: number, maxN: number): number {
   if (n <= 0 || maxN <= 0) return R_MIN;
   return R_MIN + (R_MAX - R_MIN) * Math.min(1, Math.sqrt(n) / Math.sqrt(maxN));
@@ -32,11 +48,20 @@ function nodeRadius(n: number, maxN: number): number {
 const truncate = (s: string) => (s.length > 24 ? s.slice(0, 23) + "…" : s);
 
 // --- Layout geometry --------------------------------------------------------
-const VIEW = 1000; // logical viewBox; the SVG scales to its container via CSS
-const CENTER = VIEW / 2;
-// The layout always fills a fixed radius, so the tree neither shrinks to a dot
-// (one ring) nor overflows as it deepens — rings just compress; zoom handles it.
-const TARGET_R = 390;
+// A landscape viewBox that ~matches the container, so the SVG barely down-scales
+// (nodes/labels render close to their CSS px) and there's little letterboxing.
+const VW = 1100;
+const VH = 760;
+const CX = VW / 2;
+const CY = VH / 2;
+// Rings sit a fixed distance apart (RING) so expanding grows the tree outward at
+// constant, readable spacing instead of cramming; a floor (FILL_R) keeps a
+// shallow tree filling the view rather than shrinking to a dot. Deep trees spill
+// past the edge — that's what pan/zoom is for.
+// Leave vertical room for the radial labels (the 12/6-o'clock ones extend
+// straight out), so the outermost ring + its labels fit without clipping.
+const FILL_R = 0.34 * VH;
+const RING = 135;
 const MIN_K = 0.2;
 const MAX_K = 5;
 
@@ -109,8 +134,9 @@ export default function RadialTree({
     const datum = buildVisible(nodes, rootId);
     if (!datum) return null;
     const hier = hierarchy<Datum>(datum, (d) => (d.kind === "node" ? d.children : undefined));
+    const totalR = Math.max(FILL_R, hier.height * RING);
     const root = d3tree<Datum>()
-      .size([2 * Math.PI, TARGET_R])
+      .size([2 * Math.PI, totalR])
       .separation((a, b) => (a.parent === b.parent ? 1 : 2) / Math.max(1, a.depth))(hier);
     let maxN = 1;
     root.each((d) => {
@@ -122,7 +148,7 @@ export default function RadialTree({
   if (rootId == null || !laid) return <p className="notice">Loading tree…</p>;
   const { root, maxN } = laid;
 
-  const logicalPerPx = () => VIEW / (svgRef.current?.clientWidth || VIEW);
+  const logicalPerPx = () => VW / (svgRef.current?.clientWidth || VW);
   const clampK = (k: number) => Math.min(MAX_K, Math.max(MIN_K, k));
 
   const onWheel = (e: React.WheelEvent) => {
@@ -172,7 +198,7 @@ export default function RadialTree({
         <svg
           ref={svgRef}
           className="tree__svg"
-          viewBox={`0 0 ${VIEW} ${VIEW}`}
+          viewBox={`0 0 ${VW} ${VH}`}
           role="img"
           aria-label="Interactive radial tree of life; use the outline below for a keyboard-accessible view."
           onWheel={onWheel}
@@ -181,7 +207,7 @@ export default function RadialTree({
           onPointerUp={onPointerUp}
           onPointerLeave={onPointerUp}
         >
-          <g transform={`translate(${CENTER + view.tx} ${CENTER + view.ty}) scale(${view.k})`}>
+          <g transform={`translate(${CX + view.tx} ${CY + view.ty}) scale(${view.k})`}>
             <g className="tree__links" fill="none">
               {root.links().map((l) => (
                 <path
@@ -426,10 +452,11 @@ function Legend({ metrics, colorKey }: { metrics: MetricConfig[]; colorKey: stri
       </span>
       <span className="tree-legend__ramp">
         <span className="tree-legend__cap">0</span>
-        {RAMP.map((c) => (
-          <span key={c} className="tree-legend__step" style={{ background: c }} />
-        ))}
-        <span className="tree-legend__cap">100</span>
+        <span
+          className="tree-legend__bar"
+          style={{ background: `linear-gradient(to right, ${RAMP.join(", ")})` }}
+        />
+        <span className="tree-legend__cap">100%</span>
       </span>
       <span className="tree-legend__item">
         <span className="tree-legend__step" style={{ background: NO_DATA }} /> no species

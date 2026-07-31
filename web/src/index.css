@@ -909,7 +909,7 @@ a:hover {
 }
 .tree__links path {
   stroke: var(--grid);
-  stroke-width: 1.4;
+  stroke-width: 1.8;
 }
 .tree__dot {
   stroke: rgba(15, 23, 42, 0.28);
@@ -930,19 +930,19 @@ a:hover {
   opacity: 0.5;
 }
 .tree__label {
-  font-size: 11px;
+  font-size: 14px;
   fill: var(--ink-2);
   cursor: pointer;
   paint-order: stroke; /* draw the halo behind the glyphs */
   stroke: var(--card);
-  stroke-width: 3px; /* halo so labels stay legible over links */
+  stroke-width: 3.5px; /* halo so labels stay legible over links */
   stroke-linejoin: round;
 }
 .tree__label:hover {
   fill: var(--link);
 }
 .tree__label--root {
-  font-size: 14px;
+  font-size: 18px;
   font-weight: 700;
   fill: var(--ink);
   text-anchor: middle;
@@ -960,7 +960,7 @@ a:hover {
   stroke: var(--link);
 }
 .tree__more-label {
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 600;
   fill: var(--ink-2);
   pointer-events: none;
@@ -995,6 +995,12 @@ a:hover {
   width: 16px;
   height: 10px;
   border-radius: 2px;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.08);
+}
+.tree-legend__bar {
+  width: 92px;
+  height: 10px;
+  border-radius: 3px;
   box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.08);
 }
 .tree-legend__cap {
