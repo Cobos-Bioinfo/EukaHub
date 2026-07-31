@@ -129,10 +129,11 @@ lazy-expand: sorted by species count, `count(*) OVER ()` total + `has_children`
 `fetch_breakdown`). Frontend: `useTree` reducer (loaded-hierarchy state, lazy
 fetch, expand/collapse/load-more, node guardrail) drives `RadialTree` — an SVG
 radial dendrogram using **`d3-hierarchy`/`d3-shape` for layout math only**
-(node size ∝ √species, colour = sequential assembly-coverage ramp per the
-**dataviz** skill), with hover tooltip (reuses `.chart-tip`), click-to-expand,
-"load more", hand-rolled pan/zoom, and a keyboard/SR **text-outline fallback**
-(`TreeOutline`). `/tree/:taxid` route + nav link, cross-linked with the
+(node size ∝ √species, colour = a sequential coverage ramp for a **user-picked
+resource** — a "Colour by" selector — per the **dataviz** skill), with a light
+hover tooltip, a **click-to-select details panel** (all 4 metrics + Expand +
+"Open dashboard →"), zoom buttons + hand-rolled pan/zoom, "load more", and a
+keyboard/SR **text-outline fallback** (`TreeOutline`). `/tree/:taxid` route + nav link, cross-linked with the
 dashboard both ways. 52 API tests (+5 children, network-free); web
 typecheck+build clean; verified live through the SPA `/api` proxy
 (Eukaryota→Opisthokonta/Viridiplantae/Sar). Radial-form + `d3-hierarchy`
