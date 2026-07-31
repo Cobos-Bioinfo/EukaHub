@@ -7,34 +7,43 @@ import type { Tree, TreeNode } from "../hooks/useTree";
 import { fmt, fmtPct } from "../lib/format";
 
 // --- Encodings --------------------------------------------------------------
-// Node COLOUR = a sequential single-hue (blue) ramp of the *selected* resource's
-// coverage % — a magnitude (dataviz skill: magnitude → one hue light→dark). The
-// resource is user-selectable (see the "Colour by" control); the details panel
-// carries all four. Grey = no species tracked in the clade.
+// Node COLOUR = a sequential ramp in the *selected resource's own hue* (dataviz
+// skill: magnitude → one hue light→dark), so "Colour by" adopts each category's
+// identity colour — assemblies light-blue, annotations dark-blue, RNA-Seq green,
+// long-read dark-green — matching the cards/chart. The details panel carries all
+// four; grey = no species tracked in the clade.
 //
 // Coverage is heavily right-skewed (most clades sit at 0–10%, a few reach 100%),
-// so a linear scale would paint almost everything the same pale blue. We map with
-// a gamma curve (pct^0.4) that spreads the low end, then interpolate the ramp
-// continuously — so a 2% vs 9% clade actually differ in shade.
+// so a linear scale would paint almost everything the palest tint. We map with a
+// gamma curve (pct^0.35) that spreads the low end, then interpolate a per-metric
+// ramp (light tint → colour → darkened) continuously.
+type RGB = [number, number, number];
 const NO_DATA = "#cbd5e1";
-const RAMP = ["#e7f0fc", "#bcd4f6", "#7fb0ee", "#4287e0", "#1d4ed8"] as const;
-const hexRgb = (h: string): [number, number, number] => [
+const WHITE: RGB = [255, 255, 255];
+const BLACK: RGB = [0, 0, 0];
+const hexRgb = (h: string): RGB => [
   parseInt(h.slice(1, 3), 16),
   parseInt(h.slice(3, 5), 16),
   parseInt(h.slice(5, 7), 16),
 ];
-const STOPS = RAMP.map(hexRgb);
+const rgbStr = (c: RGB) => `rgb(${c[0]}, ${c[1]}, ${c[2]})`;
+const mix = (c: RGB, t: RGB, f: number): RGB =>
+  [0, 1, 2].map((i) => Math.round(c[i] + (t[i] - c[i]) * f)) as RGB;
 
-function coverageColor(node: TaxonNode, key: string): string {
+/** Build a metric's light→colour→dark sequential ramp from its identity hue. */
+function buildRamp(hex: string): RGB[] {
+  const c = hexRgb(hex);
+  return [mix(c, WHITE, 0.82), c, mix(c, BLACK, 0.28)];
+}
+
+function coverageColor(node: TaxonNode, key: string, ramp: RGB[]): string {
   if (node.n_rows <= 0) return NO_DATA;
   const pct = node.resources[key]?.percent ?? 0;
-  if (pct <= 0) return RAMP[0];
+  if (pct <= 0) return rgbStr(ramp[0]);
   const t = Math.min(1, Math.pow(pct / 100, 0.35)); // gamma-spread the low end
-  const x = t * (STOPS.length - 1);
-  const i = Math.min(STOPS.length - 2, Math.floor(x));
-  const f = x - i;
-  const [r, g, b] = STOPS[i].map((v, k) => Math.round(v + (STOPS[i + 1][k] - v) * f));
-  return `rgb(${r}, ${g}, ${b})`;
+  const x = t * (ramp.length - 1);
+  const i = Math.min(ramp.length - 2, Math.floor(x));
+  return rgbStr(mix(ramp[i], ramp[i + 1], x - i));
 }
 
 // Node SIZE = √(species count), clamped and scaled to the largest node in view.
@@ -120,6 +129,8 @@ export default function RadialTree({
   const [view, setView] = useState({ k: 1, tx: 0, ty: 0 });
   const [selected, setSelected] = useState<number | null>(null);
   const [colorKey, setColorKey] = useState(metrics[0]?.key ?? "ass");
+  const activeMetric = metrics.find((m) => m.key === colorKey);
+  const ramp = useMemo(() => buildRamp(activeMetric?.color ?? "#1f6feb"), [activeMetric?.color]);
   const svgRef = useRef<SVGSVGElement>(null);
   const drag = useRef<{ x: number; y: number; moved: boolean } | null>(null);
 
@@ -188,6 +199,7 @@ export default function RadialTree({
               className={"seg-btn" + (m.key === colorKey ? " seg-btn--on" : "")}
               onClick={() => setColorKey(m.key)}
             >
+              <span className="seg-btn__dot" style={{ background: m.color }} />
               {m.card_title}
             </button>
           ))}
@@ -240,6 +252,7 @@ export default function RadialTree({
                   r={nodeRadius(data.tn.node.n_rows, maxN)}
                   treeNode={data.tn}
                   colorKey={colorKey}
+                  ramp={ramp}
                   onClick={() => {
                     if (drag.current?.moved) return;
                     setSelected(data.taxid);
@@ -265,7 +278,7 @@ export default function RadialTree({
           </button>
         </div>
 
-        <Legend metrics={metrics} colorKey={colorKey} />
+        <Legend label={activeMetric?.card_title} ramp={ramp} />
 
         {selectedNode && (
           <DetailsPanel
@@ -299,6 +312,7 @@ function TreeNodeMark({
   r,
   treeNode,
   colorKey,
+  ramp,
   onClick,
   onHover,
   onLeave,
@@ -310,6 +324,7 @@ function TreeNodeMark({
   r: number;
   treeNode: TreeNode;
   colorKey: string;
+  ramp: RGB[];
   onClick: () => void;
   onHover: (x: number, y: number) => void;
   onLeave: () => void;
@@ -332,7 +347,7 @@ function TreeNodeMark({
   if (isRoot) {
     return (
       <g className="tree__node" onClick={onClick} onMouseMove={hover} onMouseLeave={onLeave}>
-        <circle cx={0} cy={0} r={r} fill={coverageColor(node, colorKey)} className={cls} />
+        <circle cx={0} cy={0} r={r} fill={coverageColor(node, colorKey, ramp)} className={cls} />
         <text className="tree__label tree__label--root" x={0} y={-(r + 7)}>
           {label}
         </text>
@@ -347,7 +362,7 @@ function TreeNodeMark({
       onMouseMove={hover}
       onMouseLeave={onLeave}
     >
-      <circle cx={0} cy={0} r={r} fill={coverageColor(node, colorKey)} className={cls} />
+      <circle cx={0} cy={0} r={r} fill={coverageColor(node, colorKey, ramp)} className={cls} />
       <text
         className="tree__label"
         x={onLeft ? -(r + 5) : r + 5}
@@ -443,18 +458,15 @@ function DetailsPanel({
   );
 }
 
-function Legend({ metrics, colorKey }: { metrics: MetricConfig[]; colorKey: string }) {
-  const colorMetric = metrics.find((m) => m.key === colorKey);
+function Legend({ label, ramp }: { label?: string; ramp: RGB[] }) {
   return (
     <div className="tree-legend">
-      <span className="tree-legend__title">
-        Colour · {colorMetric?.card_title ?? "coverage"} %
-      </span>
+      <span className="tree-legend__title">Colour · {label ?? "coverage"} %</span>
       <span className="tree-legend__ramp">
         <span className="tree-legend__cap">0</span>
         <span
           className="tree-legend__bar"
-          style={{ background: `linear-gradient(to right, ${RAMP.join(", ")})` }}
+          style={{ background: `linear-gradient(to right, ${ramp.map(rgbStr).join(", ")})` }}
         />
         <span className="tree-legend__cap">100%</span>
       </span>
