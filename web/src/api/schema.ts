@@ -80,8 +80,34 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Health */
+        /**
+         * Health
+         * @description Liveness: the process is up and serving. Checks no dependencies, so a
+         *     container/orchestrator can tell 'process alive' apart from 'DB ready'.
+         */
         get: operations["health_health_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/health/ready": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Readiness
+         * @description Readiness: can we actually serve reads? Pings Postgres with SELECT 1 and
+         *     returns 503 if it's unreachable, so a load balancer holds traffic until the
+         *     read-only serving DB is back.
+         */
+        get: operations["readiness_health_ready_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -442,7 +468,29 @@ export interface operations {
                 };
                 content: {
                     "application/json": {
-                        [key: string]: unknown;
+                        [key: string]: string;
+                    };
+                };
+            };
+        };
+    };
+    readiness_health_ready_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: string;
                     };
                 };
             };
