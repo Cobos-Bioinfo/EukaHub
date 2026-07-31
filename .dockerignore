@@ -12,3 +12,11 @@ taxdump/
 data/
 .env
 .env.*
+
+# The api image (build context = repo root) never needs the frontend, agent
+# config, or local-only notes.
+web/
+.claude/
+*.local.md
+*.egg-info/
+*.tar.gz
