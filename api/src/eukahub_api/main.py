@@ -8,18 +8,23 @@ Phase 2 read endpoints:
 - ``GET /taxon/{taxid}``            — the root→node lineage breadcrumb.
 - ``GET /search``                   — name search for the root picker.
 
-``/health`` and ``/metrics-config`` remain from the scaffold. Next: generate
-OpenAPI + TS types from the metric config for the frontend (Phase 3).
+``/health`` (liveness) + ``/health/ready`` (DB readiness) and ``/metrics-config``
+round out the service. Every request is logged as one structured JSON line (see
+``logging_config``).
 """
 
-import os
+import logging
+import time
+from contextlib import asynccontextmanager
 from typing import Annotated
 
 from eukahub_core.metrics import METRICS
-from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi import FastAPI, HTTPException, Query, Request, Response
 from fastapi.responses import StreamingResponse
 
-from eukahub_api.db import Conn, lifespan
+from eukahub_api.db import Conn
+from eukahub_api.db import lifespan as db_lifespan
+from eukahub_api.logging_config import configure_logging
 from eukahub_api.queries import (
     FilterLogic,
     MetricFilter,
@@ -41,12 +46,62 @@ from eukahub_api.schemas import (
     TaxonRef,
 )
 
+log = logging.getLogger("eukahub.api")
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Configure structured logging, then open the DB pool (see db.lifespan)."""
+    configure_logging()
+    async with db_lifespan(app):
+        log.info("startup complete")
+        yield
+
+
 app = FastAPI(title="EukaHub API", version="0.1.0", lifespan=lifespan)
 
 
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    """One structured log line per request. Health probes drop to DEBUG so they
+    don't flood the log at the default INFO level."""
+    start = time.perf_counter()
+    response = await call_next(request)
+    level = logging.DEBUG if request.url.path.startswith("/health") else logging.INFO
+    log.log(
+        level,
+        "request",
+        extra={
+            "method": request.method,
+            "path": request.url.path,
+            "status": response.status_code,
+            "duration_ms": round((time.perf_counter() - start) * 1000, 1),
+        },
+    )
+    return response
+
+
 @app.get("/health")
-def health() -> dict[str, object]:
-    return {"status": "ok", "database_configured": "DATABASE_URL" in os.environ}
+def health() -> dict[str, str]:
+    """Liveness: the process is up and serving. Checks no dependencies, so a
+    container/orchestrator can tell 'process alive' apart from 'DB ready'."""
+    return {"status": "ok"}
+
+
+@app.get("/health/ready")
+def readiness(request: Request, response: Response) -> dict[str, str]:
+    """Readiness: can we actually serve reads? Pings Postgres with SELECT 1 and
+    returns 503 if it's unreachable, so a load balancer holds traffic until the
+    read-only serving DB is back."""
+    try:
+        with request.app.state.pool.connection() as conn:
+            conn.execute("SELECT 1")
+    # Any failure — DB down, pool timeout, unexpected error — means "not ready".
+    except Exception:
+        log.warning("readiness check failed", exc_info=True)
+        response.status_code = 503
+        return {"status": "unavailable", "database": "unreachable"}
+    return {"status": "ready", "database": "ok"}
 
 
 @app.get("/metrics-config", response_model=list[MetricConfig])

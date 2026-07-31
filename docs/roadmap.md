@@ -33,8 +33,36 @@ that depend on them.
 - Downloads (displayed rows + full breakdown TSV).
 
 ## Phase 5 — Productionization
-- Dockerized deploy, health checks, structured logging, scheduled rebuild (GitHub
-  Actions or Nextflow), staging vs prod DB, basic metrics.
+
+### Deploy & runtime
+- Full Dockerized deploy: build + run the `api` and `web` containers (dev runs
+  them natively today) alongside Postgres via docker-compose; health checks on
+  every service; structured (JSON) logging.
+- Scheduled offline rebuild (GitHub Actions or Nextflow) keeping the
+  resumable-snapshot + atomic-swap discipline; staging vs prod DB; basic metrics.
+- Response caching for common clades (Eukaryota, Metazoa, …) — read-only between
+  rebuilds, so cache-friendly.
+
+### Security & secrets — assistant owns this; acknowledge & fix each when reached
+Credential externalization is **done** (compose reads `${POSTGRES_*:-eukahub}`,
+`infra/.env.example` committed, `infra/.env` gitignored). Remaining, to action
+in this phase:
+- **Do not publish Postgres `5432` in prod.** The `ports: 5432:5432` mapping is a
+  local-dev convenience only — keep Postgres on the internal compose network in
+  the prod compose file.
+- **Real prod credentials from a secret store** (GitHub Actions secrets / host
+  env), never committed. Gotcha: Postgres applies `POSTGRES_PASSWORD` only on
+  first volume init — a real password needs a fresh volume or `ALTER USER`.
+- **TLS/HTTPS** terminated at a gateway / reverse proxy in front of `api` + `web`.
+- **CORS** locked to the known web origin(s); **rate limiting** at the gateway.
+- **Auth decision:** the API serves public, read-only data — confirm no user auth
+  is needed (vs. optional API keys purely for abuse control) and record it.
+- **Security headers** (HSTS, X-Content-Type-Options, referrer-policy, …) and a
+  **dependency / secret scan** in CI.
+
+### Verify
+- `docker compose config` resolves; a fresh clone comes up on dev defaults with
+  no committed secret; prod overrides via `--env-file`.
 
 ## Phase 6 — Stretch: interactive Tree of Life
 - WebGL/canvas hierarchical view with lazy-expand (`parent_id`) and subtree fetch

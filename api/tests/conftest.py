@@ -20,7 +20,7 @@ def _db_available() -> bool:
     try:
         with psycopg.connect(database_url(), connect_timeout=3):
             return True
-    except Exception:  # noqa: BLE001 — any connection failure means "skip"
+    except Exception:  # noqa: BLE001  (any connection failure means "skip")
         return False
 
 

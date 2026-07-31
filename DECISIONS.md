@@ -41,6 +41,17 @@ ADR-style. Settled decisions with a one-line why; open forks at the bottom.
   viable alternative; Pandas is eager/single-threaded/RAM-bound and is the tool
   this rewrite moves away from.
 
+## Settled (2026-07-31)
+
+- **Secrets via env substitution, not committed.** `infra/docker-compose.yml`
+  reads `${POSTGRES_USER/PASSWORD/DB:-eukahub}` (dev defaults keep local dev
+  zero-config) and builds `DATABASE_URL` from them; `infra/.env.example` is the
+  committed template, `infra/.env` is gitignored. Real credentials come from a
+  secret store at deploy time. Full production hardening (no public `5432`, TLS,
+  CORS, rate limiting, security headers, the read-only-API auth decision) is
+  scheduled and enumerated in roadmap Phase 5 — **the assistant owns security
+  and credentials** and must action those steps when Phase 5 reaches them.
+
 ## Open — still to decide
 
 - None — all forks resolved.
