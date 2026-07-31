@@ -88,9 +88,11 @@ nginx→api→db path works. (3) CORS (configurable `CORS_ALLOW_ORIGINS`, GET-on
 + baseline security headers (nosniff / frame-DENY / referrer-policy) on API
 responses and the static SPA. (4) CI (`.github/workflows/ci.yml`): ruff + pytest
 + web build, gitleaks secret scan + pip-audit / npm audit + Dependabot (and
-fixed 8 pre-existing repo-wide lint errors). 42 tests (36 API skip without a DB
-in CI); secrets externalized (DECISIONS 2026-07-31). **Next: scheduled dataset
-rebuild, then response caching** — full checklist in `docs/roadmap.md`.
+fixed 8 pre-existing repo-wide lint errors). (5) Response caching:
+`Cache-Control: public, max-age=$CACHE_MAX_AGE` on cacheable GETs, `no-store` on
+health. 48 tests (42 API skip without a DB in CI); secrets externalized
+(DECISIONS 2026-07-31). **Next: scheduled dataset rebuild + staging/prod DB** —
+full checklist in `docs/roadmap.md`.
 
 Run the build (Postgres up): `uv run --package eukahub-pipeline python -m
 eukahub_pipeline.build` (add `--skip-download` to reuse an unpacked taxdump).
@@ -135,17 +137,18 @@ token`, no `--show-token`); redact anything sensitive before showing output.
 ## Immediate next step (Phase 5 — continue productionization)
 
 Phases 0–4 are done. **Phase 5 is underway on `dev`** (see Status): structured
-logging + health checks, the Dockerized deploy, CORS + security headers, and CI
-are shipped. Remaining, in order: the **scheduled offline dataset rebuild**
-(GitHub Actions cron — keep the resumable-snapshot + atomic-swap discipline) and
-**staging-vs-prod DB**, then **response caching** for common clades. A useful CI
-follow-up: seed a small CI database so the DB-backed API tests run (they skip
-today). Remaining security items — the assistant owns these (no public `5432` +
-CORS + baseline headers + secret/dep scan already done; still to do: **TLS**,
-**rate limiting**, and the **read-only-API auth decision**) — are enumerated in
-`docs/roadmap.md` Phase 5 and must be actioned as reached. (Phase 6 is the
-stretch interactive Tree of Life — the DB already supports it via `parent_id`
-lazy-expand + materialized lineage.)
+logging + health checks, the Dockerized deploy, CORS + security headers, CI, and
+response caching are shipped. Remaining, in order: the **scheduled offline
+dataset rebuild** (GitHub Actions cron — keep the resumable-snapshot + atomic-swap
+discipline) and **staging-vs-prod DB**. Then the tracked follow-ups: the
+**react-router 6→7 / vite 5→8 dependency upgrade** (browser-verified — clears the
+open npm-audit advisories), seeding a **small CI database** so the API tests run
+in CI, and caching layers (nginx `proxy_cache`/CDN, ETag/304). Remaining security
+items the assistant owns (no public `5432` + CORS + headers + secret/dep scan
+done; still to do: **TLS**, **rate limiting**, the **read-only-API auth
+decision**) are enumerated in `docs/roadmap.md` Phase 5 and actioned as reached.
+(Phase 6 is the stretch interactive Tree of Life — the DB already supports it via
+`parent_id` lazy-expand + materialized lineage.)
 
 Smaller follow-ups worth doing along the way:
 - **Screenshot/verify Q1 + Q2 in a browser** — the dev env has no headless
