@@ -219,8 +219,20 @@ export interface components {
             external_source_name: string;
             /** External Url Template */
             external_url_template: string;
+            /** Filter Label */
+            filter_label: string;
             /** Key */
             key: string;
+            /** Legend Label */
+            legend_label: string;
+            /** Overlay */
+            overlay: boolean;
+            /** Side */
+            side: string;
+            /** Sort Count Label */
+            sort_count_label: string;
+            /** Sort Total Label */
+            sort_total_label: string;
             /** Species Help */
             species_help: string;
             /** Total Column */

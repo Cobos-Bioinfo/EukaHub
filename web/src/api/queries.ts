@@ -2,7 +2,17 @@
 // { data, error, response } into the response value, throwing a readable Error
 // on failure so the useAsync hook can surface it.
 import { api } from "./client";
-import type { CladeSummary, MetricConfig, TaxonLineage, TaxonRef } from "./types";
+import type {
+  Breakdown,
+  CladeSummary,
+  FilterLogic,
+  MetricConfig,
+  MetricFilter,
+  SortColumn,
+  TargetRank,
+  TaxonLineage,
+  TaxonRef,
+} from "./types";
 
 function extractDetail(error: unknown): string | undefined {
   if (error && typeof error === "object" && "detail" in error) {
@@ -36,3 +46,38 @@ export const getLineage = async (taxid: number): Promise<TaxonLineage> =>
 
 export const searchTaxa = async (q: string, limit = 10): Promise<TaxonRef[]> =>
   unwrap(await api.GET("/search", { params: { query: { q, limit } } }));
+
+// The breakdown (Q2) controls, matching the API's query params. `rank` is
+// required; the rest carry the API's own defaults when omitted.
+export interface BreakdownParams {
+  rank: TargetRank;
+  sort?: SortColumn;
+  filter?: MetricFilter[];
+  logic?: FilterLogic;
+  exclude_empty?: boolean;
+  limit?: number;
+}
+
+export const getBreakdown = async (
+  taxid: number,
+  params: BreakdownParams,
+): Promise<Breakdown> =>
+  unwrap(
+    await api.GET("/clade/{taxid}/breakdown", {
+      params: { path: { taxid }, query: params },
+    }),
+  );
+
+// Direct URL for the streamed full-breakdown TSV (a browser download, not a
+// fetch). Mirrors the export endpoint's params; `filter` repeats per value,
+// which is how FastAPI parses a list query param. Empties are included by
+// default server-side, so `exclude_empty` is only sent when the caller sets it.
+export function exportTsvUrl(taxid: number, params: BreakdownParams): string {
+  const q = new URLSearchParams();
+  q.set("rank", params.rank);
+  if (params.sort) q.set("sort", params.sort);
+  for (const f of params.filter ?? []) q.append("filter", f);
+  if (params.logic) q.set("logic", params.logic);
+  if (params.exclude_empty !== undefined) q.set("exclude_empty", String(params.exclude_empty));
+  return `/api/clade/${taxid}/export.tsv?${q.toString()}`;
+}

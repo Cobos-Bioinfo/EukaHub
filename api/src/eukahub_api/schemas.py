@@ -28,6 +28,17 @@ class MetricConfig(BaseModel):
     external_url_template: str  # contains "{taxid}"; the client substitutes
     coverage_column: str
     total_column: str
+    # Labels for the breakdown (Q2) filter/sort controls — the metric config's
+    # single source of truth so the frontend's control copy can't drift.
+    filter_label: str  # resource-presence checkbox label
+    sort_count_label: str  # label for sorting by c_<key> (species covered)
+    sort_total_label: str  # label for sorting by s_<key> (summed total)
+    # Divergent bar-chart layout (Q2 chart): which half of the mirrored bar the
+    # metric occupies, whether it's the darker overlaid (subset) metric in its
+    # pair, and the short label used in the chart legend.
+    side: str  # "left" (assemblies/annotations) | "right" (RNA-Seq)
+    overlay: bool  # True = darker metric drawn over its lighter pair-mate
+    legend_label: str
 
     @classmethod
     def from_metric(cls, m: Metric) -> MetricConfig:
@@ -43,6 +54,12 @@ class MetricConfig(BaseModel):
             external_url_template=m.external_url_template,
             coverage_column=m.coverage_key,
             total_column=m.total_key,
+            filter_label=m.filter_label,
+            sort_count_label=m.sort_count_label,
+            sort_total_label=m.sort_total_label,
+            side=m.side,
+            overlay=m.overlay,
+            legend_label=m.legend_label,
         )
 
 

@@ -46,9 +46,34 @@ in `api/tests/conftest.py`).
 Genomic Resource Summary for `/clade/:taxid` — metric cards + coverage meters
 (`/metrics-config` joined to `summary`), total species, lineage breadcrumb
 (`/taxon/{id}`), and a name-search root picker (`/search`). Verified via
-typecheck + vite build + the Vite `/api` proxy against a live API; **not yet
-screenshotted** (no headless browser in the dev env). **Next: Phase 4 — the
-breakdown table/chart (Q2).** See `docs/roadmap.md`.
+typecheck + vite build + the Vite `/api` proxy against a live API; user
+manually confirmed Q1 in a browser (2026-07-31).
+
+**Phase 4 (the breakdown, Q2) — table done** (2026-07-31). `BreakdownSection`
+renders below the Q1 cards on `/clade/:taxid` (keyed by taxid so a new root
+resets controls): rank + sort + limit selects, per-resource filter chips with
+an AND/OR toggle, an exclude-empty switch, and a comparison table of child taxa
+with per-metric coverage meters. Sort/filter labels now come from the metric
+config too — added `filter_label`/`sort_count_label`/`sort_total_label` to the
+API's `MetricConfig` and regenerated the TS types, so control copy can't drift.
+Two downloads: displayed rows (client-side TSV from the loaded items) and the
+full breakdown (`/clade/{taxid}/export.tsv`).
+
+**Phase 4 complete — divergent bar chart added** (2026-07-31). A Table/Chart
+toggle in `BreakdownSection` drives both views from the same controls/data.
+`DivergentBarChart` ports Euka-Survey's overlaid mirror bar: per taxon, left
+half = assemblies+annotations (blue), right half = RNA-Seq+long-read (green),
+each side's darker subset metric overlaid on its lighter base; the plotted
+value is coverage % (0–100 per side). Built in HTML/CSS (no chart lib) with a
+recessive gridline track, a dashed centre axis, a legend, and a per-row hover
+tooltip. Exposed `side`/`overlay`/`legend_label` on the API's `MetricConfig`
+(same no-drift path as the labels). Followed the **dataviz** skill: the 4 fixed
+entity colors PASS CVD + normal-vision separation; the pale-hue lightness/
+contrast FAILs are handled by relief (grey track + inset bar edge) + the table
+view, per the validator's guidance — kept the palette rather than recolor.
+Verified via typecheck + vite build + full API suite (31 passed) + curl;
+**not yet screenshotted** (no headless browser), and the app is light-only so
+chart dark mode is deferred with the rest. See `docs/roadmap.md`.
 
 Run the build (Postgres up): `uv run --package eukahub-pipeline python -m
 eukahub_pipeline.build` (add `--skip-download` to reuse an unpacked taxdump).
@@ -82,21 +107,23 @@ Tests (whole workspace, DB up): `uv run pytest`.
   query for any root.
 - **Serving is read-only;** rebuilt offline. Denormalize freely.
 
-## Immediate next step (Phase 4 — the breakdown view, Q2)
+## Immediate next step (Phase 5 — productionization)
 
-The API (all five endpoints) and the Q1 dashboard are done (see Status). Next:
-**Phase 4 — the breakdown table/chart.** Add a `/clade/:taxid/breakdown` view
-(or a section on the dashboard) driven by `GET /clade/{taxid}/breakdown`: a
-rank selector + filter/sort/limit controls, a table of child taxa with
-coverage bars, and a download (the displayed rows + the full-breakdown TSV via
-`/clade/{taxid}/export.tsv`). A divergent bar chart comes next — load the
-**dataviz** skill before building it. See `docs/roadmap.md` Phase 4.
+Phases 0–4 are done: data foundation, all five read endpoints, and both the Q1
+dashboard and the Q2 breakdown (table + divergent chart). Next is **Phase 5**:
+a real Dockerized deploy (the `api`/`web` containers exist but dev runs them
+natively), health checks, structured logging, a scheduled offline rebuild
+(GitHub Actions or Nextflow), staging-vs-prod DB, and basic metrics. See
+`docs/roadmap.md` Phase 5. (Phase 6 is the stretch interactive Tree of Life —
+the DB already supports it via `parent_id` lazy-expand + materialized lineage.)
 
-Two smaller follow-ups worth doing along the way:
-- **Screenshot/verify the Q1 dashboard in a browser** — this env had no
-  headless browser, so the UI was build- and integration-verified only.
+Smaller follow-ups worth doing first:
+- **Screenshot/verify Q1 + Q2 in a browser** — the dev env has no headless
+  browser, so the UI is build- and curl-verified only (user eyeballed Q1; Q2
+  table + chart still need a human look).
 - **Response caching** for common clades (Eukaryota, Metazoa, …) — read-only
   between rebuilds, so it's cache-friendly.
+- **App-wide dark mode** — currently light-only; the chart defers to that.
 
 ## Still open
 
