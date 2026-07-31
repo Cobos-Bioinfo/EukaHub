@@ -610,13 +610,16 @@
     },
     "/health": {
       "get": {
+        "description": "Liveness: the process is up and serving. Checks no dependencies, so a\ncontainer/orchestrator can tell 'process alive' apart from 'DB ready'.",
         "operationId": "health_health_get",
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
+                  "additionalProperties": {
+                    "type": "string"
+                  },
                   "title": "Response Health Health Get",
                   "type": "object"
                 }
@@ -626,6 +629,29 @@
           }
         },
         "summary": "Health"
+      }
+    },
+    "/health/ready": {
+      "get": {
+        "description": "Readiness: can we actually serve reads? Pings Postgres with SELECT 1 and\nreturns 503 if it's unreachable, so a load balancer holds traffic until the\nread-only serving DB is back.",
+        "operationId": "readiness_health_ready_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Readiness Health Ready Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Readiness"
       }
     },
     "/metrics-config": {

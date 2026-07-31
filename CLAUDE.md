@@ -150,10 +150,11 @@ already supports it via `parent_id` lazy-expand + materialized lineage), the
 **Wikipedia "About" card** (ported idea from Euka-Survey), and UX polish. Ask the
 user which to take.
 
-Tracked non-functional follow-ups (do when relevant): **react-router 6→7 / vite
-5→8 upgrade** (browser-verified — clears the open npm-audit advisories), seed a
-**small CI database** so the API tests run in CI, caching layers (nginx
-`proxy_cache`/CDN, ETag/304), and **app-wide dark mode** (currently light-only).
+Tracked non-functional follow-ups (do when relevant): frontend deps are now on
+latest majors (react-router 7, vite 8, done 2026-07-31) — **6 npm-audit highs
+remain with no forward fix** (dev-tooling + low-risk react-router; revisit when
+upstream patches); seed a **small CI database** so the API tests run in CI,
+caching layers (nginx `proxy_cache`/CDN, ETag/304), and **app-wide dark mode**.
 Verify Q1 + Q2 in a browser (dev env has no headless browser; user eyeballed Q1).
 
 ## Still open
