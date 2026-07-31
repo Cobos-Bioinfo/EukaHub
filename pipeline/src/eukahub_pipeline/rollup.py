@@ -17,7 +17,6 @@ import sqlite3
 from pathlib import Path
 
 import polars as pl
-
 from eukahub_core.metrics import COVERAGE_KEYS, METRIC_KEYS, TOTAL_KEYS
 
 log = logging.getLogger("eukahub.rollup")

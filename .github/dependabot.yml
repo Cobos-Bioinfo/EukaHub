@@ -1,0 +1,14 @@
+version: 2
+updates:
+  # Keep the CI actions current.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+
+  # Frontend dependencies (Python deps are audited via pip-audit in CI; a `uv`
+  # ecosystem entry can be added here later for automated update PRs).
+  - package-ecosystem: "npm"
+    directory: "/web"
+    schedule:
+      interval: "weekly"

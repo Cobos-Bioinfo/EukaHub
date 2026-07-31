@@ -41,7 +41,13 @@ that depend on them.
   healthchecks, only web published). User-verified end-to-end.
 - **[done]** Health checks (`/health` liveness, `/health/ready` DB) + structured
   JSON logging (`logging_config.py`, per-request middleware).
-- Scheduled offline rebuild (GitHub Actions or Nextflow) keeping the
+- **[done]** CI (`.github/workflows/ci.yml`): ruff lint + pytest (pipeline/core;
+  the DB-backed API tests skip without a seeded DB — follow-up) + web
+  typecheck/build; secret scan (gitleaks) + dependency audits (pip-audit, npm
+  audit) + Dependabot. Also fixed 8 pre-existing repo-wide lint errors.
+- Scheduled offline **dataset** rebuild (GitHub Actions cron or Nextflow) keeping
+  the resumable-snapshot + atomic-swap discipline; staging vs prod DB; basic
+  metrics.
   resumable-snapshot + atomic-swap discipline; staging vs prod DB; basic metrics.
 - Response caching for common clades (Eukaryota, Metazoa, …) — read-only between
   rebuilds, so cache-friendly.
@@ -67,7 +73,7 @@ in this phase:
   `X-Frame-Options`, `Referrer-Policy`) on API responses (middleware) and on the
   static SPA (`web/nginx.conf`, in `location /` so `/api` isn't double-set).
   **HSTS + a CSP** still to add with TLS. Plus a **dependency / secret scan** in
-  CI (still to add).
+  CI **(done)**: gitleaks secret scan + pip-audit / npm audit + Dependabot.
 
 ### Verify
 - `docker compose config` resolves; a fresh clone comes up on dev defaults with

@@ -35,8 +35,7 @@ def download_taxdump(
     with requests.get(url, stream=True, timeout=120) as r:
         r.raise_for_status()
         with open(tgz, "wb") as fh:
-            for chunk in r.iter_content(chunk_size=1 << 20):
-                fh.write(chunk)
+            fh.writelines(r.iter_content(chunk_size=1 << 20))
 
     log.info("Extracting %s", ", ".join(_WANTED))
     with tarfile.open(tgz) as tar:

@@ -1,0 +1,72 @@
+name: CI
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  python:
+    name: Python — lint, tests, audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - name: Ruff lint
+        run: uv run ruff check .
+      - name: Tests
+        # No Postgres in CI, so the DB-backed API tests skip cleanly (see
+        # api/tests/conftest.py) while the pipeline/core unit tests run. Seeding
+        # a CI database to also run the integration tests is a documented
+        # follow-up (see docs/roadmap.md).
+        run: uv run pytest -q
+      - name: Dependency audit (pip-audit)
+        # Informational: dependencies are pinned in uv.lock; a fresh advisory
+        # should surface here without blocking every merge.
+        continue-on-error: true
+        run: |
+          uv export --format requirements-txt --no-dev --no-emit-workspace -o requirements.txt
+          uvx pip-audit -r requirements.txt
+
+  web:
+    name: Web — typecheck, build, audit
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Install
+        run: npm ci
+      - name: Build (tsc + vite build)
+        run: npm run build
+      - name: Dependency audit (npm)
+        continue-on-error: true
+        run: npm audit --audit-level=high
+
+  security:
+    name: Security — secret scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # gitleaks scans full history
+      - name: Secret scan (gitleaks)
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

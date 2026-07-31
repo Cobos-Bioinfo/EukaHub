@@ -1,0 +1,10 @@
+# gitleaks config for CI: use the default ruleset, plus allowlist EukaHub's
+# dev-only placeholders so the fake local credentials (never real secrets)
+# don't trip the scan. See infra/.env.example and docs/… for context.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Dev-only Postgres defaults and the committed env template"
+paths = ['''infra/\.env\.example''']
+regexes = ['''eukahub:eukahub''', '''change-me''']
