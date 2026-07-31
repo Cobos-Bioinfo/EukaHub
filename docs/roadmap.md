@@ -18,6 +18,22 @@ that depend on them.
 - Confirm both canonical queries run fast **without** `precomputed_taxa` and
   **without** ETE3. This proves the thesis of the redesign.
 
+## Data refresh — port the fresh source fetches (independent of deployment)
+
+The Phase-1 build reads per-species feature counts from Euka-Survey's old SQLite
+(`../Euka-Survey/eukaryotes.db`, table `taxid_features`) — a deliberate Phase-1
+**bridge**. Replace it by porting Euka-Survey's fetch steps so the counts come
+fresh from source, then feed the roll-up from those instead of the SQLite:
+
+- **Assemblies** — NCBI `datasets` CLI (`get_assemblies`; ports mostly as-is).
+- **Annotations** — Annotrieve (`get_annotations`).
+- **RNA-Seq (any + long-read)** — ENA (`get_reads`).
+
+**This is independent work — NOT blocked by the CRG deployment.** It can be built
+and run locally any time you want current data (e.g. before a demo). It also
+*unblocks* Phase 5's scheduled rebuild, which must fetch fresh data rather than
+read a frozen file. Keep the resumable-snapshot + atomic-swap discipline.
+
 ## Phase 2 — API
 - FastAPI endpoints: `summary`, `breakdown` (filter/sort/limit pushed down),
   `taxon`/lineage (breadcrumb), `export.tsv`, name search.
