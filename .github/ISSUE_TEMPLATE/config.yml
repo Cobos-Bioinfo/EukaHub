@@ -1,0 +1,7 @@
+# Controls GitHub's "New issue" chooser page. The contact link routes people
+# without a GitHub account to the Google Form, which files an issue for them.
+blank_issues_enabled: true
+contact_links:
+  - name: Send feedback without a GitHub account
+    url: https://docs.google.com/forms/d/e/1FAIpQLSfEEOn9g8c1G14DLkRr9qlMQldLdibyVO7zotzkIT4PKYgMKQ/viewform
+    about: No GitHub account needed. Your response is filed here as an issue automatically.

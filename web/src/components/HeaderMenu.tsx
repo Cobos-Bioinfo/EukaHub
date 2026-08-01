@@ -3,25 +3,13 @@ import { Link } from "react-router-dom";
 
 const REPO_URL = "https://github.com/Cobos-Bioinfo/EukaHub";
 
-// A prefilled GitHub issue — no backend needed. GitHub ignores unknown labels,
-// so this works even before a "feedback" label exists on the repo.
-const FEEDBACK_URL =
-  `${REPO_URL}/issues/new?` +
-  new URLSearchParams({
-    title: "Feedback: ",
-    labels: "feedback",
-    body: [
-      "**Type:** bug / suggestion / question",
-      "",
-      "**What happened, or what would you like?**",
-      "",
-      "",
-      "**Page or TaxID (if relevant):**",
-      "",
-      "",
-      "_Sent from the EukaHub web app._",
-    ].join("\n"),
-  }).toString();
+// Primary feedback path: a Google Form that files a labeled GitHub issue via an
+// Apps Script server-side, so no GitHub account is needed.
+const FEEDBACK_FORM_URL =
+  "https://docs.google.com/forms/d/e/1FAIpQLSfEEOn9g8c1G14DLkRr9qlMQldLdibyVO7zotzkIT4PKYgMKQ/viewform";
+// Secondary path for people who have an account: GitHub's issue-template chooser
+// (Bug report / Idea), see .github/ISSUE_TEMPLATE.
+const GITHUB_ISSUE_URL = `${REPO_URL}/issues/new/choose`;
 
 /** The "more" dropdown in the header: feedback, API docs, and the FAQ. */
 export default function HeaderMenu() {
@@ -55,12 +43,24 @@ export default function HeaderMenu() {
             <a
               className="menu__item"
               role="menuitem"
-              href={FEEDBACK_URL}
+              href={FEEDBACK_FORM_URL}
               target="_blank"
               rel="noreferrer"
               onClick={() => setOpen(false)}
             >
               Send feedback ↗
+            </a>
+          </li>
+          <li role="none">
+            <a
+              className="menu__item"
+              role="menuitem"
+              href={GITHUB_ISSUE_URL}
+              target="_blank"
+              rel="noreferrer"
+              onClick={() => setOpen(false)}
+            >
+              Open an issue on GitHub ↗
             </a>
           </li>
           <li role="none">
