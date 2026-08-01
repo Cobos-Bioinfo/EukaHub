@@ -280,6 +280,10 @@ a:hover {
   border-left: 3px solid var(--accent);
   border-radius: 6px;
 }
+.dashboard__note a {
+  font-weight: 600;
+  white-space: nowrap;
+}
 
 /* Two-column body: a context rail (About + tree CTA) beside the metrics +
    breakdown. Collapses to a single stack below 960px. */
@@ -1714,6 +1718,7 @@ button.tree-outline__name:hover {
 .faq__item {
   padding: 1rem 0;
   border-top: 1px solid var(--border);
+  scroll-margin-top: 80px; /* clear the sticky app bar when deep-linked (#anchor) */
 }
 .faq__item:last-child {
   border-bottom: 1px solid var(--border);

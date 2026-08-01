@@ -54,7 +54,8 @@ export default function Dashboard() {
         {isLeaf ? (
           <p className="dashboard__note">
             This {rankWord} has its own data. It is not counted toward its parent species or any
-            higher group.
+            higher group.{" "}
+            <Link to="/faq#subspecies">See FAQs</Link>
           </p>
         ) : (
           <p className="dashboard__species">
