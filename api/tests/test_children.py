@@ -65,6 +65,16 @@ def test_children_leaf_returns_empty(client):
     assert res["items"] == []
 
 
+def test_children_infraspecific_flag(client):
+    """A species' children are below-species (is_infraspecific True); a genus'
+    children are species (False). One probe on the parent settles the page."""
+    sub = client.get("/taxon/9606/children").json()["items"]  # Homo sapiens' subspecies
+    assert sub and all(i["is_infraspecific"] for i in sub)
+
+    genus_kids = client.get("/taxon/9605/children").json()["items"]  # Homo (genus) -> species
+    assert genus_kids and not any(i["is_infraspecific"] for i in genus_kids)
+
+
 def test_children_not_found(client):
     """An unknown taxid is a 404, distinct from 'present but childless'."""
     assert client.get("/taxon/999999999/children").status_code == 404

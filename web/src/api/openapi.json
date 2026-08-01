@@ -40,6 +40,11 @@
       "CladeSummary": {
         "description": "The Genomic Resource Summary (Q1) payload for one taxon.",
         "properties": {
+          "is_infraspecific": {
+            "default": false,
+            "title": "Is Infraspecific",
+            "type": "boolean"
+          },
           "n_rows": {
             "title": "N Rows",
             "type": "integer"
@@ -367,6 +372,11 @@
         "properties": {
           "has_children": {
             "title": "Has Children",
+            "type": "boolean"
+          },
+          "is_infraspecific": {
+            "default": false,
+            "title": "Is Infraspecific",
             "type": "boolean"
           },
           "n_rows": {

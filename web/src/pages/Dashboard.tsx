@@ -6,6 +6,7 @@ import Breadcrumb from "../components/Breadcrumb";
 import BreakdownSection from "../components/BreakdownSection";
 import MetricCard from "../components/MetricCard";
 import SpeciesLinks from "../components/SpeciesLinks";
+import SubspeciesSection from "../components/SubspeciesSection";
 import { TreeIcon } from "../components/icons";
 import { useAsync } from "../hooks/useAsync";
 import { fmt } from "../lib/format";
@@ -30,6 +31,17 @@ export default function Dashboard() {
   }
 
   const s = summary.data;
+  // Below-species taxa (subspecies/strains/...) are leaf detail: show their own
+  // record counts + source links, and list any finer taxa beneath them, but no
+  // clade coverage summary or generic rank breakdown. A species is also a leaf
+  // for these purposes (its "breakdown" is its subspecies).
+  const isLeaf = s.is_infraspecific;
+  const isSpecies = s.rank === "species";
+  const showLinks = isSpecies || isLeaf;
+  const showBreakdown = !isSpecies && !isLeaf;
+  const showInfra = isSpecies || isLeaf;
+  const rankWord = s.rank && s.rank !== "no rank" ? s.rank : "infraspecific taxon";
+
   return (
     <section className="dashboard">
       {lineage.data && <Breadcrumb lineage={lineage.data.lineage} currentTaxid={taxid} />}
@@ -39,19 +51,28 @@ export default function Dashboard() {
           <h1 className="dashboard__name">{s.name}</h1>
           <span className="rank-badge">{s.rank}</span>
         </div>
-        <p className="dashboard__species">
-          <strong>{fmt(s.n_rows)}</strong> species in this clade
-        </p>
+        {isLeaf ? (
+          <p className="dashboard__note">
+            This {rankWord} has its own data. It is not counted toward its parent species or any
+            higher group.
+          </p>
+        ) : (
+          <p className="dashboard__species">
+            <strong>{fmt(s.n_rows)}</strong> species in this clade
+          </p>
+        )}
       </header>
 
       <div className="dashboard__body">
         <aside className="dashboard__side">
           {about.data && <AboutCard about={about.data} />}
-          <Link className="dashboard__tree-link" to={`/tree/${taxid}`}>
-            <TreeIcon size={17} />
-            Explore <em>this clade</em> in the Tree of Life →
-          </Link>
-          {s.rank === "species" && <SpeciesLinks metrics={metrics.data} taxid={taxid} />}
+          {!isLeaf && (
+            <Link className="dashboard__tree-link" to={`/tree/${taxid}`}>
+              <TreeIcon size={17} />
+              Explore <em>this group</em> in the Tree of Life →
+            </Link>
+          )}
+          {showLinks && <SpeciesLinks metrics={metrics.data} taxid={taxid} />}
         </aside>
 
         <div className="dashboard__content">
@@ -59,18 +80,29 @@ export default function Dashboard() {
             {metrics.data.map((m) => {
               const value = s.resources[m.key];
               return value ? (
-                <MetricCard key={m.key} config={m} value={value} taxid={taxid} />
+                <MetricCard
+                  key={m.key}
+                  config={m}
+                  value={value}
+                  taxid={taxid}
+                  mode={isLeaf ? "count" : "coverage"}
+                />
               ) : null;
             })}
           </div>
 
-          <BreakdownSection
-            key={taxid}
-            taxid={taxid}
-            rootName={s.name}
-            rootRank={s.rank}
-            metrics={metrics.data}
-          />
+          {showBreakdown && (
+            <BreakdownSection
+              key={taxid}
+              taxid={taxid}
+              rootName={s.name}
+              rootRank={s.rank}
+              metrics={metrics.data}
+            />
+          )}
+          {showInfra && (
+            <SubspeciesSection key={taxid} taxid={taxid} rank={s.rank} metrics={metrics.data} />
+          )}
         </div>
       </div>
     </section>

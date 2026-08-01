@@ -210,10 +210,22 @@ under Phase 7 above). Each major one wants a design/scope decision before coding
   automatic (light + dark screenshotted). Build + typecheck clean. Future polish
   (deferred): the live "at a glance" data strip + featured-clade coverage cards
   (Direction B) and vertical centring in the viewport.
-- **Subspecies** (design-first, deepest) — include subspecies as navigable
-  dashboard/tree nodes but **not** counted toward any ancestor's aggregates; only
-  shown when focused on a subspecies. Touches the pipeline rollup + `n_rows`/
-  coverage semantics + `data-model.md` (the project's core thesis).
+- **[done] Subspecies / infraspecific taxa (2026-08-01)** — decisions: **all
+  infraspecific ranks** (subspecies, strain, varietas, forma, isolate, ...),
+  **directly-attached counts**. Additive, so the core thesis is untouched: the
+  species rollup stays `rank = 'species'`, and `_infraspecific_rows` (`rollup.py`)
+  adds one row per below-species taxon holding **only its own** directly-attached
+  features with `n_rows = 1`, never summed into any ancestor (disjoint taxids →
+  plain concat). Verified: *Canis lupus* (species) shows 4 assemblies while its
+  subspecies *familiaris* shows 40 — the 40 is not rolled up; a species with
+  subspecies still has `n_rows == 1`. `is_infraspecific` is derived at serve time
+  (`EXISTS` species-ancestor probe — no stored flag/schema change) and threaded
+  through `summary` + `children`. Frontend: an infraspecific dashboard renders as
+  **leaf detail** (count-mode `MetricCard`s, "Get the data" links, a "not counted
+  upward" note, no coverage meter or generic breakdown); species/leaf dashboards
+  gain a **"Subspecies & strains"** section (`SubspeciesSection`, via `/children`,
+  sorted data-first) listing the finer taxa. DB rebuilt (validation still within
+  0.3%); 63 tests pass; light+dark screenshotted. `data-model.md` updated.
 - **Feedback via Google Form → GitHub issue** (so users without a GH account can
   submit) — Google Apps Script `onFormSubmit` POSTs to the GitHub Issues API (per
   the user's [article](https://medium.com/@01010111/using-google-forms-to-submit-github-issues-efdb5f876b)).

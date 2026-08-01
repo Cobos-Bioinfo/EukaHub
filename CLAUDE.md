@@ -193,6 +193,29 @@ dark mode is automatic, verified via headless screenshots in **both** light and
 dark. Web typecheck + build clean; no API change. Deferred polish: a live "at a
 glance" data strip + featured-clade coverage cards (Direction B), viewport centring.
 
+**Subspecies / infraspecific taxa — done** (2026-08-01, on `dev`). Third Backlog
+item, the deepest (touches the pipeline rollup + the core thesis). Decisions (from
+the user): **all infraspecific ranks** (subspecies, strain, varietas, forma,
+isolate, ...), **directly-attached counts**. The change is **additive** and does
+**not** disturb the "aggregates are species-only" thesis: the species rollup still
+filters `rank = 'species'`; a new `_infraspecific_rows` pass (`pipeline/.../rollup.py`)
+adds one `clade_features` row per below-species taxon holding **only its own**
+directly-attached features with `n_rows = 1`, **never summed into any ancestor**
+(the two row-sets have disjoint taxids, so it's a plain concat). Proof: *Canis
+lupus* (species) shows 4 assemblies while its subspecies *familiaris* shows 40 —
+the 40 never rolls up; a species with subspecies still has `n_rows == 1`.
+`is_infraspecific` is **derived at serve time** (one indexed `EXISTS`
+species-ancestor probe — no stored flag, no schema change), threaded through
+`/summary` + `/children`. Frontend: an infraspecific dashboard renders as **leaf
+detail** — count-mode `MetricCard`s (own record totals, no coverage meter), the
+"Get the data" source links, a "not counted upward" note, and **no** generic
+breakdown; species/leaf dashboards gain a **"Subspecies & strains"** section
+(`SubspeciesSection`, fetched via `/children`, sorted data-first) that lists the
+finer taxa, each navigable. DB **rebuilt** locally (~3 min; validation still
+within 0.3% of Euka-Survey, ancestor rows unchanged); ~3,151 below-species taxa
+now carry visible data (of ~73k below-species rows total). TS types regenerated;
+63 tests pass (4 new); light + dark screenshotted; `docs/data-model.md` updated.
+
 ## Read before doing anything
 
 - `docs/data-model.md` — **the core doc.** DB design + taxonomy-tree storage.
@@ -230,13 +253,12 @@ rebuild vs. the live DB, TLS, staging/prod DB, rate limiting).
 
 **So the next focus is functional** — the gate the user set for deploying. Done
 since: the **Wikipedia "About" card**, **Phase 6 — the radial Tree of Life**,
-**Phase 7 — the layout overhaul + Tier-1 UX batch**, **app-wide dark mode**, and
-the **landing / hero page** (see Status). The remaining user suggestions are logged
-in `docs/roadmap.md` **Backlog** (2026-08-01) — pick one next:
+**Phase 7 — the layout overhaul + Tier-1 UX batch**, **app-wide dark mode**, the
+**landing / hero page**, and **subspecies / infraspecific taxa** (see Status). The
+remaining user suggestions are logged in `docs/roadmap.md` **Backlog** (2026-08-01)
+— pick one next:
 - **breakdown redesign** (design-first — user dislikes the whole current view;
   bring 2–3 directions first).
-- **subspecies, not counted upward** (design-first, deepest — pipeline rollup +
-  data-model change).
 - **feedback via Google Form → GitHub issue** (no-GH-account path; fine-grained
   PAT — see Backlog).
 - **data-refresh pipeline** (port NCBI/Annotrieve/ENA fetches; unblocks the

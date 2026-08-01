@@ -1,9 +1,10 @@
 import type { MetricConfig } from "../api/types";
 import { externalUrl } from "../lib/format";
 
-/** "Go get the data" links for a single species — NCBI (genomes & assemblies),
- *  Annotrieve (annotations), ENA (RNA-Seq). Reuses each metric's source URL, so
- *  it only appears on species-level dashboards. */
+/** "Go get the data" links for a single focused taxon — NCBI (genomes &
+ *  assemblies), Annotrieve (annotations), ENA (RNA-Seq). Reuses each metric's
+ *  source URL (which accepts any taxid), so it appears on the leaf-level
+ *  dashboards: a species or an infraspecific taxon (subspecies/strain/...). */
 export default function SpeciesLinks({
   metrics,
   taxid,
@@ -14,7 +15,7 @@ export default function SpeciesLinks({
   return (
     <section className="species-links" aria-label="External data sources">
       <h2 className="species-links__title">Get the data</h2>
-      <p className="species-links__sub">Open this species at the source.</p>
+      <p className="species-links__sub">Open this taxon at the source.</p>
       <div className="species-links__list">
         {metrics.map((m) => (
           <a
