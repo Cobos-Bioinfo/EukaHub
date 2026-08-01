@@ -171,6 +171,28 @@ table/legends). Web typecheck+build clean; user-verified in a browser. Still
 missing dark-mode polish is nil for now; deeper dark-specific metric hues (would
 require plumbing variants through the API config) deferred as a separate scope.
 
+**Landing / hero page — done, "good enough for now"** (2026-08-01, on `dev`).
+Second Backlog item taken (design-first; user picked the **clean hero + discovery**
+frame, then called the result good enough and parked it for later polish). `/` now
+renders `Landing` instead of redirecting to Eukaryota: the **"EukaHub" name front
+and centre** (large solid two-tone wordmark, "Hub" in the link accent, no gradient,
+Annotrieve-style), a tagline + lede, the `RootPicker` search enlarged as the focal
+control, quick-jump "Try:" chips, a **"Surprise me with a random clade"** button,
+and the two primary journeys (Explore Eukaryota / Tree of Life). Data-light, nothing
+fetched on load. Chips + the random button draw from a **curated pool of 32
+recognizable, data-rich groups** (`web/src/lib/clades.ts`), **every taxid verified
+against the live DB** so a first-time visitor never lands on an empty/obscure node.
+Reusable `RandomCladeButton` (reads the current `:taxid` so a re-roll never repeats)
+also lives in the app bar for re-rolling from any page; brand link now points at
+`/`, and the header nav gained a **Dashboard** link (prefix-active on `/clade/`) so
+it reads **EukaHub · Dashboard · Tree of Life**. **House style (see the
+writing-style memory): no em dashes and no emojis** in copy/UI, so the old 🎲/🌳
+are now inline SVG icons (`web/src/components/icons.tsx`, `currentColor`) reused in
+the hero, app bar, and dashboard tree-link. All hero styles are token-driven, so
+dark mode is automatic, verified via headless screenshots in **both** light and
+dark. Web typecheck + build clean; no API change. Deferred polish: a live "at a
+glance" data strip + featured-clade coverage cards (Direction B), viewport centring.
+
 ## Read before doing anything
 
 - `docs/data-model.md` — **the core doc.** DB design + taxonomy-tree storage.
@@ -208,12 +230,11 @@ rebuild vs. the live DB, TLS, staging/prod DB, rate limiting).
 
 **So the next focus is functional** — the gate the user set for deploying. Done
 since: the **Wikipedia "About" card**, **Phase 6 — the radial Tree of Life**,
-**Phase 7 — the layout overhaul + Tier-1 UX batch**, and **app-wide dark mode**
-(see Status). The remaining user suggestions are logged in `docs/roadmap.md`
-**Backlog** (2026-08-01) — pick one next:
+**Phase 7 — the layout overhaul + Tier-1 UX batch**, **app-wide dark mode**, and
+the **landing / hero page** (see Status). The remaining user suggestions are logged
+in `docs/roadmap.md` **Backlog** (2026-08-01) — pick one next:
 - **breakdown redesign** (design-first — user dislikes the whole current view;
   bring 2–3 directions first).
-- **landing / hero page** (design-first — `/` just redirects to Eukaryota).
 - **subspecies, not counted upward** (design-first, deepest — pipeline rollup +
   data-model change).
 - **feedback via Google Form → GitHub issue** (no-GH-account path; fine-grained
