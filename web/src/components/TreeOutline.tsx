@@ -1,11 +1,10 @@
-import { Link } from "react-router-dom";
-
 import type { Tree } from "../hooks/useTree";
 import { fmt, fmtPct } from "../lib/format";
 
 /** Keyboard-accessible text mirror of the radial tree: the same loaded/expanded
- *  hierarchy as a nested list of native buttons and links. This is the
- *  screen-reader / no-pointer equivalent of the SVG showcase. */
+ *  hierarchy as a nested list. Clicking a taxon with children expands it here
+ *  (and in the radial view) rather than navigating away — the same lazy-expand
+ *  the SVG uses, reachable without a pointer. */
 export default function TreeOutline({ tree }: { tree: Tree }) {
   if (tree.rootId == null || !tree.nodes[tree.rootId]) return null;
   return (
@@ -38,9 +37,17 @@ function OutlineNode({ id, tree }: { id: number; tree: Tree }) {
             ·
           </span>
         )}
-        <Link className="tree-outline__name" to={`/clade/${id}`}>
-          {node.name}
-        </Link>
+        {node.has_children ? (
+          <button
+            type="button"
+            className="tree-outline__name tree-outline__name--btn"
+            onClick={() => tree.toggle(id)}
+          >
+            {node.name}
+          </button>
+        ) : (
+          <span className="tree-outline__name">{node.name}</span>
+        )}
         <span className="tree-outline__rank">{node.rank}</span>
         <span className="tree-outline__meta">
           {fmt(node.n_rows)} sp · {fmtPct(node.resources.ass.percent)}% assemblies

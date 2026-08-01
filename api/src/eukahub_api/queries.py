@@ -40,6 +40,10 @@ MetricFilter = Enum("MetricFilter", {k: k for k in METRIC_KEYS}, type=str)
 ALLOWED_RANKS: tuple[str, ...] = ("phylum", "class", "order", "family", "genus", "species")
 TargetRank = Enum("TargetRank", {r: r for r in ALLOWED_RANKS}, type=str)
 
+# Search is scoped to the eukaryotic subtree (the app's domain), so non-eukaryote
+# taxa never surface in the root picker even though `taxon` holds all of life.
+EUKARYOTA_TAXID = 2759
+
 
 class FilterLogic(str, Enum):
     """How multiple resource-presence filters combine (ported verbatim)."""
@@ -320,14 +324,15 @@ def search_taxa(
     Substring match (``ILIKE %q%``, served by the ``pg_trgm`` GIN index on
     ``name``), ordered prefix-matches-first, then shortest, then alphabetical —
     the useful order for a root picker. Wildcards in ``query`` are escaped so
-    they match literally.
+    they match literally. Results are scoped to the eukaryotic subtree.
     """
     escaped = query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
     rows = conn.execute(
         "SELECT taxid, name, rank FROM taxon "
         "WHERE name ILIKE %(sub)s "
+        "AND path <@ (SELECT path FROM taxon WHERE taxid = %(euk)s) "
         "ORDER BY (name ILIKE %(pre)s) DESC, length(name), name "
         "LIMIT %(lim)s",
-        {"sub": f"%{escaped}%", "pre": f"{escaped}%", "lim": limit},
+        {"sub": f"%{escaped}%", "pre": f"{escaped}%", "lim": limit, "euk": EUKARYOTA_TAXID},
     ).fetchall()
     return rows

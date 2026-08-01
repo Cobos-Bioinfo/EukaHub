@@ -5,6 +5,7 @@ import AboutCard from "../components/AboutCard";
 import Breadcrumb from "../components/Breadcrumb";
 import BreakdownSection from "../components/BreakdownSection";
 import MetricCard from "../components/MetricCard";
+import SpeciesLinks from "../components/SpeciesLinks";
 import { useAsync } from "../hooks/useAsync";
 import { fmt } from "../lib/format";
 
@@ -48,6 +49,7 @@ export default function Dashboard() {
           <Link className="dashboard__tree-link" to={`/tree/${taxid}`}>
             🌳 Explore <em>this clade</em> in the Tree of Life →
           </Link>
+          {s.rank === "species" && <SpeciesLinks metrics={metrics.data} taxid={taxid} />}
         </aside>
 
         <div className="dashboard__content">

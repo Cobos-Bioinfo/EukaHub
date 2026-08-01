@@ -76,6 +76,12 @@ _SECURITY_HEADERS = {
 # Tune CACHE_MAX_AGE (seconds) to the rebuild cadence; health stays uncached.
 _CACHE_MAX_AGE = int(os.environ.get("CACHE_MAX_AGE", "3600"))
 
+# The SPA reaches the API through a proxy (Vite in dev, nginx in prod) that
+# strips a `/api` prefix. Setting root_path tells FastAPI its external mount
+# point so the docs at `/api/docs` reference `/api/openapi.json` correctly.
+# Override with API_ROOT_PATH="" to serve the docs when hitting uvicorn directly.
+_ROOT_PATH = os.environ.get("API_ROOT_PATH", "/api")
+
 
 def cors_allow_origins() -> list[str]:
     raw = os.environ.get("CORS_ALLOW_ORIGINS", _DEFAULT_CORS_ORIGINS)
@@ -91,7 +97,7 @@ async def lifespan(app: FastAPI):
         yield
 
 
-app = FastAPI(title="EukaHub API", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="EukaHub API", version="0.1.0", lifespan=lifespan, root_path=_ROOT_PATH)
 
 # Read-only public API: allow cross-origin GETs from the configured origins; no
 # credentials (no cookies/auth), so the allowlist stays an explicit set.

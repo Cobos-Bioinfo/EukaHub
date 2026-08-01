@@ -1,9 +1,13 @@
+import { Fragment } from "react";
 import { Link } from "react-router-dom";
 
 import type { TaxonRef } from "../api/types";
-import { isCanonicalRank } from "../lib/format";
 
-/** Root→node lineage, filtered to canonical ranks (plus the current taxon). */
+// Trim the two synthetic roots NCBI puts above every lineage.
+const HIDDEN_TAXIDS = new Set([1, 131567]); // root, cellular organisms
+
+/** The lineage from Eukaryota down to the current taxon (every NCBI rank),
+ *  shown as a wrapping breadcrumb. */
 export default function Breadcrumb({
   lineage,
   currentTaxid,
@@ -11,13 +15,18 @@ export default function Breadcrumb({
   lineage: TaxonRef[];
   currentTaxid: number;
 }) {
-  const hops = lineage.filter((t) => isCanonicalRank(t.rank) || t.taxid === currentTaxid);
+  const hops = lineage.filter((t) => !HIDDEN_TAXIDS.has(t.taxid));
 
   return (
     <nav className="breadcrumb" aria-label="Lineage">
+      <span className="breadcrumb__label">Lineage (all ranks):</span>
       {hops.map((t, i) => (
-        <span key={t.taxid} className="breadcrumb__item">
-          {i > 0 && <span className="breadcrumb__sep" aria-hidden="true">›</span>}
+        <Fragment key={t.taxid}>
+          {i > 0 && (
+            <span className="breadcrumb__sep" aria-hidden="true">
+              ›
+            </span>
+          )}
           {t.taxid === currentTaxid ? (
             <span className="breadcrumb__current" aria-current="page">
               {t.name}
@@ -25,7 +34,7 @@ export default function Breadcrumb({
           ) : (
             <Link to={`/clade/${t.taxid}`}>{t.name}</Link>
           )}
-        </span>
+        </Fragment>
       ))}
     </nav>
   );
