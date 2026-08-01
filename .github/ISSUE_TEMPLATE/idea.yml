@@ -1,0 +1,27 @@
+name: Idea or suggestion
+description: Suggest an improvement or a new feature for EukaHub.
+title: "Idea: "
+labels: ["feedback", "enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the idea. Please explain it clearly and thoroughly so it can be
+        weighed up. This issue is public, so do not include anything private or sensitive.
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would you like, and why?
+      description: Describe the change and the problem it would solve or the value it would add.
+      placeholder: |
+        I would like … because …
+    validations:
+      required: true
+  - type: input
+    id: where
+    attributes:
+      label: Where in the app
+      description: If it relates to a specific place, the page or group / TaxID.
+      placeholder: e.g. the breakdown table on a clade dashboard
+    validations:
+      required: false
