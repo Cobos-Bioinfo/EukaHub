@@ -40,29 +40,35 @@ export default function Dashboard() {
         <p className="dashboard__species">
           <strong>{fmt(s.n_rows)}</strong> species in this clade
         </p>
-        <Link className="dashboard__tree-link" to={`/tree/${taxid}`}>
-          🌳 Explore <em>this clade</em> in the Tree of Life →
-        </Link>
       </header>
 
-      {about.data && <AboutCard about={about.data} />}
+      <div className="dashboard__body">
+        <aside className="dashboard__side">
+          {about.data && <AboutCard about={about.data} />}
+          <Link className="dashboard__tree-link" to={`/tree/${taxid}`}>
+            🌳 Explore <em>this clade</em> in the Tree of Life →
+          </Link>
+        </aside>
 
-      <div className="card-grid">
-        {metrics.data.map((m) => {
-          const value = s.resources[m.key];
-          return value ? (
-            <MetricCard key={m.key} config={m} value={value} taxid={taxid} />
-          ) : null;
-        })}
+        <div className="dashboard__content">
+          <div className="card-grid">
+            {metrics.data.map((m) => {
+              const value = s.resources[m.key];
+              return value ? (
+                <MetricCard key={m.key} config={m} value={value} taxid={taxid} />
+              ) : null;
+            })}
+          </div>
+
+          <BreakdownSection
+            key={taxid}
+            taxid={taxid}
+            rootName={s.name}
+            rootRank={s.rank}
+            metrics={metrics.data}
+          />
+        </div>
       </div>
-
-      <BreakdownSection
-        key={taxid}
-        taxid={taxid}
-        rootName={s.name}
-        rootRank={s.rank}
-        metrics={metrics.data}
-      />
     </section>
   );
 }

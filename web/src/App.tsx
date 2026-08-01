@@ -1,4 +1,4 @@
-import { Link, Navigate, NavLink, Route, Routes } from "react-router-dom";
+import { Link, Navigate, NavLink, Route, Routes, useLocation } from "react-router-dom";
 
 import RootPicker from "./components/RootPicker";
 import Dashboard from "./pages/Dashboard";
@@ -8,6 +8,10 @@ import TreePage from "./pages/TreePage";
 const DEFAULT_TAXID = 2759;
 
 export default function App() {
+  const location = useLocation();
+  // The Tree of Life goes full-bleed (near-fullscreen); every other page keeps
+  // the centered content column.
+  const isTree = location.pathname.startsWith("/tree/");
   return (
     <div className="app">
       <header className="app__bar">
@@ -23,7 +27,7 @@ export default function App() {
         <RootPicker />
       </header>
 
-      <main className="app__main">
+      <main className={"app__main" + (isTree ? " app__main--full" : "")}>
         <Routes>
           <Route path="/" element={<Navigate to={`/clade/${DEFAULT_TAXID}`} replace />} />
           <Route path="/clade/:taxid" element={<Dashboard />} />

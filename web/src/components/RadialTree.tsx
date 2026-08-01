@@ -57,19 +57,19 @@ function nodeRadius(n: number, maxN: number): number {
 const truncate = (s: string) => (s.length > 24 ? s.slice(0, 23) + "…" : s);
 
 // --- Layout geometry --------------------------------------------------------
-// A landscape viewBox that ~matches the container, so the SVG barely down-scales
-// (nodes/labels render close to their CSS px) and there's little letterboxing.
+// The viewBox is measured from the container at runtime (see the ResizeObserver
+// below) so it matches the on-screen pixel box exactly — the SVG neither
+// down-scales nor letterboxes, and nodes/labels render at their intended px on
+// any canvas size (near-fullscreen on the full-bleed tree page). VW/VH are only
+// the pre-measurement fallback for the first paint.
 const VW = 1100;
 const VH = 760;
-const CX = VW / 2;
-const CY = VH / 2;
 // Rings sit a fixed distance apart (RING) so expanding grows the tree outward at
-// constant, readable spacing instead of cramming; a floor (FILL_R) keeps a
-// shallow tree filling the view rather than shrinking to a dot. Deep trees spill
-// past the edge — that's what pan/zoom is for.
-// Leave vertical room for the radial labels (the 12/6-o'clock ones extend
-// straight out), so the outermost ring + its labels fit without clipping.
-const FILL_R = 0.34 * VH;
+// constant, readable spacing instead of cramming; a floor (fillR, derived from
+// the smaller container dimension) keeps a shallow tree filling the view rather
+// than shrinking to a dot. Deep trees spill past the edge — that's what pan/zoom
+// is for. Using the *smaller* dimension leaves horizontal room for the radial
+// labels (the 3/9-o'clock ones extend furthest) so they clip less.
 const RING = 135;
 const MIN_K = 0.2;
 const MAX_K = 5;
@@ -133,6 +133,24 @@ export default function RadialTree({
   const ramp = useMemo(() => buildRamp(activeMetric?.color ?? "#1f6feb"), [activeMetric?.color]);
   const svgRef = useRef<SVGSVGElement>(null);
   const drag = useRef<{ x: number; y: number; moved: boolean } | null>(null);
+  // Live pixel size of the SVG box; the viewBox tracks it so the radial layout
+  // fills whatever canvas the (near-fullscreen) container gives us.
+  const [size, setSize] = useState({ w: VW, h: VH });
+  const cx = size.w / 2;
+  const cy = size.h / 2;
+
+  useEffect(() => {
+    const el = svgRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver((entries) => {
+      const cr = entries[0]?.contentRect;
+      if (cr && cr.width > 0 && cr.height > 0) {
+        setSize({ w: Math.round(cr.width), h: Math.round(cr.height) });
+      }
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   // Reset pan/zoom and selection whenever the tree root changes.
   useEffect(() => {
@@ -145,7 +163,8 @@ export default function RadialTree({
     const datum = buildVisible(nodes, rootId);
     if (!datum) return null;
     const hier = hierarchy<Datum>(datum, (d) => (d.kind === "node" ? d.children : undefined));
-    const totalR = Math.max(FILL_R, hier.height * RING);
+    const fillR = 0.34 * Math.min(size.w, size.h);
+    const totalR = Math.max(fillR, hier.height * RING);
     const root = d3tree<Datum>()
       .size([2 * Math.PI, totalR])
       .separation((a, b) => (a.parent === b.parent ? 1 : 2) / Math.max(1, a.depth))(hier);
@@ -154,12 +173,12 @@ export default function RadialTree({
       if (d.data.kind === "node") maxN = Math.max(maxN, d.data.tn.node.n_rows);
     });
     return { root, maxN };
-  }, [nodes, rootId]);
+  }, [nodes, rootId, size.w, size.h]);
 
   if (rootId == null || !laid) return <p className="notice">Loading tree…</p>;
   const { root, maxN } = laid;
 
-  const logicalPerPx = () => VW / (svgRef.current?.clientWidth || VW);
+  const logicalPerPx = () => size.w / (svgRef.current?.clientWidth || size.w);
   const clampK = (k: number) => Math.min(MAX_K, Math.max(MIN_K, k));
 
   const onWheel = (e: React.WheelEvent) => {
@@ -210,7 +229,7 @@ export default function RadialTree({
         <svg
           ref={svgRef}
           className="tree__svg"
-          viewBox={`0 0 ${VW} ${VH}`}
+          viewBox={`0 0 ${size.w} ${size.h}`}
           role="img"
           aria-label="Interactive radial tree of life; use the outline below for a keyboard-accessible view."
           onWheel={onWheel}
@@ -219,7 +238,7 @@ export default function RadialTree({
           onPointerUp={onPointerUp}
           onPointerLeave={onPointerUp}
         >
-          <g transform={`translate(${CX + view.tx} ${CY + view.ty}) scale(${view.k})`}>
+          <g transform={`translate(${cx + view.tx} ${cy + view.ty}) scale(${view.k})`}>
             <g className="tree__links" fill="none">
               {root.links().map((l) => (
                 <path
