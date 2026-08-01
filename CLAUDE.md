@@ -227,9 +227,9 @@ server-side — never in the repo, the frontend, or a classic token; the submitt
 optional email stays in the private form responses and is **not** printed into the
 public issue. The script maps the form's "Type of feedback" to a repo label
 (bug/enhancement/question) + `feedback`. Frontend (`HeaderMenu.tsx`): "Send
-feedback" now opens the Form (primary, no account), with a secondary "Open an issue
-on GitHub" → the issue-template chooser; a FAQ entry was added (and a stray em dash
-fixed). Repo also gained structured **issue forms** (`.github/ISSUE_TEMPLATE/`:
+feedback" opens the Form (no account needed); a FAQ entry notes that GitHub-account
+users can open an issue directly (which surfaces the templates), and a stray em
+dash was fixed. Repo also gained structured **issue forms** (`.github/ISSUE_TEMPLATE/`:
 `bug_report.yml`, `idea.yml`, auto-labeled) plus `config.yml` with a contact link
 routing account-less users to the Form — the applicable analog of a PR-template's
 guided rules. Web build + typecheck clean.
