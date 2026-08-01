@@ -234,11 +234,12 @@ under Phase 7 above). Each major one wants a design/scope decision before coding
   classic `repo` token; the submitter's email is kept in the private form
   responses, never printed into the public issue. The script maps the form's
   "Type of feedback" to a repo label (bug/enhancement/question) plus `feedback`.
-  App wiring: header "Send feedback" opens the form (primary, no account), with a
-  secondary "Open an issue on GitHub" → the new issue-template chooser; a FAQ
-  entry added. Repo also gained structured **issue forms** (`.github/ISSUE_TEMPLATE/`
-  bug + idea, auto-labeled) and a `config.yml` contact link routing account-less
-  users to the form. The Google account / PAT / Form live in the user's accounts
+  App wiring: header "Send feedback" opens the form (no account needed); a FAQ
+  entry notes that GitHub-account users can open an issue directly. Repo also
+  gained structured **issue forms** (`.github/ISSUE_TEMPLATE/` bug + idea,
+  auto-labeled) and a `config.yml` contact link routing account-less users to the
+  form (GitHub reads these from the default branch, so they surface once `main`
+  has them). The Google account / PAT / Form live in the user's accounts
   (set up by the user with assistant-provided script + field copy).
 
 Smaller follow-ups from this session:
