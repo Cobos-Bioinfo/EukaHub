@@ -2,6 +2,7 @@ import { Link, Navigate, NavLink, Route, Routes, useLocation } from "react-route
 
 import HeaderMenu from "./components/HeaderMenu";
 import RootPicker from "./components/RootPicker";
+import ThemeToggle from "./components/ThemeToggle";
 import Dashboard from "./pages/Dashboard";
 import Faq from "./pages/Faq";
 import TreePage from "./pages/TreePage";
@@ -29,6 +30,7 @@ export default function App() {
         </NavLink>
         <div className="app__actions">
           <RootPicker />
+          <ThemeToggle />
           <a
             className="app__icon-btn"
             href={REPO_URL}

@@ -1,7 +1,9 @@
 /* EukaHub — Genomic Resource Summary dashboard.
-   Light theme. Data-encoding color (per-metric) is confined to the identity
-   dot + coverage meter; all text uses ink tokens so identity is never
-   color-alone (each card is also titled and shows its percent numerically). */
+   Token-driven theme. Data-encoding color (per-metric) is confined to the
+   identity dot + coverage meter; all text uses ink tokens so identity is never
+   color-alone (each card is also titled and shows its percent numerically).
+   Dark mode is a *selected* set of token values (see :root[data-theme="dark"]
+   below), not an automatic inversion. */
 
 :root {
   --surface: #fcfcfb; /* page + card surface family */
@@ -12,18 +14,53 @@
   --ink: #1a1d21; /* primary text */
   --ink-2: #4b5563; /* secondary text */
   --muted: #6b7280; /* labels / captions */
-  --link: #1f6feb;
+  --link: #1f6feb; /* interactive text/icons */
+  --cta: #1f6feb; /* filled-button surface (white text sits on it — keep it dark enough) */
   --accent: #0f172a;
+  --danger: #b42318;
+  --bar-bg: rgba(252, 252, 251, 0.85); /* sticky app bar (translucent) */
+  --overlay-bg: rgba(255, 255, 255, 0.92); /* floating tree panels/legend/zoom */
+  --tree-center: #ffffff; /* radial-canvas gradient centre */
+  --dot-stroke: rgba(15, 23, 42, 0.28); /* tree node outline */
   --radius: 12px;
   --shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 1px 3px rgba(16, 24, 40, 0.06);
   --maxw: 1360px; /* content cap — wide enough for the dashboard two-column body */
 
+  color-scheme: light;
   color: var(--ink);
   background: var(--surface);
   font-family: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   font-size: 16px;
   line-height: 1.45;
   -webkit-font-smoothing: antialiased;
+}
+
+/* ---- Dark theme -----------------------------------------------------------
+   Selected against a dark slate surface — its own token values, not a flip.
+   Applied via data-theme on <html> (set pre-paint by an inline script in
+   index.html, toggled from the header). The data-viz ramps re-anchor for the
+   dark canvas in RadialTree.tsx; the categorical metric hues are unchanged
+   (their separation is background-independent). --cta stays a dark-enough blue
+   so its white button text keeps contrast. */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --surface: #0f1216;
+  --card: #171b21;
+  --border: #2a2f37;
+  --track: #262b33;
+  --grid: #333a44;
+  --ink: #e8eaed;
+  --ink-2: #b3b9c2;
+  --muted: #8b929c;
+  --link: #6ba5f7;
+  --cta: #2563eb;
+  --accent: #4b566b;
+  --danger: #f87171;
+  --bar-bg: rgba(15, 18, 22, 0.85);
+  --overlay-bg: rgba(23, 27, 33, 0.92);
+  --tree-center: #1b2029;
+  --dot-stroke: rgba(226, 232, 240, 0.35);
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.35), 0 2px 6px rgba(0, 0, 0, 0.45);
 }
 
 * {
@@ -57,7 +94,7 @@ a:hover {
   align-items: center;
   gap: 1.5rem;
   padding: 0.75rem clamp(1rem, 4vw, 2rem);
-  background: rgba(252, 252, 251, 0.85);
+  background: var(--bar-bg);
   backdrop-filter: saturate(1.2) blur(8px);
   border-bottom: 1px solid var(--border);
 }
@@ -881,7 +918,7 @@ a:hover {
   padding: 2rem 0;
 }
 .notice--error {
-  color: #b42318;
+  color: var(--danger);
 }
 
 /* ---- Tree: nav + cross-links ----------------------------------------- */
@@ -906,7 +943,7 @@ a:hover {
   font-size: 0.92rem;
   font-weight: 600;
   color: #fff;
-  background: var(--link);
+  background: var(--cta);
   border-radius: 999px;
   box-shadow: var(--shadow);
 }
@@ -982,7 +1019,7 @@ a:hover {
   cursor: grab;
   touch-action: none;
   user-select: none;
-  background: radial-gradient(circle at 50% 50%, #ffffff 0%, var(--surface) 78%);
+  background: radial-gradient(circle at 50% 50%, var(--tree-center) 0%, var(--surface) 78%);
 }
 .tree__svg:active {
   cursor: grabbing;
@@ -992,7 +1029,7 @@ a:hover {
   stroke-width: 1.8;
 }
 .tree__dot {
-  stroke: rgba(15, 23, 42, 0.28);
+  stroke: var(--dot-stroke);
   stroke-width: 1;
   transition: stroke-width 0.1s ease;
 }
@@ -1000,11 +1037,11 @@ a:hover {
   cursor: pointer;
 }
 .tree__dot--expandable:hover {
-  stroke: var(--accent);
+  stroke: var(--ink);
   stroke-width: 2;
 }
 .tree__dot--expanded {
-  stroke: var(--accent);
+  stroke: var(--ink);
 }
 .tree__dot--loading {
   opacity: 0.5;
@@ -1057,7 +1094,7 @@ a:hover {
   padding: 0.5rem 0.65rem;
   font-size: 0.72rem;
   color: var(--ink-2);
-  background: rgba(255, 255, 255, 0.9);
+  background: var(--overlay-bg);
   border: 1px solid var(--border);
   border-radius: 8px;
   backdrop-filter: blur(4px);
@@ -1225,10 +1262,10 @@ button.tree-outline__name:hover {
 }
 .seg-btn--on {
   color: #fff;
-  background: var(--link);
+  background: var(--cta);
 }
 .seg-btn--on:hover {
-  background: var(--link);
+  background: var(--cta);
   filter: brightness(1.05);
 }
 
@@ -1246,7 +1283,7 @@ button.tree-outline__name:hover {
   font-size: 1.1rem;
   line-height: 1;
   color: var(--ink-2);
-  background: rgba(255, 255, 255, 0.92);
+  background: var(--overlay-bg);
   border: 1px solid var(--border);
   border-radius: 8px;
   cursor: pointer;
@@ -1269,7 +1306,7 @@ button.tree-outline__name:hover {
   left: 12px;
   width: min(280px, 70vw);
   padding: 0.85rem 0.95rem 0.95rem;
-  background: rgba(255, 255, 255, 0.97);
+  background: var(--overlay-bg);
   border: 1px solid var(--border);
   border-radius: 12px;
   box-shadow: 0 6px 20px rgba(16, 24, 40, 0.16);
@@ -1364,8 +1401,8 @@ button.tree-outline__name:hover {
 }
 .tree-panel__btn--primary {
   color: #fff;
-  background: var(--link);
-  border-color: var(--link);
+  background: var(--cta);
+  border-color: var(--cta);
 }
 .tree-panel__btn--primary:hover {
   color: #fff;

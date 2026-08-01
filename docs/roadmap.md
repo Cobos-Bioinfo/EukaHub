@@ -174,8 +174,19 @@ of left/right space. A dedicated pass, big enough for its own session:
 Remaining items from the user's suggestions list (the Tier-1 quick wins are done
 under Phase 7 above). Each major one wants a design/scope decision before coding:
 
-- **Dark mode** (major) — app-wide light/dark; chart + tree + all components are
-  light-only today. Pairs naturally with the Phase 7 layout.
+- **[done] Dark mode (2026-08-01)** — app-wide, via `data-theme` on `<html>`: a
+  pre-paint inline script in `web/index.html` (no flash) + `web/src/lib/theme.ts`
+  (persist + follow-OS store, `useTheme`) + a `ThemeToggle` in the header. One
+  **selected** dark token block in `index.css` (not an auto-flip; `color-scheme:
+  dark`), with `--cta` (button surface) split from `--link` (text) so white-on-blue
+  keeps contrast, and the previously-hardcoded light surfaces (app bar, tree
+  overlays, canvas-gradient centre, node outline, error text) tokenised.
+  `RadialTree.tsx` re-anchors the sequential coverage ramp **dim→hue→bright** for
+  the dark canvas (dark no-data neutral), tuned with the dataviz `--ordinal`
+  validator (low-end ≥2:1). Categorical metric hues kept as-is (background-
+  independent separation; same accepted Paired trade-off as light — relief via
+  track + inset edge + table/legends). Deeper dark-specific metric hues (needs
+  variants plumbed through the API config) deferred as a separate scope.
 - **Breakdown redesign** (design-first) — the user dislikes the whole current
   breakdown (`BreakdownSection` + `DivergentBarChart`); bring 2–3 layout
   directions before building.
