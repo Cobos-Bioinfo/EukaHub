@@ -1,0 +1,40 @@
+name: Bug report
+description: Something in EukaHub looks wrong or does not work.
+title: "Bug: "
+labels: ["feedback", "bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve EukaHub. Please describe the problem clearly and
+        thoroughly so it can be reproduced and fixed. This issue is public, so do not
+        include anything private or sensitive.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What you did, what you expected to happen, and what actually happened.
+      placeholder: |
+        1. Went to …
+        2. Clicked …
+
+        Expected: …
+        Instead: …
+    validations:
+      required: true
+  - type: input
+    id: where
+    attributes:
+      label: Where in the app
+      description: The page, or the group / TaxID it happened on.
+      placeholder: e.g. Tree of Life, or Mammals (TaxID 40674)
+    validations:
+      required: false
+  - type: input
+    id: environment
+    attributes:
+      label: Browser and device
+      description: Optional, but it helps for display or layout bugs.
+      placeholder: e.g. Firefox on Windows, or Safari on iPhone
+    validations:
+      required: false
