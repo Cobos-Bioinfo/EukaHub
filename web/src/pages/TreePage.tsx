@@ -35,10 +35,10 @@ export default function TreePage() {
             Tree of Life{node ? <> — <em>{node.name}</em></> : null}
           </h1>
           <p className="tree-page__sub">
-            Explore the tree of life outward from this group. Each circle is a cluster of
-            species — the bigger the circle, the more it holds — and you can colour the tree
-            by a data type to see where data is plentiful or scarce. Click any circle to peek
-            at its details or jump to its full dashboard; scroll to zoom and drag to move around.
+            Browse the tree of life starting from this group. Bigger circles hold more species,
+            and you can colour the tree by a data type to see where data is rich or sparse.
+            Click a circle to see its details or open its dashboard. Scroll to zoom and drag to
+            move around.
           </p>
         </div>
         <Link className="tree-page__back" to={`/clade/${taxid}`}>

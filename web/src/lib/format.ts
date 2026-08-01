@@ -9,19 +9,3 @@ export const fmtPct = (p: number): string => p.toFixed(p < 1 ? 2 : 1);
 /** Substitute the taxid into a metric's external URL template. */
 export const externalUrl = (template: string, taxid: number): string =>
   template.replace("{taxid}", String(taxid));
-
-// The canonical Linnaean ranks worth showing in the breadcrumb — NCBI lineages
-// are padded with many unranked "clade"/"no rank" nodes we hide.
-const CANONICAL_RANKS = new Set([
-  "domain",
-  "superkingdom",
-  "kingdom",
-  "phylum",
-  "class",
-  "order",
-  "family",
-  "genus",
-  "species",
-]);
-
-export const isCanonicalRank = (rank: string): boolean => CANONICAL_RANKS.has(rank);

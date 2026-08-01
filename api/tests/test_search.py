@@ -26,12 +26,19 @@ def test_search_respects_limit(client):
 
 
 def test_search_escapes_wildcards(client):
-    # '%' is escaped to match literally: every hit contains a literal '%'
-    # (some NCBI names do). Unescaped, '%' is the match-all wildcard and would
-    # return names *without* a '%', so this pins the escaping.
-    body = client.get("/search", params={"q": "%"}).json()
-    assert body, "expected some names containing a literal '%'"
-    assert all("%" in hit["name"] for hit in body)
+    # '%' is escaped to match literally. Search is scoped to Eukaryota, where no
+    # name contains a literal '%'. Unescaped, '%' would be the match-all wildcard
+    # and return a full page of names; escaped, it matches nothing — pinning both
+    # the escaping and the eukaryote scope.
+    body = client.get("/search", params={"q": "%", "limit": 50}).json()
+    assert body == []
+
+
+def test_search_excludes_non_eukaryotes(client):
+    # Escherichia coli (Bacteria, taxid 562) lies outside the eukaryotic subtree,
+    # so it must never surface in the root picker.
+    body = client.get("/search", params={"q": "Escherichia coli", "limit": 50}).json()
+    assert all(hit["taxid"] != 562 for hit in body)
 
 
 def test_search_no_matches_is_empty(client):

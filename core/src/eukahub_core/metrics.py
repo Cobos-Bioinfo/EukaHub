@@ -119,7 +119,7 @@ METRICS: tuple[Metric, ...] = (
         total_label="Total Annotations",
         total_help="Total number of annotated genomes across all species",
         external_source_name="Annotrieve",
-        external_url_template="https://genome.crg.es/annotrieve/annotations/details/?taxon={taxid}",
+        external_url_template="https://genome.crg.es/annotrieve/annotations/?taxids={taxid}",
         tsv_count_column="species_with_annotations",
         tsv_total_column="total_annotations",
     ),

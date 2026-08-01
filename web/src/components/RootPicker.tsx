@@ -1,10 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
-import { searchTaxa } from "../api/queries";
+import { getLineage, searchTaxa } from "../api/queries";
 import type { TaxonRef } from "../api/types";
 
-/** Debounced name-search box that navigates to the chosen clade's dashboard. */
+// EukaHub only covers the eukaryotic subtree; a TaxID outside it is rejected.
+const EUKARYOTA_TAXID = 2759;
+
+/** Search box that finds a clade by name or NCBI TaxID and opens its dashboard. */
 export default function RootPicker() {
   const [q, setQ] = useState("");
   const [results, setResults] = useState<TaxonRef[]>([]);
@@ -14,6 +17,19 @@ export default function RootPicker() {
 
   useEffect(() => {
     const query = q.trim();
+    // All digits → look the taxon up directly by TaxID; otherwise search names.
+    if (/^\d+$/.test(query)) {
+      const timer = setTimeout(() => {
+        getLineage(Number(query)).then(
+          (t) =>
+            t.lineage.some((a) => a.taxid === EUKARYOTA_TAXID)
+              ? setResults([{ taxid: t.taxid, name: t.name, rank: t.rank }])
+              : setResults([]),
+          () => setResults([]),
+        );
+      }, 250);
+      return () => clearTimeout(timer);
+    }
     if (query.length < 2) {
       setResults([]);
       return;
@@ -44,7 +60,7 @@ export default function RootPicker() {
       <input
         className="picker__input"
         type="search"
-        placeholder="Search a clade — e.g. Primates, Fungi…"
+        placeholder="Search by name or TaxID — e.g. Primates, 9606"
         value={q}
         onChange={(e) => {
           setQ(e.target.value);
