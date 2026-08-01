@@ -16,7 +16,7 @@
   --accent: #0f172a;
   --radius: 12px;
   --shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 1px 3px rgba(16, 24, 40, 0.06);
-  --maxw: 1100px;
+  --maxw: 1360px; /* content cap — wide enough for the dashboard two-column body */
 
   color: var(--ink);
   background: var(--surface);
@@ -81,6 +81,12 @@ a:hover {
   max-width: var(--maxw);
   margin: 0 auto;
   padding: clamp(1.25rem, 3vw, 2.25rem) clamp(1rem, 4vw, 2rem);
+}
+/* Full-bleed pages (the Tree of Life): escape the content cap and shrink the
+   gutters so the canvas runs near the viewport edges. */
+.app__main--full {
+  max-width: none;
+  padding: clamp(0.85rem, 2vw, 1.4rem) clamp(0.85rem, 2vw, 1.5rem);
 }
 
 .app__foot {
@@ -202,6 +208,52 @@ a:hover {
 }
 .dashboard__species strong {
   color: var(--ink);
+}
+
+/* Two-column body: a context rail (About + tree CTA) beside the metrics +
+   breakdown. Collapses to a single stack below 960px. */
+.dashboard__body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1.5rem;
+  margin-top: 1.5rem;
+}
+.dashboard__side {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  min-width: 0;
+}
+.dashboard__content {
+  min-width: 0; /* let wide tables/charts scroll instead of stretching the grid */
+}
+@media (min-width: 960px) {
+  .dashboard__body {
+    grid-template-columns: 320px minmax(0, 1fr);
+    gap: 2rem;
+    align-items: start;
+  }
+  .dashboard__side {
+    position: sticky;
+    top: 68px; /* clear the sticky app bar */
+  }
+}
+/* About card, when it lives in the rail: stack vertically, banner thumbnail,
+   no trailing margin (the flex gap handles spacing). */
+.dashboard__side .about-card {
+  flex-direction: column;
+  margin-bottom: 0;
+}
+.dashboard__side .about-card__thumb {
+  width: 100%;
+  height: 160px;
+}
+/* Tree CTA fills the rail. */
+.dashboard__side .dashboard__tree-link {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+  margin-top: 0;
 }
 
 /* ---- About card (Wikipedia) ----------------------------------------- */
@@ -855,6 +907,10 @@ a:hover {
   flex-wrap: wrap;
   margin-bottom: 1rem;
 }
+.tree-page__intro {
+  flex: 1 1 auto; /* grow to fill the head row so the intro copy uses the width */
+  min-width: 0;
+}
 .tree-page__title {
   margin: 0;
   font-size: clamp(1.5rem, 3.5vw, 2rem);
@@ -866,7 +922,6 @@ a:hover {
 }
 .tree-page__sub {
   margin: 0.35rem 0 0;
-  max-width: 62ch;
   color: var(--muted);
   font-size: 0.9rem;
 }
@@ -894,11 +949,15 @@ a:hover {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
+  /* Near-fullscreen on the full-bleed tree page; RadialTree measures this box
+     and matches its viewBox to it, so the radial layout uses the whole canvas. */
+  height: min(80vh, 920px);
+  min-height: 460px;
 }
 .tree__svg {
   display: block;
   width: 100%;
-  height: min(72vh, 720px);
+  height: 100%;
   cursor: grab;
   touch-action: none;
   user-select: none;

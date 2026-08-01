@@ -30,15 +30,15 @@ export default function TreePage() {
       {lineage.data && <Breadcrumb lineage={lineage.data.lineage} currentTaxid={taxid} />}
 
       <header className="tree-page__head">
-        <div>
+        <div className="tree-page__intro">
           <h1 className="tree-page__title">
             Tree of Life{node ? <> — <em>{node.name}</em></> : null}
           </h1>
           <p className="tree-page__sub">
-            Explore the eukaryotic tree outward from this clade. Node size ∝ species;
-            colour by a resource of your choice. Click a node to expand it and see its
-            details, then open its dashboard from there. Scroll or use the buttons to zoom;
-            drag to pan.
+            Explore the tree of life outward from this group. Each circle is a cluster of
+            species — the bigger the circle, the more it holds — and you can colour the tree
+            by a data type to see where data is plentiful or scarce. Click any circle to peek
+            at its details or jump to its full dashboard; scroll to zoom and drag to move around.
           </p>
         </div>
         <Link className="tree-page__back" to={`/clade/${taxid}`}>
