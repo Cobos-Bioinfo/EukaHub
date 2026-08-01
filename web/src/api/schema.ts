@@ -256,6 +256,11 @@ export interface components {
          * @description The Genomic Resource Summary (Q1) payload for one taxon.
          */
         CladeSummary: {
+            /**
+             * Is Infraspecific
+             * @default false
+             */
+            is_infraspecific: boolean;
             /** N Rows */
             n_rows: number;
             /** Name */
@@ -404,6 +409,11 @@ export interface components {
         TaxonNode: {
             /** Has Children */
             has_children: boolean;
+            /**
+             * Is Infraspecific
+             * @default false
+             */
+            is_infraspecific: boolean;
             /** N Rows */
             n_rows: number;
             /** Name */

@@ -78,15 +78,23 @@ class CladeSummary(BaseModel):
     name: str
     rank: str
     n_rows: int  # species in the subtree
+    # True for below-species taxa (subspecies/strains/varietas/...): the row
+    # holds only this taxon's own directly-attached data (n_rows == 1) and is
+    # never counted toward any ancestor. The frontend renders these as leaf
+    # detail (own resource counts + source links), not a clade coverage summary.
+    is_infraspecific: bool = False
     resources: dict[str, ResourceSummary]  # keyed by metric key, in METRICS order
 
     @classmethod
-    def from_metadata(cls, name: str, rank: str, meta: CladeMetadata) -> CladeSummary:
+    def from_metadata(
+        cls, name: str, rank: str, meta: CladeMetadata, is_infraspecific: bool = False
+    ) -> CladeSummary:
         return cls(
             taxid=meta.taxid,
             name=name,
             rank=rank,
             n_rows=meta.n_rows,
+            is_infraspecific=is_infraspecific,
             resources={
                 key: ResourceSummary(
                     covered=getattr(meta, f"c_{key}"),
@@ -124,14 +132,20 @@ class TaxonNode(CladeSummary):
 
     @classmethod
     def from_child(
-        cls, name: str, rank: str, meta: CladeMetadata, has_children: bool
+        cls,
+        name: str,
+        rank: str,
+        meta: CladeMetadata,
+        has_children: bool,
+        is_infraspecific: bool = False,
     ) -> TaxonNode:
-        s = CladeSummary.from_metadata(name, rank, meta)
+        s = CladeSummary.from_metadata(name, rank, meta, is_infraspecific)
         return cls(
             taxid=s.taxid,
             name=s.name,
             rank=s.rank,
             n_rows=s.n_rows,
+            is_infraspecific=s.is_infraspecific,
             resources=s.resources,
             has_children=has_children,
         )

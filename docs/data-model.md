@@ -111,6 +111,25 @@ CREATE TABLE clade_features (
 );
 ```
 
+### Infraspecific taxa (below species)
+
+`clade_features` also holds one row per **below-species** taxon (subspecies,
+strain, varietas, forma, isolate, ...) that carries directly-attached features.
+These rows are **not** part of the lineage rollup — they hold only that taxon's
+own counts, with `n_rows = 1` (the taxon as a single unit), and are **never
+summed into any ancestor**. So a subspecies' assemblies are navigable when you
+focus on the subspecies, but never inflate its parent species or any higher
+clade (the species rollup stays strictly `rank = 'species'`). The two row-sets
+have disjoint taxids — an infraspecific taxon is never an ancestor of a species
+— so the pipeline just concatenates them (`rollup.py`: `_species_rollup` +
+`_infraspecific_rows`). This keeps the project's core thesis intact: aggregates
+are species-only; below-species data is additive leaf detail.
+
+Whether a taxon *is* infraspecific isn't stored — it's derived at serve time
+with one indexed probe (`EXISTS` a `species`-rank ancestor on its `path`), so
+the API can flag any taxon (`is_infraspecific`) and the frontend renders it as
+leaf detail (own record counts + source links) instead of a clade summary.
+
 The two runtime queries:
 
 ```sql

@@ -57,31 +57,35 @@ def _collect(lf: pl.LazyFrame) -> pl.DataFrame:
             return lf.collect()
 
 
-def rollup_from_frames(taxon: pl.DataFrame, features: pl.DataFrame) -> pl.DataFrame:
-    """Roll species features up into per-clade rollups.
+def _own_feature_cols() -> list[pl.Expr]:
+    """Per-taxon has-flags (``has_<key>``) and summed totals (``s_<key>``) from
+    the raw leaf counts — the directly-attached features of one taxid."""
+    return [
+        (pl.col("ass") > 0).cast(pl.Int64).alias("has_ass"),
+        (pl.col("ann") > 0).cast(pl.Int64).alias("has_ann"),
+        ((pl.col("short") + pl.col("long")) > 0).cast(pl.Int64).alias("has_rna"),
+        (pl.col("long") > 0).cast(pl.Int64).alias("has_lng"),
+        pl.col("ass").alias("s_ass"),
+        pl.col("ann").alias("s_ann"),
+        (pl.col("short") + pl.col("long")).alias("s_rna"),
+        pl.col("long").alias("s_lng"),
+    ]
 
-    ``taxon`` needs columns (taxid, rank, path); ``features`` needs
-    (taxid, short, long, ass, ann). Returns one row per ancestor clade with
-    columns (taxid, n_rows, c_*, s_*) in METRICS order. A species is included
-    in its own lineage (``path`` ends with its taxid), matching Euka-Survey.
+
+def _species_rollup(taxon: pl.DataFrame, features: pl.DataFrame) -> pl.DataFrame:
+    """Sum species features up every lineage into one row per ancestor clade.
+
+    A species is included in its own lineage (``path`` ends with its taxid),
+    matching Euka-Survey. ``n_rows`` counts the species in each clade's subtree.
     """
     species = (
         features.join(taxon.select("taxid", "rank", "path"), on="taxid", how="inner")
         .filter(pl.col("rank") == "species")
-        .with_columns(
-            has_ass=(pl.col("ass") > 0).cast(pl.Int64),
-            has_ann=(pl.col("ann") > 0).cast(pl.Int64),
-            has_rna=((pl.col("short") + pl.col("long")) > 0).cast(pl.Int64),
-            has_lng=(pl.col("long") > 0).cast(pl.Int64),
-            s_ass=pl.col("ass"),
-            s_ann=pl.col("ann"),
-            s_rna=pl.col("short") + pl.col("long"),
-            s_lng=pl.col("long"),
-        )
+        .with_columns(_own_feature_cols())
     )
 
     carried = [f"has_{k}" for k in METRIC_KEYS] + [f"s_{k}" for k in METRIC_KEYS]
-    aggs = [pl.len().alias("n_rows")]
+    aggs = [pl.len().cast(pl.Int64).alias("n_rows")]
     aggs += [pl.col(f"has_{k}").sum().alias(f"c_{k}") for k in METRIC_KEYS]
     aggs += [pl.col(f"s_{k}").sum().alias(f"s_{k}") for k in METRIC_KEYS]
 
@@ -95,6 +99,79 @@ def rollup_from_frames(taxon: pl.DataFrame, features: pl.DataFrame) -> pl.DataFr
         .select("taxid", "n_rows", *COVERAGE_KEYS, *TOTAL_KEYS)
     )
     return _collect(clade)
+
+
+def _infraspecific_rows(taxon: pl.DataFrame, features: pl.DataFrame) -> pl.DataFrame:
+    """One rollup row per *below-species* taxon that carries directly-attached
+    features (subspecies, strains, varietas, forma, isolates, ...).
+
+    These are the resources NCBI/Annotrieve/ENA registered on a taxid finer than
+    species. They are **not** rolled into any ancestor (the species-only rollup
+    above is untouched), so a subspecies' data is navigable when focused on it
+    but never inflates its parent species or any higher clade. Each row is the
+    taxon's own counts, with ``n_rows = 1`` (the taxon itself as a single unit),
+    so it renders like a leaf. A taxon is "below species" iff a proper ancestor
+    in its ``path`` has rank ``species``; detection runs only over the small set
+    of featured non-species taxa, so it is cheap.
+    """
+    empty = pl.DataFrame(
+        schema={c: pl.Int64 for c in ("taxid", "n_rows", *COVERAGE_KEYS, *TOTAL_KEYS)}
+    )
+    featured = (
+        features.join(taxon.select("taxid", "rank", "path"), on="taxid", how="inner")
+        .filter(pl.col("rank") != "species")
+    )
+    if featured.height == 0:
+        return empty
+
+    species_ids = taxon.filter(pl.col("rank") == "species").select(
+        pl.col("taxid").alias("anc")
+    )
+    # A featured taxon is below-species iff one of its proper ancestors (path
+    # labels other than itself) is a species.
+    below_ids = (
+        featured.select("taxid", pl.col("path").str.split(".").alias("anc"))
+        .explode("anc")
+        .with_columns(pl.col("anc").cast(pl.Int64))
+        .filter(pl.col("anc") != pl.col("taxid"))
+        .join(species_ids, on="anc", how="inner")
+        .select("taxid")
+        .unique()
+    )
+    if below_ids.height == 0:
+        return empty
+
+    rows = (
+        featured.join(below_ids, on="taxid", how="inner")
+        .with_columns(_own_feature_cols())
+        .with_columns(pl.lit(1, dtype=pl.Int64).alias("n_rows"))
+        .rename({f"has_{k}": f"c_{k}" for k in METRIC_KEYS})
+        .select("taxid", "n_rows", *COVERAGE_KEYS, *TOTAL_KEYS)
+    )
+    return rows
+
+
+def rollup_from_frames(taxon: pl.DataFrame, features: pl.DataFrame) -> pl.DataFrame:
+    """Roll leaf features into per-clade rollups.
+
+    ``taxon`` needs columns (taxid, rank, path); ``features`` needs
+    (taxid, short, long, ass, ann). Returns one row per taxon with columns
+    (taxid, n_rows, c_*, s_*) in METRICS order, combining:
+
+    - the **species rollup** — one row per ancestor clade, features summed up
+      every species' lineage (``n_rows`` = species in the subtree); and
+    - **below-species rows** — one row per featured infraspecific taxon
+      (subspecies/strain/...), holding only its own directly-attached features
+      with ``n_rows = 1``, never rolled into any ancestor.
+
+    The two row-sets have disjoint taxids (an infraspecific taxon is never an
+    ancestor of a species), so a plain vertical concat is exact.
+    """
+    clade = _species_rollup(taxon, features)
+    infra = _infraspecific_rows(taxon, features)
+    if infra.height == 0:
+        return clade
+    return pl.concat([clade, infra], how="vertical")
 
 
 def rollup_clades(taxon: pl.DataFrame, leaf_features_sqlite: str | Path) -> pl.DataFrame:

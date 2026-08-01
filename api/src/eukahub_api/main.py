@@ -183,10 +183,10 @@ def clade_summary(taxid: int, conn: Conn) -> CladeSummary:
     """Genomic Resource Summary for one taxon: species count + per-resource
     coverage/total/percent. One indexed lookup on `clade_features`."""
     try:
-        name, rank, meta = fetch_summary(conn, taxid)
+        name, rank, meta, is_infraspecific = fetch_summary(conn, taxid)
     except TaxonNotFound:
         raise HTTPException(status_code=404, detail=f"taxon {taxid} not found")
-    return CladeSummary.from_metadata(name, rank, meta)
+    return CladeSummary.from_metadata(name, rank, meta, is_infraspecific)
 
 
 @app.get("/clade/{taxid}/breakdown", response_model=Breakdown)
@@ -276,8 +276,8 @@ def taxon_children(
         total=total,
         returned=len(items),
         items=[
-            TaxonNode.from_child(name, rank, meta, has_children)
-            for name, rank, meta, has_children in items
+            TaxonNode.from_child(name, rank, meta, has_children, is_infraspecific)
+            for name, rank, meta, has_children, is_infraspecific in items
         ],
     )
 

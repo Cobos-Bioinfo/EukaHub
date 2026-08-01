@@ -51,11 +51,21 @@ class FilterLogic(str, Enum):
     AND = "AND"
     OR = "OR"
 
+# A taxon is "infraspecific" (below species) iff a proper ancestor in its path
+# has rank 'species' — subspecies, strains, varietas, etc. Their features are
+# stored per-taxon (n_rows=1) and never rolled into an ancestor, so the frontend
+# renders them as leaf detail. One indexed GiST (`@>`) probe per lookup.
+_IS_INFRASPECIFIC = (
+    "EXISTS (SELECT 1 FROM taxon a WHERE a.path @> {path} "
+    "AND a.rank = 'species' AND a.taxid <> {self})"
+)
+
 # LEFT JOIN: a taxon may exist in `taxon` but have no rollup row (the rollup
 # covers the eukaryotic subtree only). Those come back with NULL features and
 # are zero-filled below.
 _SUMMARY_SQL = (
-    f"SELECT t.name, t.rank, {', '.join('f.' + c for c in _FEATURE_COLS)} "
+    f"SELECT t.name, t.rank, {', '.join('f.' + c for c in _FEATURE_COLS)}, "
+    f"{_IS_INFRASPECIFIC.format(path='t.path', self='t.taxid')} AS is_infraspecific "
     "FROM taxon t "
     "LEFT JOIN clade_features f USING (taxid) "
     "WHERE t.taxid = %s"
@@ -83,20 +93,26 @@ def fetch_root(conn: psycopg.Connection, taxid: int) -> tuple[str, str, str]:
     return row
 
 
-def fetch_summary(conn: psycopg.Connection, taxid: int) -> tuple[str, str, CladeMetadata]:
-    """Return ``(name, rank, metadata)`` for one taxon.
+def fetch_summary(
+    conn: psycopg.Connection, taxid: int
+) -> tuple[str, str, CladeMetadata, bool]:
+    """Return ``(name, rank, metadata, is_infraspecific)`` for one taxon.
 
     Raises ``TaxonNotFound`` if the taxid is not in the taxonomy. A taxon with
-    no rollup row yields a zero-filled ``CladeMetadata``.
+    no rollup row yields a zero-filled ``CladeMetadata``. ``is_infraspecific`` is
+    True for below-species taxa (subspecies/strains/...), whose row holds only
+    their own directly-attached data (``n_rows == 1``) and never counts upward.
     """
     row = conn.execute(_SUMMARY_SQL, (taxid,)).fetchone()
     if row is None:
         raise TaxonNotFound(taxid)
 
-    name, rank, *features = row
+    name, rank, *rest = row
+    is_infraspecific: bool = rest.pop()  # trailing EXISTS column
+    features = rest
     if features[0] is None:  # LEFT JOIN produced NULLs — no clade_features row
-        return name, rank, CladeMetadata.zero(taxid)
-    return name, rank, CladeMetadata(taxid, *features)
+        return name, rank, CladeMetadata.zero(taxid), is_infraspecific
+    return name, rank, CladeMetadata(taxid, *features), is_infraspecific
 
 
 def fetch_lineage(conn: psycopg.Connection, taxid: int) -> list[tuple[int, str, str]]:
@@ -125,7 +141,7 @@ def fetch_children(
     sort: str,
     limit: int,
     offset: int,
-) -> tuple[tuple[int, str, str], list[tuple[str, str, CladeMetadata, bool]], int]:
+) -> tuple[tuple[int, str, str], list[tuple[str, str, CladeMetadata, bool, bool]], int]:
     """Direct children of ``taxid`` (adjacency via ``parent_id``) — the cheap
     lookup the schema reserved for lazy-expanding the interactive tree.
 
@@ -141,9 +157,16 @@ def fetch_children(
     SortColumn-validated value (the endpoint does). A LEFT JOIN keeps children
     that lack a rollup row (zero-filled), and each child carries a
     ``has_children`` flag (one indexed EXISTS probe) so the UI shows an expand
-    affordance without another round-trip.
+    affordance without another round-trip, plus an ``is_infraspecific`` flag: a
+    child is below-species iff the parent already has a species in its path
+    (child of a species, or of a subspecies), so one probe on the parent settles
+    it for the whole page.
     """
-    parent_name, parent_rank, _path = fetch_root(conn, taxid)
+    parent_name, parent_rank, parent_path = fetch_root(conn, taxid)
+    children_infraspecific: bool = conn.execute(
+        f"SELECT {_IS_INFRASPECIFIC.format(path='%s::ltree', self='0')}",
+        (parent_path,),
+    ).fetchone()[0]
 
     feature_cols = ", ".join(f"f.{c}" for c in _FEATURE_COLS)
     # COUNT(*) OVER () rides along for the total child count (before paging);
@@ -164,7 +187,7 @@ def fetch_children(
     if not rows:
         return parent_ref, [], 0
     total = rows[0][-1]
-    items: list[tuple[str, str, CladeMetadata, bool]] = []
+    items: list[tuple[str, str, CladeMetadata, bool, bool]] = []
     for taxid_, name, rank, *rest in rows:
         *features, has_children, _row_total = rest
         meta = (
@@ -172,7 +195,7 @@ def fetch_children(
             if features[0] is None
             else CladeMetadata(taxid_, *features)
         )
-        items.append((name, rank, meta, has_children))
+        items.append((name, rank, meta, has_children, children_infraspecific))
     return parent_ref, items, total
 
 
