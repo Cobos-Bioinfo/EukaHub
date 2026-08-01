@@ -154,6 +154,23 @@ docs / FAQ) + `/faq`, plainer copy. API: `/search` scoped to Eukaryota,
 Remaining suggestions (dark mode, breakdown redesign, landing page, subspecies,
 Google-Form feedback) logged in `docs/roadmap.md` **Backlog**. Still light-only.
 
+**App-wide dark mode — done** (2026-08-01, on `dev`). First Backlog item taken.
+Applied via `data-theme` on `<html>`: a pre-paint inline script in `web/index.html`
+(no light-flash) + `web/src/lib/theme.ts` (persist + follow-OS store, `useTheme`
+hook) + a `ThemeToggle` sun/moon button in the header. `index.css` gains one
+**selected** dark token block (`:root[data-theme="dark"]`, `color-scheme: dark`) —
+not an auto-inversion (dataviz skill) — and splits `--cta` (button surface) from
+`--link` (text) so white-on-blue keeps contrast; the previously-hardcoded light
+bits (app bar, tree legend/zoom/panel overlays, radial-canvas gradient centre,
+node outline, error text) become tokens. `RadialTree.tsx` re-anchors the tree's
+sequential coverage ramp **dim→hue→bright** for the dark canvas (+ dark no-data
+neutral); ramp tuned with the dataviz `--ordinal` validator (low-end ≥2:1). The
+categorical metric hues (ColorBrewer Paired) are kept unchanged — separation is
+background-independent, same accepted trade-off as light (relief via track+edge+
+table/legends). Web typecheck+build clean; user-verified in a browser. Still
+missing dark-mode polish is nil for now; deeper dark-specific metric hues (would
+require plumbing variants through the API config) deferred as a separate scope.
+
 ## Read before doing anything
 
 - `docs/data-model.md` — **the core doc.** DB design + taxonomy-tree storage.
@@ -190,12 +207,10 @@ the remaining Phase 5 items depend on CRG's env and are **on hold** (scheduled
 rebuild vs. the live DB, TLS, staging/prod DB, rate limiting).
 
 **So the next focus is functional** — the gate the user set for deploying. Done
-since: the **Wikipedia "About" card**, **Phase 6 — the radial Tree of Life**, and
-**Phase 7 — the layout overhaul + Tier-1 UX batch** (see Status). The remaining
-user suggestions are logged in `docs/roadmap.md` **Backlog** (2026-08-01) — pick
-one next:
-- **app-wide dark mode** (major; chart + tree + all components light-only; pairs
-  with the fresh layout).
+since: the **Wikipedia "About" card**, **Phase 6 — the radial Tree of Life**,
+**Phase 7 — the layout overhaul + Tier-1 UX batch**, and **app-wide dark mode**
+(see Status). The remaining user suggestions are logged in `docs/roadmap.md`
+**Backlog** (2026-08-01) — pick one next:
 - **breakdown redesign** (design-first — user dislikes the whole current view;
   bring 2–3 directions first).
 - **landing / hero page** (design-first — `/` just redirects to Eukaryota).
@@ -212,9 +227,10 @@ enough to open the CRG deployment conversation.
 Tracked non-functional follow-ups (do when relevant): frontend deps on latest
 majors — **npm audit now shows 2 highs** (react-router runtime, low practical
 risk; the dev-only openapi-typescript chain cleared upstream); seed a **small CI
-database** so the API tests run in CI, caching layers (nginx `proxy_cache`/CDN,
-ETag/304), and **app-wide dark mode**. Verify Q1 + Q2 + the tree in a browser
-(dev env has no headless browser; user eyeballed Q1, and the Wikipedia card).
+database** so the API tests run in CI, and caching layers (nginx `proxy_cache`/CDN,
+ETag/304). **A headless browser IS available** in the dev env via
+`google-chrome-stable` — use it to screenshot/verify UI changes (this note
+supersedes earlier "no headless browser" remarks).
 
 ## Still open
 

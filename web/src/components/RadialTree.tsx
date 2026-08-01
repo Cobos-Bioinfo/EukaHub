@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { MetricConfig, TaxonNode } from "../api/types";
 import type { Tree, TreeNode } from "../hooks/useTree";
 import { fmt, fmtPct } from "../lib/format";
+import { useTheme } from "../lib/theme";
 
 // --- Encodings --------------------------------------------------------------
 // Node COLOUR = a sequential ramp in the *selected resource's own hue* (dataviz
@@ -16,11 +17,16 @@ import { fmt, fmtPct } from "../lib/format";
 // Coverage is heavily right-skewed (most clades sit at 0–10%, a few reach 100%),
 // so a linear scale would paint almost everything the palest tint. We map with a
 // gamma curve (pct^0.35) that spreads the low end, then interpolate a per-metric
-// ramp (light tint → colour → darkened) continuously.
+// ramp continuously. The ramp is a *selected* dark variant, not a flip (dataviz
+// skill): on the light canvas it runs faint→colour→dark (more ink = more data);
+// on the dark canvas it runs dim→colour→bright (more light = more data), so high
+// coverage stays the high-contrast end against either surface.
 type RGB = [number, number, number];
-const NO_DATA = "#cbd5e1";
+const NO_DATA_LIGHT = "#cbd5e1"; // pale slate, recessive on white
+const NO_DATA_DARK = "#3a4150"; // dim slate, recessive on the dark canvas
 const WHITE: RGB = [255, 255, 255];
 const BLACK: RGB = [0, 0, 0];
+const DARK_SURF: RGB = [15, 18, 22]; // matches --surface (dark)
 const hexRgb = (h: string): RGB => [
   parseInt(h.slice(1, 3), 16),
   parseInt(h.slice(3, 5), 16),
@@ -30,14 +36,16 @@ const rgbStr = (c: RGB) => `rgb(${c[0]}, ${c[1]}, ${c[2]})`;
 const mix = (c: RGB, t: RGB, f: number): RGB =>
   [0, 1, 2].map((i) => Math.round(c[i] + (t[i] - c[i]) * f)) as RGB;
 
-/** Build a metric's light→colour→dark sequential ramp from its identity hue. */
-function buildRamp(hex: string): RGB[] {
+/** Build a metric's sequential ramp from its identity hue, anchored for the theme. */
+function buildRamp(hex: string, dark: boolean): RGB[] {
   const c = hexRgb(hex);
-  return [mix(c, WHITE, 0.82), c, mix(c, BLACK, 0.28)];
+  return dark
+    ? [mix(c, DARK_SURF, 0.4), c, mix(c, WHITE, 0.45)]
+    : [mix(c, WHITE, 0.82), c, mix(c, BLACK, 0.28)];
 }
 
-function coverageColor(node: TaxonNode, key: string, ramp: RGB[]): string {
-  if (node.n_rows <= 0) return NO_DATA;
+function coverageColor(node: TaxonNode, key: string, ramp: RGB[], noData: string): string {
+  if (node.n_rows <= 0) return noData;
   const pct = node.resources[key]?.percent ?? 0;
   if (pct <= 0) return rgbStr(ramp[0]);
   const t = Math.min(1, Math.pow(pct / 100, 0.35)); // gamma-spread the low end
@@ -130,7 +138,12 @@ export default function RadialTree({
   const [selected, setSelected] = useState<number | null>(null);
   const [colorKey, setColorKey] = useState(metrics[0]?.key ?? "ass");
   const activeMetric = metrics.find((m) => m.key === colorKey);
-  const ramp = useMemo(() => buildRamp(activeMetric?.color ?? "#1f6feb"), [activeMetric?.color]);
+  const dark = useTheme() === "dark";
+  const noData = dark ? NO_DATA_DARK : NO_DATA_LIGHT;
+  const ramp = useMemo(
+    () => buildRamp(activeMetric?.color ?? "#1f6feb", dark),
+    [activeMetric?.color, dark],
+  );
   const svgRef = useRef<SVGSVGElement>(null);
   const drag = useRef<{ x: number; y: number; moved: boolean } | null>(null);
   // Live pixel size of the SVG box; the viewBox tracks it so the radial layout
@@ -272,6 +285,7 @@ export default function RadialTree({
                   treeNode={data.tn}
                   colorKey={colorKey}
                   ramp={ramp}
+                  noData={noData}
                   onClick={() => {
                     if (drag.current?.moved) return;
                     setSelected(data.taxid);
@@ -297,7 +311,7 @@ export default function RadialTree({
           </button>
         </div>
 
-        <Legend label={activeMetric?.card_title} ramp={ramp} />
+        <Legend label={activeMetric?.card_title} ramp={ramp} noData={noData} />
 
         {selectedNode && (
           <DetailsPanel
@@ -332,6 +346,7 @@ function TreeNodeMark({
   treeNode,
   colorKey,
   ramp,
+  noData,
   onClick,
   onHover,
   onLeave,
@@ -344,6 +359,7 @@ function TreeNodeMark({
   treeNode: TreeNode;
   colorKey: string;
   ramp: RGB[];
+  noData: string;
   onClick: () => void;
   onHover: (x: number, y: number) => void;
   onLeave: () => void;
@@ -366,7 +382,7 @@ function TreeNodeMark({
   if (isRoot) {
     return (
       <g className="tree__node" onClick={onClick} onMouseMove={hover} onMouseLeave={onLeave}>
-        <circle cx={0} cy={0} r={r} fill={coverageColor(node, colorKey, ramp)} className={cls} />
+        <circle cx={0} cy={0} r={r} fill={coverageColor(node, colorKey, ramp, noData)} className={cls} />
         <text className="tree__label tree__label--root" x={0} y={-(r + 7)}>
           {label}
         </text>
@@ -381,7 +397,7 @@ function TreeNodeMark({
       onMouseMove={hover}
       onMouseLeave={onLeave}
     >
-      <circle cx={0} cy={0} r={r} fill={coverageColor(node, colorKey, ramp)} className={cls} />
+      <circle cx={0} cy={0} r={r} fill={coverageColor(node, colorKey, ramp, noData)} className={cls} />
       <text
         className="tree__label"
         x={onLeft ? -(r + 5) : r + 5}
@@ -477,7 +493,7 @@ function DetailsPanel({
   );
 }
 
-function Legend({ label, ramp }: { label?: string; ramp: RGB[] }) {
+function Legend({ label, ramp, noData }: { label?: string; ramp: RGB[]; noData: string }) {
   return (
     <div className="tree-legend">
       <span className="tree-legend__title">Colour · {label ?? "coverage"} %</span>
@@ -490,7 +506,7 @@ function Legend({ label, ramp }: { label?: string; ramp: RGB[] }) {
         <span className="tree-legend__cap">100%</span>
       </span>
       <span className="tree-legend__item">
-        <span className="tree-legend__step" style={{ background: NO_DATA }} /> no species
+        <span className="tree-legend__step" style={{ background: noData }} /> no species
       </span>
       <span className="tree-legend__hint">size ∝ species · click a node for details</span>
     </div>
