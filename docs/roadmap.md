@@ -138,7 +138,20 @@ in this phase:
   rollup column (drop the per-row `EXISTS` probe), in-tree search highlighting,
   animated expand/collapse transitions.
 
-## Phase 7 — Layout & space-usage overhaul (major; not yet started)
+## Phase 7 — Layout & space-usage overhaul (done 2026-08-01)
+
+**[done] Shipped on `dev`** (commits `7531969` layout, `15647fa` Tier-1 UX
+batch). The centered `--maxw: 1100px` column is gone: the cap widened to 1360px,
+the dashboard is a two-column body (sticky context rail — About + Tree CTA +
+species "Get the data" — beside the metric grid + breakdown), and the Tree of
+Life is full-bleed near-fullscreen (`.app__main--full`, `.tree` `min(80vh,920px)`)
+with `RadialTree` measuring its container (ResizeObserver → viewBox) instead of
+the old fixed 1100×760. `TreeOutline` kept. A follow-on **Tier-1 UX batch** also
+landed: 2×2 metric cards, full-lineage wrapping breadcrumb (root + cellular
+organisms stripped), outline-click-expand, search-by-TaxID (Eukaryota-scoped),
+species external-data links, header GitHub button + dropdown (feedback / API docs
+/ FAQ) + `/faq`, and a copy cleanup. Still light-only (dark mode deferred).
+Original spec below.
 
 Flagged by the user 2026-08-01. The whole app reads "almost vertical" — every
 page is a centered column capped at `--maxw: 1100px`, so wide screens waste a lot
@@ -155,6 +168,34 @@ of left/right space. A dedicated pass, big enough for its own session:
   revisited — probably measure the container instead of the fixed viewBox.
 - **Keep the `TreeOutline` text-outline accessible view** when going fullscreen.
 - Natural to pair with app-wide **dark mode** (still deferred).
+
+## Backlog — user suggestions (opened 2026-08-01)
+
+Remaining items from the user's suggestions list (the Tier-1 quick wins are done
+under Phase 7 above). Each major one wants a design/scope decision before coding:
+
+- **Dark mode** (major) — app-wide light/dark; chart + tree + all components are
+  light-only today. Pairs naturally with the Phase 7 layout.
+- **Breakdown redesign** (design-first) — the user dislikes the whole current
+  breakdown (`BreakdownSection` + `DivergentBarChart`); bring 2–3 layout
+  directions before building.
+- **Landing / hero page** (design-first) — `/` currently redirects to Eukaryota;
+  needs product direction (purpose + content).
+- **Subspecies** (design-first, deepest) — include subspecies as navigable
+  dashboard/tree nodes but **not** counted toward any ancestor's aggregates; only
+  shown when focused on a subspecies. Touches the pipeline rollup + `n_rows`/
+  coverage semantics + `data-model.md` (the project's core thesis).
+- **Feedback via Google Form → GitHub issue** (so users without a GH account can
+  submit) — Google Apps Script `onFormSubmit` POSTs to the GitHub Issues API (per
+  the user's [article](https://medium.com/@01010111/using-google-forms-to-submit-github-issues-efdb5f876b)).
+  **Security (assistant owns):** use a *fine-grained* PAT scoped to Issues on this
+  repo only, stored server-side in the Apps Script — never a classic `repo`-scoped
+  token. Complements today's prefilled-issue link.
+
+Smaller follow-ups from this session:
+- Verify the **API docs behind the proxy** (`/api/docs`) render with
+  `root_path="/api"` once the full stack runs (couldn't test headless here).
+- The header isn't wrap-friendly on very narrow viewports (desktop-first today).
 
 ## Reuse vs rebuild vs delete
 

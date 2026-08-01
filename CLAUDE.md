@@ -140,6 +140,20 @@ typecheck+build clean; verified live through the SPA `/api` proxy
 decisions in DECISIONS.md (2026-08-01). Still **light-only** (dark mode deferred
 project-wide); Canvas/WebGL is a future scale-up path.
 
+**Phase 7 — layout & space-usage overhaul + Tier-1 UX batch — done** (2026-08-01,
+on `dev`; commits `7531969`, `15647fa`). Killed the centered `--maxw:1100px`
+column: cap → 1360px, dashboard → two-column (sticky context rail beside the
+metric grid + breakdown), Tree of Life → full-bleed near-fullscreen with
+`RadialTree` measuring its container (ResizeObserver → viewBox) not the old fixed
+1100×760; `TreeOutline` kept. Tier-1 UX batch: 2×2 metric cards, full-lineage
+wrapping breadcrumb (root + cellular organisms stripped), outline-click-expand,
+search-by-TaxID + name search both **Eukaryota-scoped**, species "Get the data"
+links, header GitHub button + dropdown (feedback via prefilled GH issue / API
+docs / FAQ) + `/faq`, plainer copy. API: `/search` scoped to Eukaryota,
+`root_path="/api"` for proxied docs, Annotrieve link fixed. 58 tests pass.
+Remaining suggestions (dark mode, breakdown redesign, landing page, subspecies,
+Google-Form feedback) logged in `docs/roadmap.md` **Backlog**. Still light-only.
+
 ## Read before doing anything
 
 - `docs/data-model.md` — **the core doc.** DB design + taxonomy-tree storage.
@@ -175,18 +189,22 @@ Guigó + the team's IT expert, once the app is more functionally interesting —
 the remaining Phase 5 items depend on CRG's env and are **on hold** (scheduled
 rebuild vs. the live DB, TLS, staging/prod DB, rate limiting).
 
-**So the next focus is functional** — the gate the user set for deploying. Two
-headline pieces now done (see above): the **Wikipedia "About" card** and
-**Phase 6 — the interactive radial Tree of Life**. Candidates:
-- **Phase 7 — layout & space-usage overhaul** (user-flagged 2026-08-01, **major**,
-  own session): the app reads too vertical / wastes horizontal space; make the
-  Tree of Life near-fullscreen (keep the `TreeOutline` view). See `docs/roadmap.md`
-  Phase 7 + the `layout-space-overhaul` memory.
-- **data-refresh pipeline** (port NCBI/Annotrieve/ENA fetches — independent of
-  deploy, unblocks the scheduled rebuild).
-- **app-wide dark mode** (chart + tree are light-only; pairs with the layout pass).
-- **tree polish** (in-tree search-to-node, animated expand, a `child_count`
-  rollup column).
+**So the next focus is functional** — the gate the user set for deploying. Done
+since: the **Wikipedia "About" card**, **Phase 6 — the radial Tree of Life**, and
+**Phase 7 — the layout overhaul + Tier-1 UX batch** (see Status). The remaining
+user suggestions are logged in `docs/roadmap.md` **Backlog** (2026-08-01) — pick
+one next:
+- **app-wide dark mode** (major; chart + tree + all components light-only; pairs
+  with the fresh layout).
+- **breakdown redesign** (design-first — user dislikes the whole current view;
+  bring 2–3 directions first).
+- **landing / hero page** (design-first — `/` just redirects to Eukaryota).
+- **subspecies, not counted upward** (design-first, deepest — pipeline rollup +
+  data-model change).
+- **feedback via Google Form → GitHub issue** (no-GH-account path; fine-grained
+  PAT — see Backlog).
+- **data-refresh pipeline** (port NCBI/Annotrieve/ENA fetches; unblocks the
+  scheduled rebuild).
 
 Ask the user which to take — or whether the app is now "functionally interesting"
 enough to open the CRG deployment conversation.
