@@ -60,7 +60,7 @@ export default function RootPicker() {
       <input
         className="picker__input"
         type="search"
-        placeholder="Search by name or TaxID — e.g. Primates, 9606"
+        placeholder="Search by name or TaxID, e.g. Primates or 9606"
         value={q}
         onChange={(e) => {
           setQ(e.target.value);

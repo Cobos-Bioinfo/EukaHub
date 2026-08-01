@@ -1,10 +1,13 @@
-import { Link, Navigate, NavLink, Route, Routes, useLocation } from "react-router-dom";
+import { Link, Route, Routes, useLocation } from "react-router-dom";
 
 import HeaderMenu from "./components/HeaderMenu";
+import RandomCladeButton from "./components/RandomCladeButton";
 import RootPicker from "./components/RootPicker";
 import ThemeToggle from "./components/ThemeToggle";
+import { RandomIcon } from "./components/icons";
 import Dashboard from "./pages/Dashboard";
 import Faq from "./pages/Faq";
+import Landing from "./pages/Landing";
 import TreePage from "./pages/TreePage";
 
 // Default landing clade: Eukaryota (the whole surveyed tree).
@@ -16,20 +19,27 @@ export default function App() {
   // The Tree of Life goes full-bleed (near-fullscreen); every other page keeps
   // the centered content column.
   const isTree = location.pathname.startsWith("/tree/");
+  // Nav links highlight for their whole route family (any clade, any tree).
+  const navClass = (prefix: string) =>
+    "app__nav" + (location.pathname.startsWith(prefix) ? " app__nav--active" : "");
   return (
     <div className="app">
       <header className="app__bar">
-        <Link className="app__brand" to={`/clade/${DEFAULT_TAXID}`}>
+        <Link className="app__brand" to="/">
           Euka<span>Hub</span>
         </Link>
-        <NavLink
-          className={({ isActive }) => "app__nav" + (isActive ? " app__nav--active" : "")}
-          to={`/tree/${DEFAULT_TAXID}`}
-        >
+        <Link className={navClass("/clade/")} to={`/clade/${DEFAULT_TAXID}`}>
+          Dashboard
+        </Link>
+        <Link className={navClass("/tree/")} to={`/tree/${DEFAULT_TAXID}`}>
           Tree of Life
-        </NavLink>
+        </Link>
         <div className="app__actions">
           <RootPicker />
+          <RandomCladeButton className="app__icon-btn" title="Surprise me, jump to a random group">
+            <RandomIcon size={18} />
+            <span className="sr-only">Surprise me, jump to a random group</span>
+          </RandomCladeButton>
           <ThemeToggle />
           <a
             className="app__icon-btn"
@@ -52,7 +62,7 @@ export default function App() {
 
       <main className={"app__main" + (isTree ? " app__main--full" : "")}>
         <Routes>
-          <Route path="/" element={<Navigate to={`/clade/${DEFAULT_TAXID}`} replace />} />
+          <Route path="/" element={<Landing />} />
           <Route path="/clade/:taxid" element={<Dashboard />} />
           <Route path="/tree/:taxid" element={<TreePage />} />
           <Route path="/faq" element={<Faq />} />

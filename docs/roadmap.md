@@ -190,8 +190,26 @@ under Phase 7 above). Each major one wants a design/scope decision before coding
 - **Breakdown redesign** (design-first) — the user dislikes the whole current
   breakdown (`BreakdownSection` + `DivergentBarChart`); bring 2–3 layout
   directions before building.
-- **Landing / hero page** (design-first) — `/` currently redirects to Eukaryota;
-  needs product direction (purpose + content).
+- **[done] Landing / hero page (2026-08-01)** — user calls it **"good enough for
+  now"** (parked; revisit later). `/` now renders a `Landing` hero (chosen frame:
+  **clean hero + discovery**) instead of redirecting to Eukaryota: the **"EukaHub"
+  name front and centre** (large solid two-tone wordmark, "Hub" in the link accent,
+  no gradient, Annotrieve-style), a tagline + lede, the `RootPicker` search enlarged
+  as the focal control, quick-jump "Try:" chips, a **"Surprise me with a random
+  clade"** button, and the two primary journeys (Explore Eukaryota / Tree of Life).
+  Data-light, nothing fetched on load. The random-clade + chip source is a curated
+  pool of 32 recognizable, data-rich groups (`web/src/lib/clades.ts`), **every taxid
+  verified against the live DB** so a new user never lands on an empty/obscure node.
+  Reusable `RandomCladeButton` (reads the current `:taxid` so it never re-rolls the
+  same group) also sits in the app bar so returning users can re-roll from any page.
+  Header nav is now **EukaHub · Dashboard · Tree of Life** (brand goes to `/`; a
+  Dashboard link was added, prefix-active on `/clade/`). Per house style: **no em
+  dashes and no emojis** in copy or UI, so the old 🎲/🌳 became inline SVG icons
+  (`web/src/components/icons.tsx`, `currentColor`) reused in the hero, the app bar,
+  and the dashboard tree-link. All hero styles are token-driven so dark mode is
+  automatic (light + dark screenshotted). Build + typecheck clean. Future polish
+  (deferred): the live "at a glance" data strip + featured-clade coverage cards
+  (Direction B) and vertical centring in the viewport.
 - **Subspecies** (design-first, deepest) — include subspecies as navigable
   dashboard/tree nodes but **not** counted toward any ancestor's aggregates; only
   shown when focused on a subspecies. Touches the pipeline rollup + `n_rows`/
