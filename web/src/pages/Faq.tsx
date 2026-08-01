@@ -79,9 +79,18 @@ export default function Faq() {
       </div>
 
       <div className="faq__item">
+        <h2 className="faq__q">How do I report a problem or suggest something?</h2>
+        <p className="faq__a">
+          Use the "Send feedback" link in the header menu (the ⋯ button). It opens a short
+          form, no GitHub account needed, and your response is filed as an issue on the
+          project. If you do have a GitHub account, you can open an issue directly instead.
+        </p>
+      </div>
+
+      <div className="faq__item">
         <h2 className="faq__q">Is there an API?</h2>
         <p className="faq__a">
-          Yes — the whole app runs on a public, read-only API.{" "}
+          Yes, the whole app runs on a public, read-only API.{" "}
           <a href="/api/docs" target="_blank" rel="noreferrer">
             Browse the API docs
           </a>

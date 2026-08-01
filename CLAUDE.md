@@ -216,6 +216,24 @@ within 0.3% of Euka-Survey, ancestor rows unchanged); ~3,151 below-species taxa
 now carry visible data (of ~73k below-species rows total). TS types regenerated;
 63 tests pass (4 new); light + dark screenshotted; `docs/data-model.md` updated.
 
+**Feedback via Google Form → GitHub issue — done** (2026-08-02, on `dev`). Fourth
+Backlog item. A public Google Form files a labeled GitHub issue via a Google Apps
+Script `onFormSubmit` trigger, so people **without a GitHub account** can submit.
+Split: the Form / PAT / Apps Script live in the **user's** Google + GitHub accounts
+(the user set them up with assistant-provided script code + exact field copy); the
+repo + frontend are mine. **Security (assistant owns):** fine-grained PAT (Issues
+read/write on this repo only) stored in the Apps Script's Script Properties,
+server-side — never in the repo, the frontend, or a classic token; the submitter's
+optional email stays in the private form responses and is **not** printed into the
+public issue. The script maps the form's "Type of feedback" to a repo label
+(bug/enhancement/question) + `feedback`. Frontend (`HeaderMenu.tsx`): "Send
+feedback" now opens the Form (primary, no account), with a secondary "Open an issue
+on GitHub" → the issue-template chooser; a FAQ entry was added (and a stray em dash
+fixed). Repo also gained structured **issue forms** (`.github/ISSUE_TEMPLATE/`:
+`bug_report.yml`, `idea.yml`, auto-labeled) plus `config.yml` with a contact link
+routing account-less users to the Form — the applicable analog of a PR-template's
+guided rules. Web build + typecheck clean.
+
 ## Read before doing anything
 
 - `docs/data-model.md` — **the core doc.** DB design + taxonomy-tree storage.
@@ -254,13 +272,11 @@ rebuild vs. the live DB, TLS, staging/prod DB, rate limiting).
 **So the next focus is functional** — the gate the user set for deploying. Done
 since: the **Wikipedia "About" card**, **Phase 6 — the radial Tree of Life**,
 **Phase 7 — the layout overhaul + Tier-1 UX batch**, **app-wide dark mode**, the
-**landing / hero page**, and **subspecies / infraspecific taxa** (see Status). The
-remaining user suggestions are logged in `docs/roadmap.md` **Backlog** (2026-08-01)
-— pick one next:
+**landing / hero page**, **subspecies / infraspecific taxa**, and **feedback via
+Google Form → GitHub issue** (see Status). The remaining user suggestions are
+logged in `docs/roadmap.md` **Backlog** — pick one next:
 - **breakdown redesign** (design-first — user dislikes the whole current view;
   bring 2–3 directions first).
-- **feedback via Google Form → GitHub issue** (no-GH-account path; fine-grained
-  PAT — see Backlog).
 - **data-refresh pipeline** (port NCBI/Annotrieve/ENA fetches; unblocks the
   scheduled rebuild).
 

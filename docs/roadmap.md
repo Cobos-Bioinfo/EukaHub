@@ -226,12 +226,20 @@ under Phase 7 above). Each major one wants a design/scope decision before coding
   gain a **"Subspecies & strains"** section (`SubspeciesSection`, via `/children`,
   sorted data-first) listing the finer taxa. DB rebuilt (validation still within
   0.3%); 63 tests pass; light+dark screenshotted. `data-model.md` updated.
-- **Feedback via Google Form → GitHub issue** (so users without a GH account can
-  submit) — Google Apps Script `onFormSubmit` POSTs to the GitHub Issues API (per
-  the user's [article](https://medium.com/@01010111/using-google-forms-to-submit-github-issues-efdb5f876b)).
-  **Security (assistant owns):** use a *fine-grained* PAT scoped to Issues on this
-  repo only, stored server-side in the Apps Script — never a classic `repo`-scoped
-  token. Complements today's prefilled-issue link.
+- **[done] Feedback via Google Form → GitHub issue (2026-08-02)** — a public
+  Google Form that files a labeled GitHub issue via an Apps Script `onFormSubmit`
+  trigger, so users **without a GitHub account** can submit. **Security (assistant
+  owns):** the Apps Script holds a *fine-grained* PAT (Issues: read/write on this
+  repo only) in Script Properties, server-side — never in the repo, frontend, or a
+  classic `repo` token; the submitter's email is kept in the private form
+  responses, never printed into the public issue. The script maps the form's
+  "Type of feedback" to a repo label (bug/enhancement/question) plus `feedback`.
+  App wiring: header "Send feedback" opens the form (primary, no account), with a
+  secondary "Open an issue on GitHub" → the new issue-template chooser; a FAQ
+  entry added. Repo also gained structured **issue forms** (`.github/ISSUE_TEMPLATE/`
+  bug + idea, auto-labeled) and a `config.yml` contact link routing account-less
+  users to the form. The Google account / PAT / Form live in the user's accounts
+  (set up by the user with assistant-provided script + field copy).
 
 Smaller follow-ups from this session:
 - Verify the **API docs behind the proxy** (`/api/docs`) render with
