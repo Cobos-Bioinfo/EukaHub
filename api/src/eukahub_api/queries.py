@@ -166,6 +166,31 @@ def fetch_overview(
     return totals, featured
 
 
+def fetch_compare(
+    conn: psycopg.Connection, taxids: list[int]
+) -> list[tuple[int, str, str, CladeMetadata, dict[str, float | None]]]:
+    """Per-group data for the compare view — one entry per taxid, in input order.
+
+    Each entry is ``(taxid, name, rank, metadata, quality)`` where ``metadata`` is
+    the clade's rollup (species count + per-resource coverage/total) and
+    ``quality`` merges the live assembly + annotation distribution stats (median
+    genome size / contig N50, best BUSCO, median genes) over the subtree — the
+    same stats the drill-down endpoints expose, computed once per group. An
+    unknown taxid is skipped (a stale shared link degrades gracefully rather than
+    404-ing the whole comparison)."""
+    groups: list[tuple[int, str, str, CladeMetadata, dict[str, float | None]]] = []
+    for taxid in taxids:
+        try:
+            name, rank, path = fetch_root(conn, taxid)
+        except TaxonNotFound:
+            continue
+        _n, _r, meta, _inf = fetch_summary(conn, taxid)
+        _ass_total, ass_stats = _fetch_quality_stats(conn, "assembly", path)
+        _ann_total, ann_stats = _fetch_quality_stats(conn, "annotation", path)
+        groups.append((taxid, name, rank, meta, {**ass_stats, **ann_stats}))
+    return groups
+
+
 def fetch_lineage(conn: psycopg.Connection, taxid: int) -> list[tuple[int, str, str]]:
     """Return the root→taxon lineage as ``(taxid, name, rank)`` rows, inclusive
     of the taxon itself, ordered root-first.

@@ -10,6 +10,7 @@ import type {
   Breakdown,
   BucketQuality,
   CladeSummary,
+  Compare,
   FilterLogic,
   MetricConfig,
   MetricFilter,
@@ -49,6 +50,10 @@ export const getMetricsConfig = async (): Promise<MetricConfig[]> =>
 
 // Landing-page "at a glance": global totals + a few featured groups, one request.
 export const getOverview = async (): Promise<Overview> => unwrap(await api.GET("/overview"));
+
+// Compare several groups side by side (2-6). Unknown taxids are dropped server-side.
+export const getCompare = async (taxids: number[]): Promise<Compare> =>
+  unwrap(await api.GET("/compare", { params: { query: { taxids: taxids.join(",") } } }));
 
 export const getSummary = async (taxid: number): Promise<CladeSummary> =>
   unwrap(await api.GET("/clade/{taxid}/summary", { params: { path: { taxid } } }));

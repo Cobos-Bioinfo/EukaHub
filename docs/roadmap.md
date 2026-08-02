@@ -324,6 +324,16 @@ under Phase 7 above). Each major one wants a design/scope decision before coding
   form (GitHub reads these from the default branch, so they surface once `main`
   has them). The Google account / PAT / Form live in the user's accounts
   (set up by the user with assistant-provided script + field copy).
+- **[done 2026-08-03] Compare groups view** (new feature; design-first, user chose
+  the **hybrid chart + table**). Cacheable `GET /compare?taxids=a,b,c` (2-6 groups)
+  returns each group's species count + per-resource coverage + live quality stats
+  (BUSCO / genes / genome size / N50). `ComparePage` at `/compare` (nav link): a
+  grouped horizontal bar chart of coverage % (one colour per group, shared
+  auto-scaled axis, value-at-tip) + a sortable numbers table; groups live in the
+  URL (`?taxids=`, shareable), colour-follows-entity, chips + presets. The 6-slot
+  group palette is the **dataviz** skill's validated categorical default,
+  re-validated against the app surfaces. `RootPicker` gained an `onPick` callback.
+  6 slice-safe API tests; suite 95 pass; light + dark + empty-state screenshotted.
 
 Smaller follow-ups from this session:
 - Verify the **API docs behind the proxy** (`/api/docs`) render with

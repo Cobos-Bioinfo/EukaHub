@@ -358,3 +358,23 @@ class AnnotationList(BaseModel):
     returned: int
     stats: list[QualityStatValue]  # best BUSCO, median protein-coding gene count
     items: list[AnnotationRecord]
+
+
+class CompareGroup(BaseModel):
+    """One group in the compare view: its species count, per-resource coverage,
+    and live quality stats — enough to line several groups up side by side."""
+
+    taxid: int
+    name: str
+    rank: str
+    n_rows: int  # species in the subtree
+    resources: dict[str, ResourceSummary]  # keyed by metric key, in METRICS order
+    quality: list[QualityStatValue]  # BUSCO / genes / genome size / N50, QUALITY_STATS order
+
+
+class Compare(BaseModel):
+    """The compare payload: several groups' summaries lined up (served by
+    ``/compare``). Unknown taxids are dropped, so ``groups`` may be shorter than
+    the requested set."""
+
+    groups: list[CompareGroup]

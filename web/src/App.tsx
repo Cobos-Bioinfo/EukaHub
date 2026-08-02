@@ -6,6 +6,7 @@ import RootPicker from "./components/RootPicker";
 import ThemeToggle from "./components/ThemeToggle";
 import { RandomIcon } from "./components/icons";
 import BreakdownPage from "./pages/BreakdownPage";
+import ComparePage from "./pages/ComparePage";
 import Dashboard from "./pages/Dashboard";
 import Faq from "./pages/Faq";
 import Landing from "./pages/Landing";
@@ -37,6 +38,9 @@ export default function App() {
         </Link>
         <Link className={navClass("/map/")} to={`/map/${DEFAULT_TAXID}`}>
           Data map
+        </Link>
+        <Link className={navClass("/compare")} to="/compare">
+          Compare
         </Link>
         <div className="app__actions">
           <RootPicker />
@@ -70,6 +74,7 @@ export default function App() {
           <Route path="/clade/:taxid" element={<Dashboard />} />
           <Route path="/tree/:taxid" element={<TreePage />} />
           <Route path="/map/:taxid" element={<BreakdownPage />} />
+          <Route path="/compare" element={<ComparePage />} />
           <Route path="/faq" element={<Faq />} />
           <Route path="*" element={<p className="notice notice--error">Page not found.</p>} />
         </Routes>
