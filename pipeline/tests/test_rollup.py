@@ -40,6 +40,68 @@ def test_rollup_from_frames() -> None:
     assert 9605 not in out
 
 
+def test_rollup_counts_species_without_data() -> None:
+    """n_rows counts ALL species in a clade — even those with no features (the
+    coverage denominator / 'total species') — while c_*/s_* stay 0 for them.
+    The fetched sources cover a small fraction of species, so the roll-up must
+    take the species universe from the taxonomy, not from the feature rows.
+    """
+    taxon = pl.DataFrame(
+        {
+            "taxid": [1, 2759, 9606, 10090, 7227],
+            "rank": ["no rank", "superkingdom", "species", "species", "species"],
+            "path": ["1", "1.2759", "1.2759.9606", "1.2759.10090", "1.2759.7227"],
+        }
+    )
+    # Only 9606 carries data; 10090 and 7227 have none.
+    features = pl.DataFrame(
+        {"taxid": [9606], "short": [5], "long": [0], "ass": [2], "ann": [1]}
+    )
+    out = {
+        r["taxid"]: r for r in rollup_from_frames(taxon, features).iter_rows(named=True)
+    }
+    # 3 species under the clade, only 1 with assemblies:
+    assert out[2759]["n_rows"] == 3
+    assert out[2759]["c_ass"] == 1
+    assert out[2759]["s_ass"] == 2
+    # No-data species still appear as their own rows (n_rows=1, all-zero counts).
+    assert out[10090]["n_rows"] == 1
+    assert out[10090]["c_ass"] == 0
+    assert out[7227]["s_ass"] == 0
+
+
+def test_rollup_scopes_to_root_subtree() -> None:
+    """root_taxid limits the species universe to that subtree — the app is
+    Eukaryota-only, but `taxon` holds the whole NCBI tree (all domains)."""
+    taxon = pl.DataFrame(
+        {
+            "taxid": [1, 131567, 2759, 2, 9606, 562],
+            "rank": [
+                "no rank", "no rank", "superkingdom",
+                "superkingdom", "species", "species",
+            ],
+            "path": [
+                "1", "1.131567", "1.131567.2759", "1.131567.2",
+                "1.131567.2759.9606", "1.131567.2.562",
+            ],
+        }
+    )
+    features = pl.DataFrame(
+        {"taxid": [9606], "short": [0], "long": [0], "ass": [1], "ann": [0]}
+    )
+    out = {
+        r["taxid"]: r
+        for r in rollup_from_frames(taxon, features, root_taxid=2759).iter_rows(named=True)
+    }
+    # The eukaryote species is counted; the bacterium (562, E. coli) is excluded.
+    assert out[2759]["n_rows"] == 1
+    assert 562 not in out  # bacterium never rolled up
+    assert 2 not in out  # bacteria superkingdom has no in-scope species
+    # Ancestors shared with Eukaryota still appear (root, cellular organisms).
+    assert out[1]["n_rows"] == 1
+    assert out[131567]["n_rows"] == 1
+
+
 def test_rollup_composition_columns_sum_up_lineages() -> None:
     """The additive assembly-composition columns roll up the same way as s_*."""
     taxon = pl.DataFrame(
