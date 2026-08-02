@@ -14,17 +14,23 @@ from enum import Enum
 
 import psycopg
 from eukahub_core.metrics import (
+    COMPOSITION_COLUMNS,
     COVERAGE_KEYS,
     METRIC_KEYS,
     METRICS,
+    QUALITY_STATS,
     TOTAL_KEYS,
     CladeMetadata,
 )
+from psycopg.rows import dict_row
 from psycopg_pool import ConnectionPool
 
-# n_rows, then c_* (COVERAGE_KEYS), then s_* (TOTAL_KEYS) — the exact tail of
-# CladeMetadata's constructor after taxid.
-_FEATURE_COLS: tuple[str, ...] = ("n_rows",) + COVERAGE_KEYS + TOTAL_KEYS
+# n_rows, then c_* (COVERAGE_KEYS), then s_* (TOTAL_KEYS), then the additive
+# composition columns — the exact tail of CladeMetadata's constructor after
+# taxid, so `CladeMetadata(taxid, *features)` stays positional.
+_FEATURE_COLS: tuple[str, ...] = (
+    ("n_rows",) + COVERAGE_KEYS + TOTAL_KEYS + COMPOSITION_COLUMNS
+)
 
 # --- Breakdown query-param enums --------------------------------------------
 # Derived from the metric config, so the API contract (and the OpenAPI/TS
@@ -39,6 +45,13 @@ MetricFilter = Enum("MetricFilter", {k: k for k in METRIC_KEYS}, type=str)
 # Ranks the breakdown can target (ported from Euka-Survey's ALLOWED_RANKS).
 ALLOWED_RANKS: tuple[str, ...] = ("phylum", "class", "order", "family", "genus", "species")
 TargetRank = Enum("TargetRank", {r: r for r in ALLOWED_RANKS}, type=str)
+
+# Sort columns for the per-record drill-down lists (interpolated as identifiers,
+# so they must be a closed, validated set — hence enums).
+_ASSEMBLY_SORTS: tuple[str, ...] = ("release_date", "contig_n50", "total_sequence_length")
+AssemblySort = Enum("AssemblySort", {c: c for c in _ASSEMBLY_SORTS}, type=str)
+_ANNOTATION_SORTS: tuple[str, ...] = ("busco_complete", "protein_coding_count", "release_date")
+AnnotationSort = Enum("AnnotationSort", {c: c for c in _ANNOTATION_SORTS}, type=str)
 
 # Search is scoped to the eukaryotic subtree (the app's domain), so non-eukaryote
 # taxa never surface in the root picker even though `taxon` holds all of life.
@@ -359,3 +372,117 @@ def search_taxa(
         {"sub": f"%{escaped}%", "pre": f"{escaped}%", "lim": limit, "euk": EUKARYOTA_TAXID},
     ).fetchall()
     return rows
+
+
+# --- Per-record drill-down (assemblies / annotations) -----------------------
+# The per-record tables are small (~68k / ~18k rows) and independently sourced,
+# so "everything under clade X" is a cheap subtree join to `taxon`, and the
+# distribution stats (median N50 / genome size / gene count, best BUSCO) are
+# computed live per request rather than precomputed — a subtree median is not
+# the sum of child medians, so it can't ride the additive rollup (data-model.md).
+
+# SELECT lists alias every column to the response-model field name, so the
+# endpoint can build the Pydantic model straight from a dict_row.
+_ASSEMBLY_RECORD_SELECT = (
+    "a.assembly_accession, a.taxid, t.name AS organism, a.assembly_level, "
+    "a.contig_n50, a.scaffold_n50, a.total_sequence_length, a.gc_percent, "
+    "a.refseq_category, a.release_date, a.submitter, a.source_database, "
+    "a.bioprojects, a.download_url"
+)
+_ANNOTATION_RECORD_SELECT = (
+    "a.annotation_id, a.assembly_accession, a.taxid, t.name AS organism, "
+    "a.source_database, a.provider, a.release_date, a.gff_url, a.gene_count, "
+    "a.protein_coding_count, a.busco_complete, a.busco_single_copy, "
+    "a.busco_duplicated, a.busco_lineage"
+)
+
+
+def _quality_stats_agg(source: str) -> str:
+    """Build the aggregate SELECT for a source's QUALITY_STATS (median via
+    ``percentile_cont``, max via ``max``). ``column``/``key`` come from the
+    trusted config, so interpolating them is safe."""
+    parts = []
+    for q in QUALITY_STATS:
+        if q.source != source:
+            continue
+        if q.agg == "median":
+            parts.append(
+                f"percentile_cont(0.5) WITHIN GROUP (ORDER BY {q.column}) AS {q.key}"
+            )
+        else:  # "max" — e.g. the clade's best BUSCO
+            parts.append(f"max({q.column}) AS {q.key}")
+    return ", ".join(parts)
+
+
+def _fetch_quality_stats(
+    conn: psycopg.Connection, source: str, root_path: str
+) -> tuple[int, dict[str, float | None]]:
+    """Return ``(record_count, {stat_key: value})`` for a source over the subtree
+    rooted at ``root_path``. ``source`` is the (trusted) table name."""
+    keys = [q.key for q in QUALITY_STATS if q.source == source]
+    agg = _quality_stats_agg(source)
+    row = conn.execute(
+        f"SELECT count(*), {agg} FROM {source} r JOIN taxon t USING (taxid) "
+        "WHERE t.path <@ %s::ltree",
+        (root_path,),
+    ).fetchone()
+    count = row[0]
+    values = {k: (float(v) if v is not None else None) for k, v in zip(keys, row[1:])}
+    return count, values
+
+
+def _fetch_records(
+    conn: psycopg.Connection,
+    *,
+    source: str,
+    select: str,
+    key_col: str,
+    root_path: str,
+    sort: str,
+    limit: int,
+    offset: int,
+) -> list[dict]:
+    """Paginated per-record rows for a source over the subtree, as dicts keyed by
+    the aliased column names. ``sort`` is enum-validated; ``key_col`` is the
+    table's primary key, appended as a unique tiebreaker so limit/offset paging
+    is a stable total order (``sort`` alone ties — many records share a taxid)."""
+    sql = (
+        f"SELECT {select} FROM {source} a JOIN taxon t USING (taxid) "
+        "WHERE t.path <@ %s::ltree "
+        f"ORDER BY a.{sort} DESC NULLS LAST, a.{key_col} "
+        "LIMIT %s OFFSET %s"
+    )
+    with conn.cursor(row_factory=dict_row) as cur:
+        return cur.execute(sql, (root_path, limit, offset)).fetchall()
+
+
+def fetch_assembly_records(
+    conn: psycopg.Connection, *, taxid: int, sort: str, limit: int, offset: int
+) -> tuple[tuple[int, str, str], int, dict[str, float | None], list[dict]]:
+    """Assemblies under ``taxid`` (whole subtree) — ``(root_ref, total, stats,
+    records)``. ``stats`` are the live assembly-source distribution stats (median
+    genome size / contig N50). Raises ``TaxonNotFound`` for an unknown taxid."""
+    root_name, root_rank, root_path = fetch_root(conn, taxid)
+    total, stats = _fetch_quality_stats(conn, "assembly", root_path)
+    records = _fetch_records(
+        conn, source="assembly", select=_ASSEMBLY_RECORD_SELECT,
+        key_col="assembly_accession",
+        root_path=root_path, sort=sort, limit=limit, offset=offset,
+    )
+    return (taxid, root_name, root_rank), total, stats, records
+
+
+def fetch_annotation_records(
+    conn: psycopg.Connection, *, taxid: int, sort: str, limit: int, offset: int
+) -> tuple[tuple[int, str, str], int, dict[str, float | None], list[dict]]:
+    """Annotations under ``taxid`` (whole subtree) — ``(root_ref, total, stats,
+    records)``. ``stats`` are the live annotation-source stats (best BUSCO, median
+    protein-coding gene count). Raises ``TaxonNotFound`` for an unknown taxid."""
+    root_name, root_rank, root_path = fetch_root(conn, taxid)
+    total, stats = _fetch_quality_stats(conn, "annotation", root_path)
+    records = _fetch_records(
+        conn, source="annotation", select=_ANNOTATION_RECORD_SELECT,
+        key_col="annotation_id",
+        root_path=root_path, sort=sort, limit=limit, offset=offset,
+    )
+    return (taxid, root_name, root_rank), total, stats, records

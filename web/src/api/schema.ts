@@ -137,6 +137,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/quality-config": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Quality Config
+         * @description The annotation/assembly-quality stats — static card chrome rendered once,
+         *     keyed by the stat keys the per-taxon quality values use (BUSCO, gene count,
+         *     genome size, N50). The analogue of ``/metrics-config`` for the new dimension.
+         */
+        get: operations["quality_config_quality_config_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/search": {
         parameters: {
             query?: never;
@@ -206,6 +228,52 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/taxon/{taxid}/annotations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Taxon Annotations
+         * @description Functional annotations anywhere under a taxon, for the drill-down list +
+         *     the live annotation-quality stats (best BUSCO, median protein-coding gene
+         *     count). Subtree join to the `annotation` table; default sort surfaces the
+         *     best-annotated genomes first. 404 if the taxid is unknown.
+         */
+        get: operations["taxon_annotations_taxon__taxid__annotations_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/taxon/{taxid}/assemblies": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Taxon Assemblies
+         * @description Genome assemblies anywhere under a taxon (the whole subtree), for the
+         *     drill-down list + the live assembly-quality stats (median genome size /
+         *     contig N50). One indexed `ltree` subtree join to the small `assembly` table,
+         *     paginated. 404 if the taxid is unknown; an empty subtree returns `[]`.
+         */
+        get: operations["taxon_assemblies_taxon__taxid__assemblies_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/taxon/{taxid}/children": {
         parameters: {
             query?: never;
@@ -237,6 +305,134 @@ export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
         /**
+         * AnnotationList
+         * @description Annotations under a taxon: live annotation-quality stats + a paginated list.
+         */
+        AnnotationList: {
+            /** Items */
+            items: components["schemas"]["AnnotationRecord"][];
+            /** Returned */
+            returned: number;
+            root: components["schemas"]["TaxonRef"];
+            /** Stats */
+            stats: components["schemas"]["QualityStatValue"][];
+            /** Total */
+            total: number;
+        };
+        /**
+         * AnnotationRecord
+         * @description One functional annotation (from the ``annotation`` table), for the
+         *     drill-down list — the Annotrieve-sourced BUSCO + gene metadata + GFF link.
+         */
+        AnnotationRecord: {
+            /** Annotation Id */
+            annotation_id: string;
+            /** Assembly Accession */
+            assembly_accession: string | null;
+            /** Busco Complete */
+            busco_complete: number | null;
+            /** Busco Duplicated */
+            busco_duplicated: number | null;
+            /** Busco Lineage */
+            busco_lineage: string | null;
+            /** Busco Single Copy */
+            busco_single_copy: number | null;
+            /** Gene Count */
+            gene_count: number | null;
+            /** Gff Url */
+            gff_url: string | null;
+            /** Organism */
+            organism: string;
+            /** Protein Coding Count */
+            protein_coding_count: number | null;
+            /** Provider */
+            provider: string | null;
+            /** Release Date */
+            release_date: string | null;
+            /** Source Database */
+            source_database: string | null;
+            /** Taxid */
+            taxid: number;
+        };
+        /**
+         * AnnotationSort
+         * @enum {string}
+         */
+        AnnotationSort: "busco_complete" | "protein_coding_count" | "release_date";
+        /**
+         * AssemblyComposition
+         * @description Additive assembly-composition counts for a clade (from ``clade_features``):
+         *     genome assemblies split by level, plus the reference/representative count.
+         *     Summed species-only up the lineage like the s_* totals.
+         */
+        AssemblyComposition: {
+            /** Chromosome */
+            chromosome: number;
+            /** Complete */
+            complete: number;
+            /** Contig */
+            contig: number;
+            /** Reference */
+            reference: number;
+            /** Scaffold */
+            scaffold: number;
+        };
+        /**
+         * AssemblyList
+         * @description Assemblies under a taxon: live assembly-quality stats + a paginated list.
+         */
+        AssemblyList: {
+            /** Items */
+            items: components["schemas"]["AssemblyRecord"][];
+            /** Returned */
+            returned: number;
+            root: components["schemas"]["TaxonRef"];
+            /** Stats */
+            stats: components["schemas"]["QualityStatValue"][];
+            /** Total */
+            total: number;
+        };
+        /**
+         * AssemblyRecord
+         * @description One genome assembly (from the ``assembly`` table), for the drill-down list.
+         *     Fields mirror the aliased SELECT so the endpoint builds it from a dict_row.
+         */
+        AssemblyRecord: {
+            /** Assembly Accession */
+            assembly_accession: string;
+            /** Assembly Level */
+            assembly_level: string | null;
+            /** Bioprojects */
+            bioprojects: string[];
+            /** Contig N50 */
+            contig_n50: number | null;
+            /** Download Url */
+            download_url: string | null;
+            /** Gc Percent */
+            gc_percent: number | null;
+            /** Organism */
+            organism: string;
+            /** Refseq Category */
+            refseq_category: string | null;
+            /** Release Date */
+            release_date: string | null;
+            /** Scaffold N50 */
+            scaffold_n50: number | null;
+            /** Source Database */
+            source_database: string | null;
+            /** Submitter */
+            submitter: string | null;
+            /** Taxid */
+            taxid: number;
+            /** Total Sequence Length */
+            total_sequence_length: number | null;
+        };
+        /**
+         * AssemblySort
+         * @enum {string}
+         */
+        AssemblySort: "release_date" | "contig_n50" | "total_sequence_length";
+        /**
          * Breakdown
          * @description The breakdown (Q2) payload: a root's descendants at a target rank.
          */
@@ -256,6 +452,7 @@ export interface components {
          * @description The Genomic Resource Summary (Q1) payload for one taxon.
          */
         CladeSummary: {
+            composition: components["schemas"]["AssemblyComposition"];
             /**
              * Is Infraspecific
              * @default false
@@ -332,6 +529,41 @@ export interface components {
          */
         MetricFilter: "ass" | "ann" | "rna" | "lng";
         /**
+         * QualityStatConfig
+         * @description Static chrome for one quality stat — served once by ``/quality-config``
+         *     and joined client-side to the per-taxon ``QualityStatValue`` by ``key``.
+         *     The analogue of ``MetricConfig`` for the annotation/assembly-quality
+         *     dimension (BUSCO %, gene count, genome size, N50).
+         */
+        QualityStatConfig: {
+            /** Card Title */
+            card_title: string;
+            /** Fmt */
+            fmt: string;
+            /** Headline */
+            headline: boolean;
+            /** Help */
+            help: string;
+            /** Key */
+            key: string;
+            /** Source */
+            source: string;
+            /** Unit */
+            unit: string | null;
+        };
+        /**
+         * QualityStatValue
+         * @description A quality stat computed live over a taxon's subtree records (median or
+         *     max per QUALITY_STATS). ``value`` is ``null`` when the subtree has no records
+         *     carrying that field.
+         */
+        QualityStatValue: {
+            /** Key */
+            key: string;
+            /** Value */
+            value: number | null;
+        };
+        /**
          * ResourceSummary
          * @description Per-resource rollup for one clade.
          */
@@ -347,7 +579,7 @@ export interface components {
          * SortColumn
          * @enum {string}
          */
-        SortColumn: "n_rows" | "c_ass" | "c_ann" | "c_rna" | "c_lng" | "s_ass" | "s_ann" | "s_rna" | "s_lng";
+        SortColumn: "n_rows" | "c_ass" | "c_ann" | "c_rna" | "c_lng" | "s_ass" | "s_ann" | "s_rna" | "s_lng" | "n_ass_complete" | "n_ass_chromosome" | "n_ass_scaffold" | "n_ass_contig" | "n_reference";
         /**
          * TargetRank
          * @enum {string}
@@ -407,6 +639,7 @@ export interface components {
          *     without a second round-trip to discover it's a leaf.
          */
         TaxonNode: {
+            composition: components["schemas"]["AssemblyComposition"];
             /** Has Children */
             has_children: boolean;
             /**
@@ -634,6 +867,26 @@ export interface operations {
             };
         };
     };
+    quality_config_quality_config_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QualityStatConfig"][];
+                };
+            };
+        };
+    };
     search_search_get: {
         parameters: {
             query: {
@@ -716,6 +969,76 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TaxonAbout"] | null;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    taxon_annotations_taxon__taxid__annotations_get: {
+        parameters: {
+            query?: {
+                sort?: components["schemas"]["AnnotationSort"];
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path: {
+                taxid: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnnotationList"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    taxon_assemblies_taxon__taxid__assemblies_get: {
+        parameters: {
+            query?: {
+                sort?: components["schemas"]["AssemblySort"];
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path: {
+                taxid: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssemblyList"];
                 };
             };
             /** @description Validation Error */
