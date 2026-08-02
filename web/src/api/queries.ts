@@ -8,6 +8,7 @@ import type {
   AssemblyList,
   AssemblySort,
   Breakdown,
+  BucketQuality,
   CladeSummary,
   FilterLogic,
   MetricConfig,
@@ -145,6 +146,18 @@ export const getBreakdown = async (
   unwrap(
     await api.GET("/clade/{taxid}/breakdown", {
       params: { path: { taxid }, query: params },
+    }),
+  );
+
+// Per-bucket quality stats (BUSCO / median genes / genome size / N50) for a rank
+// breakdown — the data map's quality lenses. Merged into the breakdown by taxid.
+export const getBreakdownQuality = async (
+  taxid: number,
+  rank: TargetRank,
+): Promise<BucketQuality[]> =>
+  unwrap(
+    await api.GET("/clade/{taxid}/breakdown/quality", {
+      params: { path: { taxid }, query: { rank } },
     }),
   );
 

@@ -20,6 +20,7 @@ export type AssemblyList = components["schemas"]["AssemblyList"];
 export type AnnotationList = components["schemas"]["AnnotationList"];
 export type AssemblyRecord = components["schemas"]["AssemblyRecord"];
 export type AnnotationRecord = components["schemas"]["AnnotationRecord"];
+export type BucketQuality = components["schemas"]["BucketQuality"];
 
 // Breakdown (Q2) query-param enums — the closed sets the API validates against.
 export type TargetRank = components["schemas"]["TargetRank"];

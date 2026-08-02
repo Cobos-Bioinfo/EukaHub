@@ -42,6 +42,7 @@ from eukahub_api.queries import (
     fetch_annotation_records,
     fetch_assembly_records,
     fetch_breakdown,
+    fetch_breakdown_quality,
     fetch_children,
     fetch_lineage,
     fetch_root,
@@ -55,6 +56,7 @@ from eukahub_api.schemas import (
     AssemblyList,
     AssemblyRecord,
     Breakdown,
+    BucketQuality,
     CladeSummary,
     MetricConfig,
     QualityStatConfig,
@@ -252,6 +254,28 @@ def clade_breakdown(
         returned=len(items),
         items=[CladeSummary.from_metadata(name, rk, meta) for name, rk, meta in items],
     )
+
+
+@app.get("/clade/{taxid}/breakdown/quality", response_model=list[BucketQuality])
+def clade_breakdown_quality(
+    taxid: int,
+    conn: Conn,
+    rank: Annotated[TargetRank, Query(description="Rank the root is broken down by.")],
+) -> list[BucketQuality]:
+    """Per-bucket distribution stats (BUSCO / median genes / genome size / N50)
+    for a rank breakdown — the quality lenses of the "data map". One grouped
+    `ltree` query per source table attributes every record under the root to its
+    rank-`rank` ancestor, then aggregates. Merge into `breakdown` by taxid."""
+    try:
+        buckets = fetch_breakdown_quality(conn, root_taxid=taxid, rank=rank.value)
+    except TaxonNotFound:
+        raise HTTPException(status_code=404, detail=f"taxon {taxid} not found")
+    return [
+        BucketQuality(
+            taxid=t, stats=[QualityStatValue(key=k, value=v) for k, v in stats.items()]
+        )
+        for t, stats in buckets.items()
+    ]
 
 
 @app.get("/taxon/{taxid}", response_model=TaxonLineage)

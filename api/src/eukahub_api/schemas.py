@@ -296,6 +296,17 @@ class AnnotationRecord(BaseModel):
     busco_lineage: str | None
 
 
+class BucketQuality(BaseModel):
+    """Per-bucket quality stats for a rank breakdown — one entry per breakdown
+    tile that carries records, keyed by its ``taxid``. Lets the "data map" colour
+    tiles by BUSCO / median genes / median genome size / N50 (the frontend merges
+    these into the breakdown by taxid). ``stats`` are keyed like ``QUALITY_STATS``;
+    a value is ``null`` when that bucket has no record carrying the field."""
+
+    taxid: int
+    stats: list[QualityStatValue]
+
+
 class AssemblyList(BaseModel):
     """Assemblies under a taxon: live assembly-quality stats + a paginated list."""
 

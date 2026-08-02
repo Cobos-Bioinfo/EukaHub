@@ -477,6 +477,28 @@
         "title": "Breakdown",
         "type": "object"
       },
+      "BucketQuality": {
+        "description": "Per-bucket quality stats for a rank breakdown \u2014 one entry per breakdown\ntile that carries records, keyed by its ``taxid``. Lets the \"data map\" colour\ntiles by BUSCO / median genes / median genome size / N50 (the frontend merges\nthese into the breakdown by taxid). ``stats`` are keyed like ``QUALITY_STATS``;\na value is ``null`` when that bucket has no record carrying the field.",
+        "properties": {
+          "stats": {
+            "items": {
+              "$ref": "#/components/schemas/QualityStatValue"
+            },
+            "title": "Stats",
+            "type": "array"
+          },
+          "taxid": {
+            "title": "Taxid",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "taxid",
+          "stats"
+        ],
+        "title": "BucketQuality",
+        "type": "object"
+      },
       "CladeSummary": {
         "description": "The Genomic Resource Summary (Q1) payload for one taxon.",
         "properties": {
@@ -1125,6 +1147,60 @@
           }
         },
         "summary": "Clade Breakdown"
+      }
+    },
+    "/clade/{taxid}/breakdown/quality": {
+      "get": {
+        "description": "Per-bucket distribution stats (BUSCO / median genes / genome size / N50)\nfor a rank breakdown \u2014 the quality lenses of the \"data map\". One grouped\n`ltree` query per source table attributes every record under the root to its\nrank-`rank` ancestor, then aggregates. Merge into `breakdown` by taxid.",
+        "operationId": "clade_breakdown_quality_clade__taxid__breakdown_quality_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "taxid",
+            "required": true,
+            "schema": {
+              "title": "Taxid",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Rank the root is broken down by.",
+            "in": "query",
+            "name": "rank",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/TargetRank",
+              "description": "Rank the root is broken down by."
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/BucketQuality"
+                  },
+                  "title": "Response Clade Breakdown Quality Clade  Taxid  Breakdown Quality Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Clade Breakdown Quality"
       }
     },
     "/clade/{taxid}/export.tsv": {
