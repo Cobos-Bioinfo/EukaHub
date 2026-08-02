@@ -3,11 +3,16 @@
 // on failure so the useAsync hook can surface it.
 import { api } from "./client";
 import type {
+  AnnotationList,
+  AnnotationSort,
+  AssemblyList,
+  AssemblySort,
   Breakdown,
   CladeSummary,
   FilterLogic,
   MetricConfig,
   MetricFilter,
+  QualityStatConfig,
   SortColumn,
   TargetRank,
   TaxonAbout,
@@ -78,6 +83,49 @@ export const getAbout = async (taxid: number): Promise<TaxonAbout | null> => {
 
 export const searchTaxa = async (q: string, limit = 10): Promise<TaxonRef[]> =>
   unwrap(await api.GET("/search", { params: { query: { q, limit } } }));
+
+// The annotation/assembly-quality stat chrome (BUSCO, genes, genome size, N50) —
+// the analogue of getMetricsConfig for the enrichment dimension, fetched once.
+export const getQualityConfig = async (): Promise<QualityStatConfig[]> =>
+  unwrap(await api.GET("/quality-config"));
+
+// Per-record drill-down: genome assemblies anywhere under a taxon, with live
+// distribution stats (median genome size / contig N50). Paginated via
+// limit/offset; sorted newest-first by default.
+export interface AssemblyParams {
+  sort?: AssemblySort;
+  limit?: number;
+  offset?: number;
+}
+
+export const getAssemblies = async (
+  taxid: number,
+  params: AssemblyParams = {},
+): Promise<AssemblyList> =>
+  unwrap(
+    await api.GET("/taxon/{taxid}/assemblies", {
+      params: { path: { taxid }, query: params },
+    }),
+  );
+
+// Functional annotations under a taxon, with live annotation-quality stats
+// (best BUSCO, median protein-coding gene count). Default sort surfaces the
+// best-annotated genomes first.
+export interface AnnotationParams {
+  sort?: AnnotationSort;
+  limit?: number;
+  offset?: number;
+}
+
+export const getAnnotations = async (
+  taxid: number,
+  params: AnnotationParams = {},
+): Promise<AnnotationList> =>
+  unwrap(
+    await api.GET("/taxon/{taxid}/annotations", {
+      params: { path: { taxid }, query: params },
+    }),
+  );
 
 // The breakdown (Q2) controls, matching the API's query params. `rank` is
 // required; the rest carry the API's own defaults when omitted.
