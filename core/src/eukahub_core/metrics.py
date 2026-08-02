@@ -186,8 +186,101 @@ def clade_feature_columns() -> tuple[str, ...]:
 
     Single source that the schema (``infra/postgres/init/001_schema.sql``)
     mirrors and that the pipeline INSERT/COPY targets.
+
+    Stage B of the data-model enrichment (docs/data-model.md) appends the
+    additive quality columns here (``n_ass_complete`` etc., ``s_bases``)
+    *together with* the rollup that fills them, so this stays the one place the
+    schema and pipeline agree on.
     """
     return COVERAGE_KEYS + TOTAL_KEYS
+
+
+# --------------------------------------------------------------------------- #
+# Quality stats — the enrichment dimension (docs/data-model.md, 2026-08-02).
+#
+# Unlike METRICS (count-based: coverage / total / percent, which roll up by
+# summation), these are *distribution* stats over the per-record ``assembly`` /
+# ``annotation`` tables. A subtree median is not the sum of child medians, so
+# they are NOT precomputed into ``clade_features``; the API aggregates them live
+# from the small per-record tables (Stage C). This tuple is the single source of
+# truth the API responses + generated TS types follow — the same no-drift role
+# METRICS plays for the count columns.
+# --------------------------------------------------------------------------- #
+
+QualitySource = Literal["assembly", "annotation"]
+QualityAgg = Literal["median", "max"]
+QualityFmt = Literal["percent", "integer", "basepairs"]
+
+
+@dataclass(frozen=True, slots=True)
+class QualityStat:
+    """A per-record distribution stat surfaced on the dashboard / breakdown.
+
+    - ``source`` + ``column`` locate the value in a per-record table.
+    - ``agg`` is how it is summarized across a clade's subtree records.
+    - ``fmt`` tells the frontend how to render the number.
+    - ``headline`` marks the surfaced *annotation-quality* figures (BUSCO, gene
+      count) versus secondary assembly-quality figures (genome size, N50).
+    """
+
+    key: str
+    source: QualitySource
+    column: str
+    agg: QualityAgg
+    unit: str | None            # '%', 'bp', 'genes', ...
+    fmt: QualityFmt
+    card_title: str
+    help: str
+    headline: bool = False
+
+
+QUALITY_STATS: tuple[QualityStat, ...] = (
+    QualityStat(
+        key="busco",
+        source="annotation",
+        column="busco_complete",
+        agg="max",  # the clade's best-annotated genome
+        unit="%",
+        fmt="percent",
+        card_title="BUSCO completeness",
+        help="Best BUSCO complete % among this clade's functional annotations",
+        headline=True,
+    ),
+    QualityStat(
+        key="genes",
+        source="annotation",
+        column="protein_coding_count",
+        agg="median",
+        unit="genes",
+        fmt="integer",
+        card_title="Protein-coding genes",
+        help="Median protein-coding gene count across this clade's annotations",
+        headline=True,
+    ),
+    QualityStat(
+        key="genome_size",
+        source="assembly",
+        column="total_sequence_length",
+        agg="median",
+        unit="bp",
+        fmt="basepairs",
+        card_title="Genome size",
+        help="Median assembly length across this clade's genome assemblies",
+    ),
+    QualityStat(
+        key="contig_n50",
+        source="assembly",
+        column="contig_n50",
+        agg="median",
+        unit="bp",
+        fmt="basepairs",
+        card_title="Contig N50",
+        help="Median contig N50 across this clade's genome assemblies",
+    ),
+)
+
+
+QUALITY_KEYS: tuple[str, ...] = tuple(q.key for q in QUALITY_STATS)
 
 
 @dataclass(frozen=True, slots=True)

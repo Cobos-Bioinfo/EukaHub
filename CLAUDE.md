@@ -234,6 +234,27 @@ dash was fixed. Repo also gained structured **issue forms** (`.github/ISSUE_TEMP
 routing account-less users to the Form — the applicable analog of a PR-template's
 guided rules. Web build + typecheck clean.
 
+**Data-model enrichment + refresh pipeline — planned & in progress** (2026-08-02,
+on `dev`). Picked over the standalone breakdown redesign (which is now sequenced
+*after* it — redesigning 4 sparse count-bars just rearranges thin material). The
+pipeline moves off the Phase-1 SQLite bridge to fresh sources, and the data model
+grows **counts-only → hybrid**: per-record `assembly` + `annotation` tables +
+additive `clade_features` extensions; reads stay aggregated (ENA ~8.2M runs).
+**Key finding:** Annotrieve (`api/v0`) already holds the assembly *and* rich
+annotation metadata we'd otherwise compute — it exposes `/assemblies`,
+`/annotations` (with **BUSCO**, gene/transcript counts, source-DB, direct GFF
+links), taxonomy, organisms, bioprojects. **Source split:** `datasets` → all
+~68k assemblies + quality fields (level/N50/genome-size/GC — 100% coverage);
+**Annotrieve → annotation richness** on the annotated subset (~17k assemblies /
+~8.5k taxa ≈ 25% — the reference-quality core); ENA → reads. **New
+annotation-quality dimension** (BUSCO %, gene count) surfaced as headline stats +
+sortable breakdown columns. Distribution stats (medians, BUSCO) are computed **on
+demand** from the small per-record tables (medians aren't additive); only counts
+join the rollup. Coverage check **done** (67,659 assemblies / 15,810 annotations /
+8.24M runs). Design written to `DECISIONS.md` (2026-08-02), `docs/data-model.md`
+(Enriched data model), `docs/roadmap.md` (Stages A–D). **Next: Stage A** — schema
++ `metrics.py` config.
+
 ## Read before doing anything
 
 - `docs/data-model.md` — **the core doc.** DB design + taxonomy-tree storage.
@@ -273,15 +294,18 @@ rebuild vs. the live DB, TLS, staging/prod DB, rate limiting).
 since: the **Wikipedia "About" card**, **Phase 6 — the radial Tree of Life**,
 **Phase 7 — the layout overhaul + Tier-1 UX batch**, **app-wide dark mode**, the
 **landing / hero page**, **subspecies / infraspecific taxa**, and **feedback via
-Google Form → GitHub issue** (see Status). The remaining user suggestions are
-logged in `docs/roadmap.md` **Backlog** — pick one next:
-- **breakdown redesign** (design-first — user dislikes the whole current view;
-  bring 2–3 directions first).
-- **data-refresh pipeline** (port NCBI/Annotrieve/ENA fetches; unblocks the
-  scheduled rebuild).
+Google Form → GitHub issue** (see Status).
 
-Ask the user which to take — or whether the app is now "functionally interesting"
-enough to open the CRG deployment conversation.
+**In flight: the data-model enrichment + refresh pipeline** (see the Status entry
+above and `docs/roadmap.md` "Data-model enrichment"). Chosen with the user
+2026-08-02; the **breakdown redesign folds into it as Stage D**. Plan locked in
+the docs; coverage check done. **Resume at Stage A** — new `assembly` /
+`annotation` tables + additive `clade_features` columns in
+`infra/postgres/init/001_schema.sql`, and the annotation-quality config in
+`core/src/eukahub_core/metrics.py` (a stat concept parallel to the count-based
+`METRICS`). Then Stage B (pipeline fetches: `datasets` full record + Annotrieve
+`/annotations`), Stage C (API drill-down endpoints), Stage D (dashboard cards +
+per-record deep-links + breakdown redesign).
 
 Tracked non-functional follow-ups (do when relevant): frontend deps on latest
 majors — **npm audit now shows 2 highs** (react-router runtime, low practical

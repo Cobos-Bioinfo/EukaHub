@@ -34,6 +34,46 @@ and run locally any time you want current data (e.g. before a demo). It also
 *unblocks* Phase 5's scheduled rebuild, which must fetch fresh data rather than
 read a frozen file. Keep the resumable-snapshot + atomic-swap discipline.
 
+### Data-model enrichment + refresh pipeline (2026-08-02) — the elaborated plan
+
+The above is now scoped concretely: the pipeline moves off the SQLite bridge to
+fresh sources **and** the data model grows from counts-only to a **hybrid** that
+captures per-record metadata (`assembly` + `annotation` tables), so the dashboard
++ breakdown have real substance. Full design in [`data-model.md`](data-model.md)
+(Enriched data model) and [`../DECISIONS.md`](../DECISIONS.md) (2026-08-02).
+
+**Coverage check [done 2026-08-02].** Sized how much of the tree lights up
+(June-2026 snapshot; fractions hold): **67,659 assemblies** across 27,705 taxa,
+**15,810 annotations** across 8,545 taxa, **8,238,507 RNA-Seq runs** across 37,211
+taxa. Annotrieve tracks **16,905** assemblies (the *annotated* subset) — so
+**assembly quality (level/N50/size/GC) covers 100%** of assemblies from the
+`datasets` call, while **annotation quality (BUSCO/genes) covers ~25%** of
+assemblies (~8.5k taxa: the reference-quality core, exactly our existing
+annotation footprint).
+
+**Source split:** `datasets` → all assemblies + quality fields; **Annotrieve
+`api/v0`** → annotation richness (BUSCO, gene/transcript counts, source-DB, GFF
+links); ENA → reads (aggregated, optionally + `base_count`).
+
+- **Stage A — schema + config.** New `assembly` / `annotation` tables + the
+  additive `clade_features` extension (`n_ass_*`, `n_reference`, `s_bases`) in
+  `infra/postgres/init`. Extend `core/metrics.py`: a config concept for the
+  **annotation-quality** stats (BUSCO %, gene count) *parallel* to the count-based
+  `METRICS` (they're distribution stats, no `c_/s_/p_` triple).
+- **Stage B — pipeline.** Enhance the `datasets` fetch to keep the full
+  per-assembly record → `assembly`; add a paginated Annotrieve `/annotations`
+  fetch (BUSCO + gene stats + GFF url) → `annotation`, replacing the thin
+  frequencies call; keep ENA (optionally add `base_count`). Extend `rollup.py` to
+  compute the new additive columns from the per-record tables (species-only).
+  Keep resumable-snapshot + atomic-swap; pin Annotrieve `api/v0`.
+- **Stage C — API.** Widen `summary` / `breakdown` with the new columns; add
+  per-record drill-down endpoints (`/taxon/{taxid}/assemblies`, `/annotations`)
+  returning real records + deep links + live distribution stats; regenerate
+  OpenAPI → TS types.
+- **Stage D — frontend.** Annotation-quality cards + genome-size/N50 on the
+  dashboard, per-record "Get the data" lists with real GCA/GFF links, **then** the
+  breakdown redesign (design-first, 2-3 directions) on the richer columns.
+
 ## Phase 2 — API
 - FastAPI endpoints: `summary`, `breakdown` (filter/sort/limit pushed down),
   `taxon`/lineage (breadcrumb), `export.tsv`, name search.
@@ -189,7 +229,10 @@ under Phase 7 above). Each major one wants a design/scope decision before coding
   variants plumbed through the API config) deferred as a separate scope.
 - **Breakdown redesign** (design-first) — the user dislikes the whole current
   breakdown (`BreakdownSection` + `DivergentBarChart`); bring 2–3 layout
-  directions before building.
+  directions before building. **Now sequenced after the data-model enrichment**
+  (2026-08-02): redesigning on top of 4 sparse count-bars just rearranges thin
+  material, so it becomes **Stage D** of that plan, built on the richer columns
+  (assembly quality tiers, genome size, gene counts, BUSCO).
 - **[done] Landing / hero page (2026-08-01)** — user calls it **"good enough for
   now"** (parked; revisit later). `/` now renders a `Landing` hero (chosen frame:
   **clean hero + discovery**) instead of redirecting to Eukaryota: the **"EukaHub"
