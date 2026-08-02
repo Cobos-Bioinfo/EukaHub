@@ -181,18 +181,38 @@ TOTAL_KEYS: tuple[str, ...] = tuple(m.total_key for m in METRICS)
 PERCENT_KEYS: tuple[str, ...] = tuple(m.percent_key for m in METRICS)
 
 
+# --------------------------------------------------------------------------- #
+# Additive assembly-composition columns (data-model enrichment, Stage B).
+#
+# Genome assemblies split by ``assembly_level``, plus a count of assemblies that
+# carry a ``refseq_category`` (NCBI reference / representative genomes). Like the
+# s_* totals these roll up by summation, so they extend clade_features and the
+# roll-up together. Distribution stats (median N50 / genome size, BUSCO) are NOT
+# here — they are non-additive and served live from the per-record tables.
+# --------------------------------------------------------------------------- #
+
+# NCBI ``assembly_level`` value -> the additive column it feeds.
+ASSEMBLY_LEVEL_TO_COLUMN: dict[str, str] = {
+    "Complete Genome": "n_ass_complete",
+    "Chromosome": "n_ass_chromosome",
+    "Scaffold": "n_ass_scaffold",
+    "Contig": "n_ass_contig",
+}
+ASSEMBLY_LEVEL_COLUMNS: tuple[str, ...] = tuple(ASSEMBLY_LEVEL_TO_COLUMN.values())
+COMPOSITION_COLUMNS: tuple[str, ...] = (*ASSEMBLY_LEVEL_COLUMNS, "n_reference")
+
+
 def clade_feature_columns() -> tuple[str, ...]:
     """The integer feature columns of ``clade_features`` in METRICS order.
 
     Single source that the schema (``infra/postgres/init/001_schema.sql``)
     mirrors and that the pipeline INSERT/COPY targets.
 
-    Stage B of the data-model enrichment (docs/data-model.md) appends the
-    additive quality columns here (``n_ass_complete`` etc., ``n_reference``)
-    *together with* the rollup that fills them, so this stays the one place the
-    schema and pipeline agree on.
+    Includes the additive assembly-composition columns (``n_ass_*``,
+    ``n_reference``) — the roll-up fills them alongside the c_*/s_* columns, so
+    this stays the one place the schema and pipeline agree on.
     """
-    return COVERAGE_KEYS + TOTAL_KEYS
+    return COVERAGE_KEYS + TOTAL_KEYS + COMPOSITION_COLUMNS
 
 
 # --------------------------------------------------------------------------- #

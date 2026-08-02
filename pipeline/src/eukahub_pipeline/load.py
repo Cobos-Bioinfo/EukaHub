@@ -13,6 +13,9 @@ from collections.abc import Iterable
 import polars as pl
 import psycopg
 
+from eukahub_pipeline.fetch_annotations import ANNOTATION_COLUMNS
+from eukahub_pipeline.fetch_assemblies import ASSEMBLY_COLUMNS
+
 log = logging.getLogger("eukahub.load")
 
 
@@ -44,3 +47,32 @@ def load_clade_features(conn: psycopg.Connection, clade: pl.DataFrame) -> int:
             cp.write_row(row)
     conn.commit()
     return clade.height
+
+
+def _copy_frame(
+    conn: psycopg.Connection, table: str, columns: tuple[str, ...], df: pl.DataFrame
+) -> int:
+    """TRUNCATE ``table`` and COPY ``df`` into it, selecting ``columns`` in order.
+
+    psycopg adapts each Python value during COPY — list columns (e.g. an
+    assembly's ``bioprojects``) become Postgres arrays and ``YYYY-MM-DD`` strings
+    become DATEs, matching the per-record schema.
+    """
+    frame = df.select(list(columns))
+    with conn.cursor() as cur:
+        cur.execute(f"TRUNCATE {table}")
+        with cur.copy(f"COPY {table} ({', '.join(columns)}) FROM STDIN") as cp:
+            for row in frame.iter_rows():
+                cp.write_row(row)
+    conn.commit()
+    return frame.height
+
+
+def load_assembly(conn: psycopg.Connection, df: pl.DataFrame) -> int:
+    """COPY per-assembly rows (``fetch_assemblies``) into ``assembly``."""
+    return _copy_frame(conn, "assembly", ASSEMBLY_COLUMNS, df)
+
+
+def load_annotation(conn: psycopg.Connection, df: pl.DataFrame) -> int:
+    """COPY per-annotation rows (``fetch_annotations``) into ``annotation``."""
+    return _copy_frame(conn, "annotation", ANNOTATION_COLUMNS, df)

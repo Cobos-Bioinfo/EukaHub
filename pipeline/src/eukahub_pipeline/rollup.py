@@ -17,9 +17,53 @@ import sqlite3
 from pathlib import Path
 
 import polars as pl
-from eukahub_core.metrics import COVERAGE_KEYS, METRIC_KEYS, TOTAL_KEYS
+from eukahub_core.metrics import (
+    ASSEMBLY_LEVEL_TO_COLUMN,
+    COMPOSITION_COLUMNS,
+    COVERAGE_KEYS,
+    METRIC_KEYS,
+    TOTAL_KEYS,
+)
 
 log = logging.getLogger("eukahub.rollup")
+
+# The per-taxid leaf inputs the fan-out consumes: raw read counts + assembly and
+# annotation totals + the additive assembly-composition columns.
+_LEAF_COUNT_COLUMNS: tuple[str, ...] = ("ass", "ann", "short", "long", *COMPOSITION_COLUMNS)
+
+
+def assemble_leaf_features(
+    assemblies: pl.DataFrame, annotations: pl.DataFrame, reads: pl.DataFrame
+) -> pl.DataFrame:
+    """Combine the three fetched sources into one per-taxid leaf-features frame.
+
+    Produces columns ``(taxid, short, long, ass, ann, *COMPOSITION_COLUMNS)`` —
+    the input the roll-up sums up every lineage. Assemblies contribute the total
+    count, the per-``assembly_level`` split, and the reference-genome count;
+    annotations contribute their count; reads their short/long run counts.
+    Sources are joined on ``taxid`` (a full outer join, missing counts -> 0), so
+    a taxon that appears in only one source still gets a complete row.
+    """
+    per_assembly = assemblies.group_by("taxid").agg(
+        pl.len().cast(pl.Int64).alias("ass"),
+        *[
+            (pl.col("assembly_level") == level).sum().cast(pl.Int64).alias(col)
+            for level, col in ASSEMBLY_LEVEL_TO_COLUMN.items()
+        ],
+        pl.col("refseq_category").is_not_null().sum().cast(pl.Int64).alias("n_reference"),
+    )
+    per_annotation = annotations.group_by("taxid").agg(pl.len().cast(pl.Int64).alias("ann"))
+    per_reads = reads.select(
+        "taxid", pl.col("short").cast(pl.Int64), pl.col("long").cast(pl.Int64)
+    )
+
+    leaf = (
+        per_assembly.join(per_annotation, on="taxid", how="full", coalesce=True)
+        .join(per_reads, on="taxid", how="full", coalesce=True)
+        .with_columns([pl.col(c).fill_null(0).cast(pl.Int64) for c in _LEAF_COUNT_COLUMNS])
+    )
+    log.info("Assembled leaf features for %d taxa", leaf.height)
+    return leaf
 
 
 def load_leaf_features(sqlite_path: str | Path) -> pl.DataFrame:
@@ -84,10 +128,15 @@ def _species_rollup(taxon: pl.DataFrame, features: pl.DataFrame) -> pl.DataFrame
         .with_columns(_own_feature_cols())
     )
 
-    carried = [f"has_{k}" for k in METRIC_KEYS] + [f"s_{k}" for k in METRIC_KEYS]
+    carried = (
+        [f"has_{k}" for k in METRIC_KEYS]
+        + [f"s_{k}" for k in METRIC_KEYS]
+        + list(COMPOSITION_COLUMNS)
+    )
     aggs = [pl.len().cast(pl.Int64).alias("n_rows")]
     aggs += [pl.col(f"has_{k}").sum().alias(f"c_{k}") for k in METRIC_KEYS]
     aggs += [pl.col(f"s_{k}").sum().alias(f"s_{k}") for k in METRIC_KEYS]
+    aggs += [pl.col(c).sum().alias(c) for c in COMPOSITION_COLUMNS]
 
     clade = (
         species.lazy()
@@ -96,7 +145,7 @@ def _species_rollup(taxon: pl.DataFrame, features: pl.DataFrame) -> pl.DataFrame
         .with_columns(pl.col("anc").cast(pl.Int64).alias("taxid"))
         .group_by("taxid")
         .agg(aggs)
-        .select("taxid", "n_rows", *COVERAGE_KEYS, *TOTAL_KEYS)
+        .select("taxid", "n_rows", *COVERAGE_KEYS, *TOTAL_KEYS, *COMPOSITION_COLUMNS)
     )
     return _collect(clade)
 
@@ -115,7 +164,10 @@ def _infraspecific_rows(taxon: pl.DataFrame, features: pl.DataFrame) -> pl.DataF
     of featured non-species taxa, so it is cheap.
     """
     empty = pl.DataFrame(
-        schema={c: pl.Int64 for c in ("taxid", "n_rows", *COVERAGE_KEYS, *TOTAL_KEYS)}
+        schema={
+            c: pl.Int64
+            for c in ("taxid", "n_rows", *COVERAGE_KEYS, *TOTAL_KEYS, *COMPOSITION_COLUMNS)
+        }
     )
     featured = (
         features.join(taxon.select("taxid", "rank", "path"), on="taxid", how="inner")
@@ -146,17 +198,31 @@ def _infraspecific_rows(taxon: pl.DataFrame, features: pl.DataFrame) -> pl.DataF
         .with_columns(_own_feature_cols())
         .with_columns(pl.lit(1, dtype=pl.Int64).alias("n_rows"))
         .rename({f"has_{k}": f"c_{k}" for k in METRIC_KEYS})
-        .select("taxid", "n_rows", *COVERAGE_KEYS, *TOTAL_KEYS)
+        .select("taxid", "n_rows", *COVERAGE_KEYS, *TOTAL_KEYS, *COMPOSITION_COLUMNS)
     )
     return rows
+
+
+def _with_composition_defaults(features: pl.DataFrame) -> pl.DataFrame:
+    """Ensure the additive composition columns exist (0 when a caller passes the
+    minimal ``{taxid, short, long, ass, ann}`` frame — the SQLite bridge / unit
+    tests). ``assemble_leaf_features`` already provides them."""
+    missing = [c for c in COMPOSITION_COLUMNS if c not in features.columns]
+    if missing:
+        features = features.with_columns(
+            [pl.lit(0, dtype=pl.Int64).alias(c) for c in missing]
+        )
+    return features
 
 
 def rollup_from_frames(taxon: pl.DataFrame, features: pl.DataFrame) -> pl.DataFrame:
     """Roll leaf features into per-clade rollups.
 
     ``taxon`` needs columns (taxid, rank, path); ``features`` needs
-    (taxid, short, long, ass, ann). Returns one row per taxon with columns
-    (taxid, n_rows, c_*, s_*) in METRICS order, combining:
+    (taxid, short, long, ass, ann) and optionally the additive composition
+    columns (``n_ass_*``, ``n_reference``). Returns one row per taxon with
+    columns (taxid, n_rows, c_*, s_*, *COMPOSITION_COLUMNS) in METRICS order,
+    combining:
 
     - the **species rollup** — one row per ancestor clade, features summed up
       every species' lineage (``n_rows`` = species in the subtree); and
@@ -167,6 +233,7 @@ def rollup_from_frames(taxon: pl.DataFrame, features: pl.DataFrame) -> pl.DataFr
     The two row-sets have disjoint taxids (an infraspecific taxon is never an
     ancestor of a species), so a plain vertical concat is exact.
     """
+    features = _with_composition_defaults(features)
     clade = _species_rollup(taxon, features)
     infra = _infraspecific_rows(taxon, features)
     if infra.height == 0:
