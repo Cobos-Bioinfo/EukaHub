@@ -161,6 +161,44 @@ everything the fetches returned; the redesign stops discarding it.
   keeps the resumable-snapshot + atomic-swap discipline and pins `api/v0`, so a
   transient Annotrieve outage never corrupts a served dataset.
 
+## Settled (2026-08-02) — breakdown redesign (the "data map")
+
+- **The rank breakdown is reimagined as a click-to-drill treemap ("data map"),
+  not a table/chart** (user, 2026-08-02). Design-first: three directions were
+  prototyped/offered — a **ranked leaderboard**, a **heatmap matrix**, and this
+  **proportional treemap** (plus a mentioned scatter "opportunity map"). The user
+  rejected the first ASCII round ("felt secondary… cumbersome… all those
+  dropdowns"), asked for something *central, clear, fun, and genuinely novel that
+  doesn't just re-list Annotrieve*, and after seeing a live prototype picked the
+  **treemap** ("fun, interactive, truly a dashboard"). Rationale: it's the app's
+  signature question ("where is genomic data across the tree, and where are the
+  gaps?"), and a proportional map answers it at a glance — **big + pale = a large
+  clade nobody has sequenced**.
+- **Drill by clicking to the next *meaningful* rank — no rank dropdown.** Immediate
+  adjacency children fail on taxonomy (Mammalia → Theria holds ~all species), so
+  the map jumps to the next canonical rank below the focus (class → orders →
+  families → genera); rank is implicit in drill depth. This kills the old five
+  dropdowns (rank/sort/filter/logic/limit) — the only controls are two segmented
+  toggles (Colour-by lens, Size-by). Distinct from the Tree of Life (topology /
+  adjacency); the map is quantitative data-distribution at ranks.
+- **Colour = one theme-aware sequential ramp; lenses swap the *measure*, not the
+  hue** (dataviz skill). Percentage lenses fill 0–100; magnitude lenses (median
+  genes / genome size) normalise to the largest tile in view and show that max in
+  the legend. Null = grey (the gap). Ordinal ramp `lib/ramp.ts` shared with the
+  radial tree.
+- **Per-tile quality via a new endpoint, not the additive rollup.** `GET
+  /clade/{taxid}/breakdown/quality?rank=R` computes per-bucket distribution stats
+  (best BUSCO, median genes/genome-size/N50) in **one grouped `ltree` query per
+  source** (each record attributed to its rank-R ancestor). A subtree median isn't
+  additive, so it can't ride `clade_features` — consistent with the Stage-C live
+  stats. Fetched async so the map paints instantly. Worst case ~1 s
+  (Eukaryota→phylum); acceptable async + cached, optimisation candidate later.
+- **The old breakdown stays until the map replaces it.** The map ships on a beta
+  route (`/lab/breakdown/:taxid`); `BreakdownSection`/`DivergentBarChart` are
+  untouched on the dashboard. Promoting the map (and dropping the old one) is
+  deferred to a polish pass (user: "when we have something more polished we may
+  discuss finer details").
+
 ## Open — still to decide
 
 - None — the two data-model forks are resolved: **no `base_count`** (settled

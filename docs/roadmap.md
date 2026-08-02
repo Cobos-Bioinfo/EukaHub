@@ -80,9 +80,21 @@ links); ENA → reads (aggregated, run counts only — no `base_count`).
   `composition` (`CladeMetadata` extended; `SortColumn` picks it up). OpenAPI → TS
   regenerated; 79 tests pass (data-dependent ones relaxed to rebuild-safe
   invariants).
-- **Stage D — frontend.** Annotation-quality cards + genome-size/N50 on the
-  dashboard, per-record "Get the data" lists with real GCA/GFF links, **then** the
-  breakdown redesign (design-first, 2-3 directions) on the richer columns.
+- **Stage D [done 2026-08-02].** The enrichment reaches the UI.
+  - **Dashboard:** `QualitySection` (live BUSCO / genes / genome-size / N50 stat
+    tiles + an ordinal-blue assembly-contiguity bar) and `RecordBrowser` (tabbed
+    Assemblies/Annotations drill-down with real NCBI/GFF deep links, sortable,
+    load-more) on every dashboard.
+  - **Breakdown redesign — the click-to-drill "data map"** (`/lab/breakdown/:taxid`,
+    beta nav link). A proportional treemap (`d3-hierarchy`): area = species or
+    assemblies, colour = a lens (3 coverage + 4 quality) on one theme-aware ramp.
+    Big + pale = a big clade with little data (the gap). Clicking a tile drills to
+    the next meaningful rank (auto-jumps past rankless clades → no rank dropdown);
+    breadcrumb climbs back. New `GET /clade/{taxid}/breakdown/quality?rank=R`
+    (per-bucket BUSCO/genes/genome-size/N50) powers the quality lenses. **The user
+    picked the treemap over a heatmap + a scatter** and confirmed the direction;
+    it's still *beta* — polish + replacing the old `BreakdownSection` come next.
+    The old breakdown is untouched meanwhile.
 
 ## Phase 2 — API
 - FastAPI endpoints: `summary`, `breakdown` (filter/sort/limit pushed down),

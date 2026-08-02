@@ -289,6 +289,36 @@ deep-link lists (from the two new endpoints), then the **breakdown redesign**
 (design-first, 2-3 directions). The web app still renders the old 4-metric shape
 until Stage D lands.
 
+**Stage D DONE — dashboard enrichment + the breakdown redesign ("data map")**
+(2026-08-02, on `dev`, commits `31033fa` `467ac8f` `b1f9d8c`). The enrichment
+reaches the UI. **Dashboard:** `QualitySection` (live BUSCO / protein-coding
+genes / genome size / contig N50 stat tiles from the Stage-C `/assemblies` +
+`/annotations` stats, plus an ordinal-blue assembly-contiguity bar with legend +
+reference count) and `RecordBrowser` (tabbed Assemblies/Annotations drill-down,
+real NCBI/GFF deep links, sortable, load-more paging) render on every dashboard;
+`fmtBp`/`fmtQuality` helpers. One bug fixed: the record browser now clears rows
+synchronously on tab/sort change so a stale assembly row never reaches the
+annotation table. **Breakdown redesign — the click-to-drill "data map"** at
+`/lab/breakdown/:taxid` (nav "Data map (beta)"): a proportional treemap
+(`d3-hierarchy`) of a clade's subgroups — **area** = species or assemblies,
+**colour** = a lens on one theme-aware sequential ramp (`lib/ramp.ts`, dataviz).
+Big + pale = a big clade with little data (the gap). **Click a tile to drill to
+the next meaningful rank** (auto-jumps past intermediate rankless clades — no
+rank dropdown; the old five dropdowns are gone); breadcrumb climbs back. Seven
+lenses: 3 coverage (assembly/annotation/RNA-Seq %) + 4 quality (contiguity %,
+BUSCO, median genes, median genome size); the two magnitude lenses normalise to
+the largest tile in view. Rich hover card (full coverage + quality + reference
+count). **New API:** `GET /clade/{taxid}/breakdown/quality?rank=R` — per-bucket
+distribution stats via one grouped `ltree` query per source (each record
+attributed to its rank-R ancestor), config-driven from `QUALITY_STATS`,
+`BucketQuality` schema; the map fetches it async so tiles paint instantly. **The
+user chose the treemap** over a heatmap + a scatter (design-first; DECISIONS
+2026-08-02) and called it "fun, interactive, truly a dashboard" — direction
+locked, finer polish + replacing the old breakdown still to come. The old
+`BreakdownSection`/`DivergentBarChart` are **untouched** (still on the dashboard);
+the data map lives on its own beta route until it replaces them. 85 tests pass
+(+6 breakdown-quality); web build+typecheck clean; light+dark screenshotted.
+
 ## Read before doing anything
 
 - `docs/data-model.md` — **the core doc.** DB design + taxonomy-tree storage.
@@ -330,18 +360,23 @@ since: the **Wikipedia "About" card**, **Phase 6 — the radial Tree of Life**,
 **landing / hero page**, **subspecies / infraspecific taxa**, and **feedback via
 Google Form → GitHub issue** (see Status).
 
-**In flight: the data-model enrichment + refresh pipeline** (see the Status entry
-above and `docs/roadmap.md` "Data-model enrichment"). Chosen with the user
-2026-08-02; the **breakdown redesign folds into it as Stage D**. **Stages A + B
-are done and the DB is rebuilt + verified** (see the Status entry). **Resume at
-Stage C** — the API: add per-record drill-down endpoints
-(`/taxon/{taxid}/assemblies`, `/annotations`) returning real records + deep links
-+ live distribution stats (median N50 / genome size / gene count, best BUSCO)
-computed from the per-record tables; widen `summary`/`breakdown` with the
-composition columns + the `QUALITY_STATS` dimension; regenerate the OpenAPI → TS
-types. Then Stage D (dashboard quality cards + per-record deep-link lists +
-breakdown redesign). The API + web code is untouched so far, so the live app
-still renders the old 4-metric shape until Stage C/D land.
+**The data-model enrichment + refresh pipeline is DONE through Stage D** (Stages
+A–D; see the Status entries and `docs/roadmap.md` "Data-model enrichment"). The
+pipeline reads fresh sources (no SQLite bridge), the API serves the per-record
+drill-down + quality dimension, and the UI surfaces both: dashboard quality cards
++ record browser, and the **click-to-drill "data map"** breakdown redesign (the
+user's chosen direction, live on `/lab/breakdown/:taxid` behind a beta nav link).
+
+**Resume here — polish + promote the data map.** It is direction-locked but still
+labelled *prototype/beta*: (1) **replace the old breakdown** — once polished, swap
+`BreakdownSection`/`DivergentBarChart` on the dashboard for the map (or link to
+it) and drop the beta label; (2) finer UX the user flagged for "when it's more
+polished" (tile labels/legibility on small tiles, copy, maybe a keyboard/SR
+outline fallback like `TreeOutline`, URL-syncing the drill path, "load more"
+past the 250-tile cap); (3) worst-case `breakdown/quality` latency is ~1 s on
+Eukaryota→phylum (two grouped subtree aggregations) — fine async + cached, but a
+candidate to optimize. Then the remaining **non-Stage-D** enrichment tail (below)
+and Phase-5 deploy items (still gated on CRG).
 
 Tracked non-functional follow-ups (do when relevant): frontend deps on latest
 majors — **npm audit now shows 2 highs** (react-router runtime, low practical
