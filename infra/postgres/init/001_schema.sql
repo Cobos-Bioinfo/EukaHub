@@ -39,13 +39,16 @@ CREATE TABLE IF NOT EXISTS clade_features (
     s_ass   INTEGER NOT NULL DEFAULT 0,
     s_ann   INTEGER NOT NULL DEFAULT 0,
     s_rna   INTEGER NOT NULL DEFAULT 0,
-    s_lng   INTEGER NOT NULL DEFAULT 0
+    s_lng   INTEGER NOT NULL DEFAULT 0,
+    -- Additive assembly-composition (data-model enrichment): genome assemblies
+    -- by level + reference-genome count. Filled by the same explode->sum rollup;
+    -- mirrors eukahub_core.metrics.COMPOSITION_COLUMNS.
+    n_ass_complete   INTEGER NOT NULL DEFAULT 0,
+    n_ass_chromosome INTEGER NOT NULL DEFAULT 0,
+    n_ass_scaffold   INTEGER NOT NULL DEFAULT 0,
+    n_ass_contig     INTEGER NOT NULL DEFAULT 0,
+    n_reference      INTEGER NOT NULL DEFAULT 0
 );
--- Stage B (data-model enrichment, docs/data-model.md) extends clade_features
--- with additive quality columns (n_ass_complete/_chromosome/_scaffold/_contig,
--- n_reference) *together with* the rollup that fills them and
--- eukahub_core.metrics.clade_feature_columns(), so the single-source invariant
--- (this table mirrors that function) stays intact.
 
 -- Per-record tables (data-model.md: Enriched data model). Small, read-only, and
 -- independently sourced, so drill-down lists + on-demand distribution stats
