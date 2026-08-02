@@ -313,11 +313,22 @@ distribution stats via one grouped `ltree` query per source (each record
 attributed to its rank-R ancestor), config-driven from `QUALITY_STATS`,
 `BucketQuality` schema; the map fetches it async so tiles paint instantly. **The
 user chose the treemap** over a heatmap + a scatter (design-first; DECISIONS
-2026-08-02) and called it "fun, interactive, truly a dashboard" — direction
-locked, finer polish + replacing the old breakdown still to come. The old
-`BreakdownSection`/`DivergentBarChart` are **untouched** (still on the dashboard);
-the data map lives on its own beta route until it replaces them. 85 tests pass
+2026-08-02) and called it "fun, interactive, truly a dashboard". 85 tests pass
 (+6 breakdown-quality); web build+typecheck clean; light+dark screenshotted.
+
+**Data map promoted + polished** (2026-08-02, on `dev`, commit `8ffb026`). The
+map is now the **default breakdown**, not a beta side-route. Extracted into a
+reusable `BreakdownMap` (seeded from a root ref, no lineage fetch): the dashboard
+embeds it as the **Breakdown** section (`variant="embed"`, ~460–520px, with a
+"Full screen" link), and the standalone page moved to **`/map/:taxid`** (nav "Data
+map", **beta label dropped**, `variant="page"`, tall). The old
+`BreakdownSection`/`DivergentBarChart`/`lib/breakdown` are **deleted** (JS bundle
+−8 kB). Polish: a keyboard/SR **"View as a list"** fallback (every subgroup with
+its numbers + drill/open links), per-clade **Open <clade> / Full screen / Download
+TSV** actions, small-tile **title tooltips**, a capped-count note past the
+250-tile limit, and **copy cleaned of em dashes** (house style; the user asked to
+avoid AI-writing tells). Verified: build clean, light+dark + list-view
+screenshotted.
 
 ## Read before doing anything
 
@@ -367,16 +378,14 @@ drill-down + quality dimension, and the UI surfaces both: dashboard quality card
 + record browser, and the **click-to-drill "data map"** breakdown redesign (the
 user's chosen direction, live on `/lab/breakdown/:taxid` behind a beta nav link).
 
-**Resume here — polish + promote the data map.** It is direction-locked but still
-labelled *prototype/beta*: (1) **replace the old breakdown** — once polished, swap
-`BreakdownSection`/`DivergentBarChart` on the dashboard for the map (or link to
-it) and drop the beta label; (2) finer UX the user flagged for "when it's more
-polished" (tile labels/legibility on small tiles, copy, maybe a keyboard/SR
-outline fallback like `TreeOutline`, URL-syncing the drill path, "load more"
-past the 250-tile cap); (3) worst-case `breakdown/quality` latency is ~1 s on
-Eukaryota→phylum (two grouped subtree aggregations) — fine async + cached, but a
-candidate to optimize. Then the remaining **non-Stage-D** enrichment tail (below)
-and Phase-5 deploy items (still gated on CRG).
+**Resume here.** Stage D is done and the data map is promoted + polished (see the
+two Status entries above). Remaining data-map niceties, none blocking: **URL-sync
+the drill path** (back-button + shareable deep links; deliberately skipped so far
+because the internal trail gives a cleaner breadcrumb than re-rooting the route);
+a true **"load more" past the 250-tile cap** (today it shows the largest 250 with
+a note); and the ~1 s worst-case `breakdown/quality` latency on Eukaryota→phylum
+(two grouped subtree aggregations, fine async + cached, optimisable). Then the
+remaining enrichment tail (below) and Phase-5 deploy items (still gated on CRG).
 
 Tracked non-functional follow-ups (do when relevant): frontend deps on latest
 majors — **npm audit now shows 2 highs** (react-router runtime, low practical
