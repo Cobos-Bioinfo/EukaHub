@@ -443,6 +443,33 @@ token-driven, so dark mode is automatic; **light + dark screenshotted** via
 headless Chrome. 4 slice-safe API tests (totals cross-checked against
 `/clade/2759/summary`; Mammalia the stable featured anchor); full suite **89
 passed**; web typecheck+build clean; house style kept (no em dashes / emojis).
+A follow-up `refine(web)` pass then dropped the "Try:" chips, made all three hero
+CTAs filled distinct-hue buttons (Explore blue / Tree green / Surprise violet, all
+white-text contrast-checked), and added the annotation-coverage meter to each
+featured card.
+
+**Compare groups view — done** (2026-08-03, on `dev`). The user's chosen next
+feature (design-first: they picked the **hybrid chart + table** over bars-only /
+table-only / side-by-side cards). New cacheable `GET /compare?taxids=a,b,c` (2-6
+groups; unknown taxids dropped, deduped, capped): each group's species count +
+per-resource coverage + live quality stats (BUSCO / genes / genome size / N50),
+reusing `fetch_summary` + `_fetch_quality_stats` per taxid. `Compare`/`CompareGroup`
+schemas; OpenAPI→TS regenerated; `getCompare()` bridge; `RootPicker` generalized
+with an optional `onPick` callback (default still navigates). Frontend
+`ComparePage` at **`/compare`** (nav link added): a **grouped horizontal bar
+chart** of coverage % (grouped by resource, one colour per group) built in
+HTML/CSS on a shared auto-scaled % axis with gridlines + value-at-tip labels, plus
+a **sortable numbers table** (species, the 4 coverage %s, BUSCO/genes/genome/N50).
+Groups live in the **URL** (`?taxids=`), so a comparison is shareable/bookmarkable;
+colour-follows-entity (a stable slot map, so removing a group never repaints the
+survivors); chips with remove, an empty-state with one-click presets. **dataviz
+skill followed**: the 6-slot categorical group palette is the skill's validated
+default, re-validated against the app's own card surfaces (light: PASS with the
+documented 3-slot contrast WARN, covered by the table + bar labels per the relief
+rule; dark: PASS all). 6 slice-safe API tests (cross-checked vs `/summary`; unknown
+drop; dedupe/cap; 422s); full suite **95 passed**; web typecheck+build clean; light
++ dark + empty-state screenshotted. **Next: #3 in-tree search highlight on the
+radial Tree of Life** (reuses this multi-taxon picker groundwork).
 
 ## Read before doing anything
 
@@ -510,12 +537,14 @@ status entry above). The ~42 DB-backed API tests now run in CI against a
 (`test_summary.py:34` → adaptive species-count invariant). Verified green on the
 slice **and** prod.
 
-**NEXT candidates.** With the CI-test-DB follow-up and the landing "at a glance"
-strip + featured groups (Direction B) both shipped, the remaining threads are:
-(a) more functional features toward the deploy gate (e.g. landing viewport
-centring; deeper featured-group storytelling; other UX polish); (b) the remaining
-enrichment tail; (c) Phase-5 deploy items (still gated on CRG); (d) the smaller
-non-functional follow-ups below.
+**NEXT: #3 in-tree search highlight** (planned, not started) — on the radial Tree
+of Life, let the user search a taxon and highlight/pan to it. Reuses the
+multi-taxon picker groundwork from the Compare view (`RootPicker`'s `onPick`).
+Then: (a) more functional polish toward the deploy gate (landing viewport centring;
+deeper featured-group storytelling); (b) the remaining enrichment tail; (c) Phase-5
+deploy items (still gated on CRG); (d) the smaller non-functional follow-ups below.
+Also a tiny CI-hygiene item: bump `actions/checkout@v4` + `gitleaks-action@v2` off
+deprecated Node 20.
 
 Tracked non-functional follow-ups (do when relevant): frontend deps on latest
 majors — **npm audit now shows 2 highs** (react-router runtime, low practical

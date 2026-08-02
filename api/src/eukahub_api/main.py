@@ -3,6 +3,7 @@
 Phase 2 read endpoints:
 
 - ``GET /overview``                    — landing-page totals + featured groups.
+- ``GET /compare``                     — several groups lined up side by side.
 - ``GET /clade/{taxid}/summary``       — the Genomic Resource Summary (Q1).
 - ``GET /clade/{taxid}/breakdown``     — descendants at a target rank (Q2).
 - ``GET /clade/{taxid}/export.tsv``    — the full breakdown as a TSV download.
@@ -45,6 +46,7 @@ from eukahub_api.queries import (
     fetch_breakdown,
     fetch_breakdown_quality,
     fetch_children,
+    fetch_compare,
     fetch_lineage,
     fetch_overview,
     fetch_root,
@@ -60,6 +62,8 @@ from eukahub_api.schemas import (
     Breakdown,
     BucketQuality,
     CladeSummary,
+    Compare,
+    CompareGroup,
     FeaturedClade,
     MetricConfig,
     Overview,
@@ -100,6 +104,10 @@ _CACHE_MAX_AGE = int(os.environ.get("CACHE_MAX_AGE", "3600"))
 # point so the docs at `/api/docs` reference `/api/openapi.json` correctly.
 # Override with API_ROOT_PATH="" to serve the docs when hitting uvicorn directly.
 _ROOT_PATH = os.environ.get("API_ROOT_PATH", "/api")
+
+# Upper bound on groups in a single /compare request — the chart + table stay
+# legible up to a handful, and it bounds the per-request query fan-out.
+_COMPARE_MAX_GROUPS = 6
 
 
 def cors_allow_origins() -> list[str]:
@@ -232,6 +240,45 @@ def overview(conn: Conn) -> Overview:
             for taxid, name, n_rows, s_ass, c_ass, c_ann in featured
         ],
     )
+
+
+@app.get("/compare", response_model=Compare)
+def compare(
+    conn: Conn,
+    taxids: Annotated[
+        str, Query(description="Comma-separated taxids to compare (2-6, e.g. 40674,8782).")
+    ],
+) -> Compare:
+    """Line several groups up side by side: each group's species count,
+    per-resource coverage, and live quality stats (BUSCO / genes / genome size /
+    N50) in one cacheable request. Unknown taxids are dropped; at most
+    ``_COMPARE_MAX_GROUPS`` are honoured."""
+    ids: list[int] = []
+    for part in taxids.split(","):
+        part = part.strip()
+        if part.isdigit() and (v := int(part)) not in ids:
+            ids.append(v)
+    if not ids:
+        raise HTTPException(status_code=422, detail="no valid taxids to compare")
+    ids = ids[:_COMPARE_MAX_GROUPS]
+
+    groups = []
+    for taxid, name, rank, meta, quality in fetch_compare(conn, ids):
+        summary = CladeSummary.from_metadata(name, rank, meta)
+        groups.append(
+            CompareGroup(
+                taxid=taxid,
+                name=name,
+                rank=rank,
+                n_rows=meta.n_rows,
+                resources=summary.resources,
+                quality=[
+                    QualityStatValue(key=q.key, value=quality.get(q.key))
+                    for q in QUALITY_STATS
+                ],
+            )
+        )
+    return Compare(groups=groups)
 
 
 @app.get("/clade/{taxid}/summary", response_model=CladeSummary)

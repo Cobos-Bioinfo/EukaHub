@@ -96,6 +96,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/compare": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Compare
+         * @description Line several groups up side by side: each group's species count,
+         *     per-resource coverage, and live quality stats (BUSCO / genes / genome size /
+         *     N50) in one cacheable request. Unknown taxids are dropped; at most
+         *     ``_COMPARE_MAX_GROUPS`` are honoured.
+         */
+        get: operations["compare_compare_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/health": {
         parameters: {
             query?: never;
@@ -531,6 +554,37 @@ export interface components {
             taxid: number;
         };
         /**
+         * Compare
+         * @description The compare payload: several groups' summaries lined up (served by
+         *     ``/compare``). Unknown taxids are dropped, so ``groups`` may be shorter than
+         *     the requested set.
+         */
+        Compare: {
+            /** Groups */
+            groups: components["schemas"]["CompareGroup"][];
+        };
+        /**
+         * CompareGroup
+         * @description One group in the compare view: its species count, per-resource coverage,
+         *     and live quality stats — enough to line several groups up side by side.
+         */
+        CompareGroup: {
+            /** N Rows */
+            n_rows: number;
+            /** Name */
+            name: string;
+            /** Quality */
+            quality: components["schemas"]["QualityStatValue"][];
+            /** Rank */
+            rank: string;
+            /** Resources */
+            resources: {
+                [key: string]: components["schemas"]["ResourceSummary"];
+            };
+            /** Taxid */
+            taxid: number;
+        };
+        /**
          * FeaturedClade
          * @description One featured group on the landing page: its species count and how much of
          *     it is assembled/annotated. The frontend supplies the friendly display label
@@ -932,6 +986,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CladeSummary"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    compare_compare_get: {
+        parameters: {
+            query: {
+                /** @description Comma-separated taxids to compare (2-6, e.g. 40674,8782). */
+                taxids: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Compare"];
                 };
             };
             /** @description Validation Error */

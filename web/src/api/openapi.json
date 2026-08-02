@@ -545,6 +545,68 @@
         "title": "CladeSummary",
         "type": "object"
       },
+      "Compare": {
+        "description": "The compare payload: several groups' summaries lined up (served by\n``/compare``). Unknown taxids are dropped, so ``groups`` may be shorter than\nthe requested set.",
+        "properties": {
+          "groups": {
+            "items": {
+              "$ref": "#/components/schemas/CompareGroup"
+            },
+            "title": "Groups",
+            "type": "array"
+          }
+        },
+        "required": [
+          "groups"
+        ],
+        "title": "Compare",
+        "type": "object"
+      },
+      "CompareGroup": {
+        "description": "One group in the compare view: its species count, per-resource coverage,\nand live quality stats \u2014 enough to line several groups up side by side.",
+        "properties": {
+          "n_rows": {
+            "title": "N Rows",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "quality": {
+            "items": {
+              "$ref": "#/components/schemas/QualityStatValue"
+            },
+            "title": "Quality",
+            "type": "array"
+          },
+          "rank": {
+            "title": "Rank",
+            "type": "string"
+          },
+          "resources": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/ResourceSummary"
+            },
+            "title": "Resources",
+            "type": "object"
+          },
+          "taxid": {
+            "title": "Taxid",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "taxid",
+          "name",
+          "rank",
+          "n_rows",
+          "resources",
+          "quality"
+        ],
+        "title": "CompareGroup",
+        "type": "object"
+      },
       "FeaturedClade": {
         "description": "One featured group on the landing page: its species count and how much of\nit is assembled/annotated. The frontend supplies the friendly display label\n(by taxid); ``name`` is the scientific name as a fallback.",
         "properties": {
@@ -1435,6 +1497,48 @@
           }
         },
         "summary": "Clade Summary"
+      }
+    },
+    "/compare": {
+      "get": {
+        "description": "Line several groups up side by side: each group's species count,\nper-resource coverage, and live quality stats (BUSCO / genes / genome size /\nN50) in one cacheable request. Unknown taxids are dropped; at most\n``_COMPARE_MAX_GROUPS`` are honoured.",
+        "operationId": "compare_compare_get",
+        "parameters": [
+          {
+            "description": "Comma-separated taxids to compare (2-6, e.g. 40674,8782).",
+            "in": "query",
+            "name": "taxids",
+            "required": true,
+            "schema": {
+              "description": "Comma-separated taxids to compare (2-6, e.g. 40674,8782).",
+              "title": "Taxids",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Compare"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Compare"
       }
     },
     "/health": {
