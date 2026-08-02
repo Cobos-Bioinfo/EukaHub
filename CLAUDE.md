@@ -537,9 +537,21 @@ status entry above). The ~42 DB-backed API tests now run in CI against a
 (`test_summary.py:34` → adaptive species-count invariant). Verified green on the
 slice **and** prod.
 
-**NEXT: #3 in-tree search highlight** (planned, not started) — on the radial Tree
-of Life, let the user search a taxon and highlight/pan to it. Reuses the
-multi-taxon picker groundwork from the Compare view (`RootPicker`'s `onPick`).
+**NEXT — two candidates the user raised (pick order next session):**
+- **Contextual cross-navigation (user-requested 2026-08-03).** The top nav
+  (Dashboard / Tree of Life / Data map / Compare) always targets the DEFAULT taxid
+  (Eukaryota 2759), so hopping between views loses the group you're on; the only
+  context-preserving hop today is the dashboard's "Explore this group in the Tree
+  of Life" link. The user wants that pattern generalised. Two complementary pieces:
+  (a) **context-aware top nav** — in `App.tsx`, derive the current taxid from a
+  `/clade|/map|/tree/:id` route and point those nav links at it (small, App.tsx
+  only); (b) **an in-page `ViewSwitcher`** on taxon-scoped pages — a segmented
+  "View {group} as: Dashboard · Data map · Tree of Life" carrying the taxid, active
+  view highlighted (Compare is multi-taxon, so a separate "Add to compare" entry).
+  Higher UX value + cheaper than #3; likely do this first.
+- **#3 in-tree search highlight** — on the radial Tree of Life, let the user search
+  a taxon and highlight/pan to it. Reuses the multi-taxon picker groundwork from
+  the Compare view (`RootPicker`'s `onPick`).
 Then: (a) more functional polish toward the deploy gate (landing viewport centring;
 deeper featured-group storytelling); (b) the remaining enrichment tail; (c) Phase-5
 deploy items (still gated on CRG); (d) the smaller non-functional follow-ups below.
