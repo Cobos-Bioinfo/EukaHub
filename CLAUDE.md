@@ -552,6 +552,33 @@ slice **and** prod.
 - **#3 in-tree search highlight** — on the radial Tree of Life, let the user search
   a taxon and highlight/pan to it. Reuses the multi-taxon picker groundwork from
   the Compare view (`RootPicker`'s `onPick`).
+
+**UI-polish backlog (user-reported 2026-08-03, do next session):** small
+alignment/consistency fixes, all verified via headless screenshots.
+1. **Landing — "Explore Eukaryota" button:** swap the right-side `→` for a *search*
+   icon on the **left** (matching the other two hero buttons, which have their icon
+   on the left). `web/src/pages/Landing.tsx` + `components/icons.tsx` (add a search
+   icon if none fits).
+2. **Dashboard metric cards:** since the 2×2 grid narrowed the cards, the 4th card
+   ("Long-Read RNA-Seq") has a longer title that wraps to two lines, so its
+   count/bar sit lower than the other three. Align card content regardless of title
+   wrapping (reserve a consistent title height, or align the stat rows). `MetricCard.tsx` /
+   `.card__*` in `index.css`.
+3. **Dashboard Breakdown level bar** (`BreakdownMap` "Viewing {focus} [RANK] →
+   broken down by [TILE RANK]"): the two rank **pills** sit slightly higher than the
+   surrounding text (vertical-align), and the user dislikes the arrow. Baseline/center
+   the pills with the text and rethink or drop the `→`. `.bmap-level` in `index.css`.
+4. **Dashboard Breakdown "Colour by" / "Size by" rows:** the two control rows don't
+   left-align because "Size by" is shorter than "Colour by", so its toggle group
+   shifts left. Give the labels a fixed-width column (or a 2-col grid) so the toggles
+   line up vertically.
+5. **Dashboard "Browse the data" (`RecordBrowser`):** the right control has a "Sort
+   by" label above it while the left control (tabs) has none, leaving uneven top
+   whitespace. Align their tops (add a matching label to the left, or drop/reposition
+   the "Sort by" label).
+6. **Data map (standalone `/map/:taxid`):** same level-bar pill/arrow alignment issue
+   as #3 (same `BreakdownMap` component, so #3's fix covers both — just verify on the
+   standalone page too).
 Then: (a) more functional polish toward the deploy gate (landing viewport centring;
 deeper featured-group storytelling); (b) the remaining enrichment tail; (c) Phase-5
 deploy items (still gated on CRG); (d) the smaller non-functional follow-ups below.
