@@ -72,10 +72,14 @@ links); ENA → reads (aggregated, run counts only — no `base_count`).
   since `taxon` holds the whole NCBI tree). Rebuilt + verified: 69,703 assemblies
   / 18,475 annotations (15,409 BUSCO) / 1,881,955 clade rows; `n_rows` matches a
   direct `taxon` species count exactly. Needs a fresh volume (schema changed).
-- **Stage C — API.** Widen `summary` / `breakdown` with the new columns; add
-  per-record drill-down endpoints (`/taxon/{taxid}/assemblies`, `/annotations`)
-  returning real records + deep links + live distribution stats; regenerate
-  OpenAPI → TS types.
+- **Stage C [done 2026-08-02].** `/taxon/{taxid}/assemblies` + `/annotations`
+  (real per-record lists + deep links, paginated with a PK tiebreaker) each with
+  **live distribution stats** (median genome size / contig N50; best BUSCO /
+  median protein-coding genes) from one `ltree` subtree query; `/quality-config`
+  (chrome from `QUALITY_STATS`). `summary`/`breakdown`/`children` gained
+  `composition` (`CladeMetadata` extended; `SortColumn` picks it up). OpenAPI → TS
+  regenerated; 79 tests pass (data-dependent ones relaxed to rebuild-safe
+  invariants).
 - **Stage D — frontend.** Annotation-quality cards + genome-size/N50 on the
   dashboard, per-record "Get the data" lists with real GCA/GFF links, **then** the
   breakdown redesign (design-first, 2-3 directions) on the richer columns.
