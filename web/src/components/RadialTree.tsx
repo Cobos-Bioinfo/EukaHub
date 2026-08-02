@@ -17,16 +17,15 @@ import { useTheme } from "../lib/theme";
 // Coverage is heavily right-skewed (most clades sit at 0–10%, a few reach 100%),
 // so a linear scale would paint almost everything the palest tint. We map with a
 // gamma curve (pct^0.35) that spreads the low end, then interpolate a per-metric
-// ramp continuously. The ramp is a *selected* dark variant, not a flip (dataviz
-// skill): on the light canvas it runs faint→colour→dark (more ink = more data);
-// on the dark canvas it runs dim→colour→bright (more light = more data), so high
-// coverage stays the high-contrast end against either surface.
+// ramp continuously. Both canvases run light→colour→deep (more ink = more data),
+// a *selected* dark variant rather than an automatic flip (dataviz skill): the
+// low end is a pale tint, the high end the hue deepened toward black, kept short
+// of the dark surface so high coverage stays legible on either background.
 type RGB = [number, number, number];
 const NO_DATA_LIGHT = "#cbd5e1"; // pale slate, recessive on white
 const NO_DATA_DARK = "#3a4150"; // dim slate, recessive on the dark canvas
 const WHITE: RGB = [255, 255, 255];
 const BLACK: RGB = [0, 0, 0];
-const DARK_SURF: RGB = [15, 18, 22]; // matches --surface (dark)
 const hexRgb = (h: string): RGB => [
   parseInt(h.slice(1, 3), 16),
   parseInt(h.slice(3, 5), 16),
@@ -40,7 +39,7 @@ const mix = (c: RGB, t: RGB, f: number): RGB =>
 function buildRamp(hex: string, dark: boolean): RGB[] {
   const c = hexRgb(hex);
   return dark
-    ? [mix(c, DARK_SURF, 0.4), c, mix(c, WHITE, 0.45)]
+    ? [mix(c, WHITE, 0.55), c, mix(c, BLACK, 0.3)]
     : [mix(c, WHITE, 0.82), c, mix(c, BLACK, 0.28)];
 }
 

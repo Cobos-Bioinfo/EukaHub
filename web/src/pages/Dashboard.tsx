@@ -110,6 +110,7 @@ export default function Dashboard() {
             <BreakdownMap
               key={taxid}
               root={{ taxid, name: s.name, rank: s.rank }}
+              rootLineage={lineage.data?.lineage}
               heading="Breakdown"
               variant="embed"
             />

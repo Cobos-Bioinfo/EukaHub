@@ -29,6 +29,25 @@ function nextRank(rank: string): TargetRank | null {
   }
   return null;
 }
+
+// The rank to break a focus down into. When the focus carries a canonical rank
+// we take the next canonical rank below it. But many taxa are rankless (rank
+// "clade" or "no rank": Eutheria, Bilateria, Opisthokonta, ...), and for those
+// nextRank("clade") would fall through to phylum — wrong for a clade that sits
+// *below* phylum (Eutheria is under class Mammalia and has no phylum
+// descendants, only orders). So for a rankless focus we anchor to the deepest
+// canonical-ranked ancestor in its lineage and step down from there (Eutheria →
+// Mammalia is class → order). A rankless focus above phylum (Opisthokonta,
+// whose deepest canonical ancestor is a domain) still resolves to phylum, which
+// is non-empty there. `lineage` is the focus's root→node chain (inclusive);
+// drilled tiles are always canonical ranks, so they never need it.
+function targetRankFor(focus: TaxonRef, lineage: string[]): TargetRank | null {
+  if (LADDER.includes(focus.rank)) return nextRank(focus.rank);
+  for (let i = lineage.length - 1; i >= 0; i--) {
+    if (LADDER.includes(lineage[i])) return nextRank(lineage[i]);
+  }
+  return nextRank(focus.rank); // no canonical ancestor → phylum via the -1 path
+}
 const RANK_PLURAL: Record<string, string> = {
   phylum: "phyla", class: "classes", order: "orders",
   family: "families", genus: "genera", species: "species",
@@ -39,17 +58,27 @@ type BucketStats = Record<string, number | null>;
 // A lens sets what a tile's colour means. Each lens returns one value per tile;
 // null paints grey (no data). Percentage lenses fill the 0-100 ramp; magnitude
 // lenses normalise to the largest tile on screen and show that max in the
-// legend. Colour is always the one blue ramp, so switching lenses repaints the
-// same tiles and the shift in pattern is what you read.
-const RAMP_HUE = "#1f6feb";
+// legend. Each lens carries its own hue, so the active ramp signals which lens
+// you're reading: the coverage lenses take a member of their resource's colour
+// family (matching the cards and the Tree of Life), the quality lenses share one
+// purple so "quality" reads as a single dimension. Only one lens shows at a time,
+// so the hues are single-hue sequential scales, never a rainbow at once. The
+// cards' pale assemblies/RNA-Seq tints have too little tone to fill a treemap, so
+// those two are saturated here (keeping the blue/green identity); annotations
+// already reads well, so it stays its exact card colour.
+const COVERAGE_HUES: Record<string, string> = { ass: "#2f8fd8", ann: "#1f78b4", rna: "#55ad39" };
+const QUALITY_HUE = "#6a3d9a"; // one hue shared by every quality lens
 type Scale = "pct" | "relative";
 interface Lens {
   key: string;
   label: string;
+  hue: string;
   scale: Scale;
   value: (n: CladeSummary, q?: BucketStats) => number | null;
   legend: string;
   fmt?: (v: number) => string;
+  /** Fuller name for the legend/list where the compact button label is terse. */
+  legendLabel?: string;
 }
 
 function contiguityPct(n: CladeSummary): number | null {
@@ -59,15 +88,15 @@ function contiguityPct(n: CladeSummary): number | null {
 }
 
 const COVERAGE_LENSES: Lens[] = [
-  { key: "ass", label: "Assemblies", scale: "pct", value: (n) => (n.resources.ass.covered > 0 ? n.resources.ass.percent : null), legend: "share of species with a genome assembly" },
-  { key: "ann", label: "Annotations", scale: "pct", value: (n) => (n.resources.ann.covered > 0 ? n.resources.ann.percent : null), legend: "share of species with an annotation" },
-  { key: "rna", label: "RNA-Seq", scale: "pct", value: (n) => (n.resources.rna.covered > 0 ? n.resources.rna.percent : null), legend: "share of species with RNA-Seq" },
+  { key: "ass", label: "Assemblies", hue: COVERAGE_HUES.ass, scale: "pct", value: (n) => (n.resources.ass.covered > 0 ? n.resources.ass.percent : null), legend: "share of species with a genome assembly" },
+  { key: "ann", label: "Annotations", hue: COVERAGE_HUES.ann, scale: "pct", value: (n) => (n.resources.ann.covered > 0 ? n.resources.ann.percent : null), legend: "share of species with an annotation" },
+  { key: "rna", label: "RNA-Seq", hue: COVERAGE_HUES.rna, scale: "pct", value: (n) => (n.resources.rna.covered > 0 ? n.resources.rna.percent : null), legend: "share of species with RNA-Seq" },
 ];
 const QUALITY_LENSES: Lens[] = [
-  { key: "contig", label: "Contiguity", scale: "pct", value: (n) => contiguityPct(n), legend: "share of assemblies at chromosome level or better" },
-  { key: "busco", label: "BUSCO", scale: "pct", value: (_n, q) => q?.busco ?? null, legend: "best BUSCO completeness across the group's annotations" },
-  { key: "genes", label: "Genes", scale: "relative", fmt: (v) => fmt(Math.round(v)), value: (_n, q) => q?.genes ?? null, legend: "median protein-coding gene count (darker means more)" },
-  { key: "genome", label: "Genome size", scale: "relative", fmt: fmtBp, value: (_n, q) => q?.genome_size ?? null, legend: "median assembly length (darker means larger)" },
+  { key: "contig", label: "Contiguity", hue: QUALITY_HUE, scale: "pct", value: (n) => contiguityPct(n), legend: "share of assemblies at chromosome level or better" },
+  { key: "busco", label: "BUSCO", hue: QUALITY_HUE, scale: "pct", value: (_n, q) => q?.busco ?? null, legend: "best BUSCO completeness across the group's annotations" },
+  { key: "genes", label: "Coding genes", legendLabel: "Protein-coding genes", hue: QUALITY_HUE, scale: "relative", fmt: (v) => fmt(Math.round(v)), value: (_n, q) => q?.genes ?? null, legend: "median protein-coding gene count (darker means more)" },
+  { key: "genome", label: "Genome size", hue: QUALITY_HUE, scale: "relative", fmt: fmtBp, value: (_n, q) => q?.genome_size ?? null, legend: "median assembly length (darker means larger)" },
 ];
 const LENSES = [...COVERAGE_LENSES, ...QUALITY_LENSES];
 const NEEDS_QUALITY = new Set(["busco", "genes", "genome"]);
@@ -97,10 +126,15 @@ interface Hover {
  *  tall (variant "page"). Seeded from `root` so it needs no lineage fetch. */
 export default function BreakdownMap({
   root,
+  rootLineage,
   heading,
   variant = "page",
 }: {
   root: TaxonRef;
+  /** The root's root→node lineage (inclusive), used to pick the breakdown rank
+   *  when the root is rankless. Optional: an empty/late lineage just falls back
+   *  to phylum, self-correcting once it loads. */
+  rootLineage?: TaxonRef[];
   heading: string;
   variant?: "page" | "embed";
 }) {
@@ -114,7 +148,8 @@ export default function BreakdownMap({
   useEffect(() => setTrail([root]), [root.taxid]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const focus = trail[trail.length - 1];
-  const targetRank = nextRank(focus.rank);
+  const rootRanks = useMemo(() => (rootLineage ?? []).map((t) => t.rank), [rootLineage]);
+  const targetRank = targetRankFor(focus, rootRanks);
 
   const bd = useAsync(
     () => (targetRank ? getBreakdown(focus.taxid, { rank: targetRank, sort: "n_rows", exclude_empty: false, limit: 250 }) : Promise.resolve(null)),
@@ -135,9 +170,9 @@ export default function BreakdownMap({
   }, [quality.data]);
 
   const dark = useTheme() === "dark";
-  const ramp = useMemo(() => buildRamp(RAMP_HUE, dark), [dark]);
-  const noData = dark ? NO_DATA_DARK : NO_DATA_LIGHT;
   const lens = LENSES.find((l) => l.key === lensKey) ?? LENSES[0];
+  const ramp = useMemo(() => buildRamp(lens.hue, dark), [lens.hue, dark]);
+  const noData = dark ? NO_DATA_DARK : NO_DATA_LIGHT;
   const qWaiting = NEEDS_QUALITY.has(lens.key) && quality.loading;
 
   const boxRef = useRef<HTMLDivElement>(null);
@@ -327,7 +362,7 @@ export default function BreakdownMap({
         {targetRank && tiles.length > 0 && (
           <div className="bmap-legend">
             <span className="bmap-legend__title">
-              {lens.label}
+              {lens.legendLabel ?? lens.label}
               {qWaiting && <span className="bmap-legend__loading"> · computing…</span>}
             </span>
             <span className="bmap-legend__ramp">
@@ -399,7 +434,7 @@ function TileList({
               </button>
               <span className="bmap-list__rank">{n.rank}</span>
               <span className="bmap-list__meta">
-                {fmt(n.n_rows)} species · {lens.label} {lensText(n)}
+                {fmt(n.n_rows)} species · {lens.legendLabel ?? lens.label} {lensText(n)}
               </span>
               <Link className="bmap-list__open" to={`/clade/${n.taxid}`}>
                 {drillable ? "Open" : "Dashboard"}
