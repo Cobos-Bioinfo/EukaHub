@@ -221,12 +221,13 @@ ALTER TABLE clade_features
   ADD COLUMN n_ass_chromosome INTEGER NOT NULL DEFAULT 0,
   ADD COLUMN n_ass_scaffold   INTEGER NOT NULL DEFAULT 0,
   ADD COLUMN n_ass_contig     INTEGER NOT NULL DEFAULT 0,
-  ADD COLUMN n_reference      INTEGER NOT NULL DEFAULT 0,  -- refseq_category set
-  ADD COLUMN s_bases          BIGINT  NOT NULL DEFAULT 0;  -- ENA base_count sum
+  ADD COLUMN n_reference      INTEGER NOT NULL DEFAULT 0;  -- refseq_category set
 ```
 
-These give the breakdown sortable quality columns (e.g. "chromosome-level
-assemblies per clade") without a per-record scan. Distribution stats (median
+(Reads stay two count metrics — no `base_count`/`s_bases`; DECISIONS.md
+2026-08-02.) These give the breakdown sortable quality columns (e.g.
+"chromosome-level assemblies per clade") without a per-record scan. Distribution
+stats (median
 N50 / genome size / gene count, best-or-median BUSCO) and the annotation-quality
 dimension are served on demand from `assembly` / `annotation`. The **species-only
 thesis is untouched**: rollup columns still sum over `rank='species'`, and a

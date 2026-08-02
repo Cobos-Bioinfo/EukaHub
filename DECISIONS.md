@@ -128,8 +128,8 @@ everything the fetches returned; the redesign stops discarding it.
     (`root_type_counts.gene`, `protein_coding`), transcript stats, source-DB mix,
     and the direct **GFF `url_path`**. This is where Annotrieve saves us the most
     effort (we'd otherwise compute BUSCO/gene counts ourselves).
-  - **ENA → reads**, unchanged in source, kept aggregated (optionally add
-    `base_count`).
+  - **ENA → reads**, unchanged in source, kept aggregated as two run-count
+    metrics (no `base_count`; see below).
 - **Annotrieve enriches, does not replace, the assembly count.** Its assembly
   collection is the **annotated subset** — `/assemblies/frequencies/assembly_level`
   totals **16,905** (Complete 446 / Chromosome 6,449 / Scaffold 6,677 / Contig
@@ -141,12 +141,17 @@ everything the fetches returned; the redesign stops discarding it.
   annotated genomes, ~8.5k taxa; the fraction the coverage check quantified).
 - **Distribution stats are computed on demand, not precomputed.** Counts roll up
   by summation (additive: `clade_features` gains assembly-level composition
-  counts `n_ass_complete/_chromosome/_scaffold/_contig`, `n_reference`, and
-  `s_bases` via the same explode→sum). **Medians/percentiles do not** (median of
-  a subtree ≠ sum of medians), so median N50 / genome size / gene count / BUSCO
-  are computed live from the small per-record tables via an `ltree` subtree
-  aggregation. The per-record tables (~68k / ~17k rows) make live stats + record
-  lists cheap, so we avoid a heavy per-clade quality rollup.
+  counts `n_ass_complete/_chromosome/_scaffold/_contig` and `n_reference` via the
+  same explode→sum). **Medians/percentiles do not** (median of a subtree ≠ sum of
+  medians), so median N50 / genome size / gene count / BUSCO are computed live
+  from the small per-record tables via an `ltree` subtree aggregation. The
+  per-record tables (~68k / ~17k rows) make live stats + record lists cheap, so
+  we avoid a heavy per-clade quality rollup.
+- **RNA-Seq reads: run counts only, no `base_count`/`s_bases`** (user, 2026-08-02).
+  Reads keep the two existing count metrics (`rna` = any-platform runs, `lng` =
+  long-read runs); we do not add sequencing volume. Keeps reads parallel to the
+  other three resources and the ENA fetch unchanged (`fields=tax_id,
+  instrument_platform`).
 - **Sequence: data model first, then the breakdown redesign** on top of the new
   columns (the breakdown was "sparse 4 bars"; enrich the data before redesigning
   its presentation).
@@ -158,8 +163,6 @@ everything the fetches returned; the redesign stops discarding it.
 
 ## Open — still to decide
 
-- **Reads `base_count`** — add sequencing *volume* (`s_bases`) beside run counts,
-  or ship run counts only first. Leaning: add it (one extra ENA field).
-- **Quality-stat modelling in `metrics.py`** — annotation-quality is a
-  *distribution stat*, not a count, so it needs a config concept parallel to the
-  count-based `METRICS` (no `c_/s_/p_` triple). Shape TBD in Stage A.
+- None — the two data-model forks are resolved: **no `base_count`** (settled
+  above, 2026-08-02) and the **quality-stat modelling** shipped in Stage A
+  (`QualityStat` / `QUALITY_STATS` in `core/metrics.py`).
