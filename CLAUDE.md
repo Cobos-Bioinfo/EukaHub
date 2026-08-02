@@ -352,6 +352,27 @@ time. The genes lens is now explicitly **protein-coding** (button "Coding genes"
 legend/list "Protein-coding genes"). Web build+typecheck clean; light+dark
 screenshotted across lenses; no API change.
 
+**Data-map drill path URL-synced + a duplicate-key fix** (2026-08-02, on `dev`,
+commit `1839a5b`). The first "remaining data-map nicety" from the resume list.
+The standalone map (`/map/:taxid`) now mirrors the drill trail to the URL as
+`?d=t1-t2-t3` (the taxids drilled below the root), so the **browser back/forward
+buttons walk the drill** and a drilled view is a **shareable, bookmarkable deep
+link**. A fresh deep-link load resolves the drilled nodes' names/ranks with **one
+lineage fetch of the focus** (each drilled node is an ancestor of it, so a single
+`getLineage` covers them); in-session drills carry the name/rank straight from the
+clicked tile, so no extra fetch. Deliberately **not** re-rooting the route (keeps
+the internal drill breadcrumb, which auto-jumps rankless ranks, rather than the
+taxonomic lineage). The **embedded** dashboard map keeps its internal-state trail
+so it never clutters the dashboard URL; all encapsulated in a `useDrillTrail`
+hook (`variant==="page"` ⇒ URL, else state). Also fixed a **pre-existing**
+duplicate-key warning: `Dashboard` rendered `BreakdownMap`/`SubspeciesSection`/
+`RecordBrowser` as siblings all keyed `key={taxid}`, colliding whenever a
+data-rich clade shows the map + records together; the remount keys are now
+namespaced (`bmap-`/`subsp-`/`rec-`). Build clean; deep-link reconstruction +
+clean console verified via headless Chrome (Eutheria→Carnivora→Felidae). Still
+open from the list: true "load more" past the 250-tile cap, and the ~1s
+worst-case `breakdown/quality` latency on Eukaryota→phylum.
+
 ## Read before doing anything
 
 - `docs/data-model.md` — **the core doc.** DB design + taxonomy-tree storage.
