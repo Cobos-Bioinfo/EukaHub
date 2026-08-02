@@ -137,6 +137,39 @@ class CladeSummary(BaseModel):
         )
 
 
+class OverviewTotals(BaseModel):
+    """Global "at a glance" totals across the eukaryotic tree (Eukaryota's
+    rollup) — the live headline numbers on the landing page."""
+
+    species: int  # eukaryotic species surveyed
+    assemblies: int  # genome assemblies
+    annotations: int  # functional annotations
+    rna_seq: int  # RNA-Seq runs (any platform)
+    long_read: int  # long-read RNA-Seq runs
+    reference_genomes: int  # assemblies flagged reference/representative
+
+
+class FeaturedClade(BaseModel):
+    """One featured group on the landing page: its species count and how much of
+    it is assembled/annotated. The frontend supplies the friendly display label
+    (by taxid); ``name`` is the scientific name as a fallback."""
+
+    taxid: int
+    name: str
+    species: int  # species in the subtree
+    assemblies: int  # total genome assemblies in the subtree
+    assembly_percent: float  # % of species with >=1 assembly
+    annotation_percent: float  # % of species with >=1 annotation
+
+
+class Overview(BaseModel):
+    """Landing-page payload: global totals + a handful of featured groups, in one
+    cacheable request (served by ``/overview``)."""
+
+    totals: OverviewTotals
+    featured: list[FeaturedClade]
+
+
 class TaxonRef(BaseModel):
     """Minimal taxon reference (breadcrumb / breakdown root)."""
 

@@ -4,6 +4,9 @@ import type { components } from "./schema";
 
 export type MetricConfig = components["schemas"]["MetricConfig"];
 export type CladeSummary = components["schemas"]["CladeSummary"];
+export type Overview = components["schemas"]["Overview"];
+export type OverviewTotals = components["schemas"]["OverviewTotals"];
+export type FeaturedClade = components["schemas"]["FeaturedClade"];
 export type ResourceSummary = components["schemas"]["ResourceSummary"];
 export type Breakdown = components["schemas"]["Breakdown"];
 export type TaxonRef = components["schemas"]["TaxonRef"];

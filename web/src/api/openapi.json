@@ -545,6 +545,45 @@
         "title": "CladeSummary",
         "type": "object"
       },
+      "FeaturedClade": {
+        "description": "One featured group on the landing page: its species count and how much of\nit is assembled/annotated. The frontend supplies the friendly display label\n(by taxid); ``name`` is the scientific name as a fallback.",
+        "properties": {
+          "annotation_percent": {
+            "title": "Annotation Percent",
+            "type": "number"
+          },
+          "assemblies": {
+            "title": "Assemblies",
+            "type": "integer"
+          },
+          "assembly_percent": {
+            "title": "Assembly Percent",
+            "type": "number"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "species": {
+            "title": "Species",
+            "type": "integer"
+          },
+          "taxid": {
+            "title": "Taxid",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "taxid",
+          "name",
+          "species",
+          "assemblies",
+          "assembly_percent",
+          "annotation_percent"
+        ],
+        "title": "FeaturedClade",
+        "type": "object"
+      },
       "FilterLogic": {
         "description": "How multiple resource-presence filters combine (ported verbatim).",
         "enum": [
@@ -677,6 +716,66 @@
         ],
         "title": "MetricFilter",
         "type": "string"
+      },
+      "Overview": {
+        "description": "Landing-page payload: global totals + a handful of featured groups, in one\ncacheable request (served by ``/overview``).",
+        "properties": {
+          "featured": {
+            "items": {
+              "$ref": "#/components/schemas/FeaturedClade"
+            },
+            "title": "Featured",
+            "type": "array"
+          },
+          "totals": {
+            "$ref": "#/components/schemas/OverviewTotals"
+          }
+        },
+        "required": [
+          "totals",
+          "featured"
+        ],
+        "title": "Overview",
+        "type": "object"
+      },
+      "OverviewTotals": {
+        "description": "Global \"at a glance\" totals across the eukaryotic tree (Eukaryota's\nrollup) \u2014 the live headline numbers on the landing page.",
+        "properties": {
+          "annotations": {
+            "title": "Annotations",
+            "type": "integer"
+          },
+          "assemblies": {
+            "title": "Assemblies",
+            "type": "integer"
+          },
+          "long_read": {
+            "title": "Long Read",
+            "type": "integer"
+          },
+          "reference_genomes": {
+            "title": "Reference Genomes",
+            "type": "integer"
+          },
+          "rna_seq": {
+            "title": "Rna Seq",
+            "type": "integer"
+          },
+          "species": {
+            "title": "Species",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "species",
+          "assemblies",
+          "annotations",
+          "rna_seq",
+          "long_read",
+          "reference_genomes"
+        ],
+        "title": "OverviewTotals",
+        "type": "object"
       },
       "QualityStatConfig": {
         "description": "Static chrome for one quality stat \u2014 served once by ``/quality-config``\nand joined client-side to the per-taxon ``QualityStatValue`` by ``key``.\nThe analogue of ``MetricConfig`` for the annotation/assembly-quality\ndimension (BUSCO %, gene count, genome size, N50).",
@@ -1405,6 +1504,25 @@
           }
         },
         "summary": "Metrics Config"
+      }
+    },
+    "/overview": {
+      "get": {
+        "description": "Landing-page \"at a glance\": global totals across the eukaryotic tree plus\na few featured groups with their assembly/annotation coverage \u2014 one cacheable\nrequest so the hero can render live headline numbers + coverage cards.",
+        "operationId": "overview_overview_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Overview"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Overview"
       }
     },
     "/quality-config": {

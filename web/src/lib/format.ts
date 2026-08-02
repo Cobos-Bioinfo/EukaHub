@@ -3,6 +3,10 @@
 /** Thousands-separated integer, e.g. 1647009 -> "1,647,009". */
 export const fmt = (n: number): string => n.toLocaleString("en-US");
 
+/** Compact magnitude for headline stats, e.g. 1695021 -> "1.7M", 65425 -> "65K". */
+export const fmtCompact = (n: number): string =>
+  n.toLocaleString("en-US", { notation: "compact", maximumFractionDigits: 1 });
+
 /** A coverage percentage: 2 decimals under 1%, else 1 (keeps tiny values visible). */
 export const fmtPct = (p: number): string => p.toFixed(p < 1 ? 2 : 1);
 

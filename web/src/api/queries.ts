@@ -13,6 +13,7 @@ import type {
   FilterLogic,
   MetricConfig,
   MetricFilter,
+  Overview,
   QualityStatConfig,
   SortColumn,
   TargetRank,
@@ -45,6 +46,9 @@ function unwrap<T>(res: { data?: T; error?: unknown; response: Response }): T {
 
 export const getMetricsConfig = async (): Promise<MetricConfig[]> =>
   unwrap(await api.GET("/metrics-config"));
+
+// Landing-page "at a glance": global totals + a few featured groups, one request.
+export const getOverview = async (): Promise<Overview> => unwrap(await api.GET("/overview"));
 
 export const getSummary = async (taxid: number): Promise<CladeSummary> =>
   unwrap(await api.GET("/clade/{taxid}/summary", { params: { path: { taxid } } }));

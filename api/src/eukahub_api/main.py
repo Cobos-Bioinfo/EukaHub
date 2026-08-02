@@ -2,6 +2,7 @@
 
 Phase 2 read endpoints:
 
+- ``GET /overview``                    — landing-page totals + featured groups.
 - ``GET /clade/{taxid}/summary``       — the Genomic Resource Summary (Q1).
 - ``GET /clade/{taxid}/breakdown``     — descendants at a target rank (Q2).
 - ``GET /clade/{taxid}/export.tsv``    — the full breakdown as a TSV download.
@@ -45,6 +46,7 @@ from eukahub_api.queries import (
     fetch_breakdown_quality,
     fetch_children,
     fetch_lineage,
+    fetch_overview,
     fetch_root,
     fetch_summary,
     iter_export_tsv,
@@ -58,7 +60,10 @@ from eukahub_api.schemas import (
     Breakdown,
     BucketQuality,
     CladeSummary,
+    FeaturedClade,
     MetricConfig,
+    Overview,
+    OverviewTotals,
     QualityStatConfig,
     QualityStatValue,
     TaxonAbout,
@@ -198,6 +203,35 @@ def quality_config() -> list[QualityStatConfig]:
     keyed by the stat keys the per-taxon quality values use (BUSCO, gene count,
     genome size, N50). The analogue of ``/metrics-config`` for the new dimension."""
     return [QualityStatConfig.from_stat(q) for q in QUALITY_STATS]
+
+
+@app.get("/overview", response_model=Overview)
+def overview(conn: Conn) -> Overview:
+    """Landing-page "at a glance": global totals across the eukaryotic tree plus
+    a few featured groups with their assembly/annotation coverage — one cacheable
+    request so the hero can render live headline numbers + coverage cards."""
+    totals, featured = fetch_overview(conn)
+    return Overview(
+        totals=OverviewTotals(
+            species=totals.n_rows,
+            assemblies=totals.s_ass,
+            annotations=totals.s_ann,
+            rna_seq=totals.s_rna,
+            long_read=totals.s_lng,
+            reference_genomes=totals.n_reference,
+        ),
+        featured=[
+            FeaturedClade(
+                taxid=taxid,
+                name=name,
+                species=n_rows,
+                assemblies=s_ass,
+                assembly_percent=round(c_ass / n_rows * 100, 2) if n_rows else 0.0,
+                annotation_percent=round(c_ann / n_rows * 100, 2) if n_rows else 0.0,
+            )
+            for taxid, name, n_rows, s_ass, c_ass, c_ann in featured
+        ],
+    )
 
 
 @app.get("/clade/{taxid}/summary", response_model=CladeSummary)
