@@ -6,7 +6,7 @@ import RandomCladeButton from "../components/RandomCladeButton";
 import RootPicker from "../components/RootPicker";
 import { RandomIcon, TreeIcon } from "../components/icons";
 import { useAsync } from "../hooks/useAsync";
-import { cladeLabel, HERO_CHIPS } from "../lib/clades";
+import { cladeLabel } from "../lib/clades";
 import { fmt, fmtCompact, fmtPct } from "../lib/format";
 
 // The whole surveyed tree: the default "explore everything" entry point.
@@ -33,28 +33,21 @@ export default function Landing() {
         <RootPicker />
       </div>
 
-      <div className="hero__chips">
-        <span className="hero__chips-label">Try:</span>
-        {HERO_CHIPS.map((c) => (
-          <Link key={c.taxid} to={`/clade/${c.taxid}`} className="hero__chip">
-            {c.label}
-          </Link>
-        ))}
-      </div>
-
-      <RandomCladeButton className="hero__surprise" title="Jump to a random group">
-        <RandomIcon size={17} />
-        Surprise me with a random clade
-      </RandomCladeButton>
-
       <div className="hero__cta">
         <Link to={`/clade/${EUKARYOTA_TAXID}`} className="hero__btn hero__btn--primary">
           Explore Eukaryota →
         </Link>
-        <Link to={`/tree/${EUKARYOTA_TAXID}`} className="hero__btn hero__btn--ghost">
+        <Link to={`/tree/${EUKARYOTA_TAXID}`} className="hero__btn hero__btn--tree">
           <TreeIcon size={17} />
           Tree of Life
         </Link>
+        <RandomCladeButton
+          className="hero__btn hero__btn--surprise"
+          title="Jump to a random group"
+        >
+          <RandomIcon size={17} />
+          Surprise me
+        </RandomCladeButton>
       </div>
 
       <LandingOverview />
@@ -95,7 +88,8 @@ function LandingOverview() {
         <section className="featured" aria-label="Featured groups">
           <h2 className="featured__heading">Featured groups</h2>
           <p className="featured__sub">
-            How much of each group is assembled. A big group with a short bar is a gap.
+            The share of each group with a genome assembly and a functional annotation. A big
+            group with short bars is a gap.
           </p>
           <div className="featured__grid">
             {data.featured.map((f) => (
@@ -107,29 +101,56 @@ function LandingOverview() {
 
       <p className="hero__meta">
         Data from NCBI, Annotrieve, and ENA. Percentages are the share of species with a genome
-        assembly.
+        assembly / functional annotation.
       </p>
     </div>
   );
 }
 
-/** One featured-group card: friendly name, species count, and an assembly-coverage
- *  meter, linking into the group's dashboard. */
+/** One featured-group card: friendly name, species count, and two coverage
+ *  meters (assembled / annotated), linking into the group's dashboard. */
 function FeaturedCard({ clade }: { clade: FeaturedClade }) {
-  const pct = clade.assembly_percent;
   const label = cladeLabel(clade.taxid) ?? clade.name;
   return (
     <Link to={`/clade/${clade.taxid}`} className="featured__card">
       <span className="featured__name">{label}</span>
       <span className="featured__species">{fmt(clade.species)} species</span>
+      <CoverageMeter kind="assembled" name={label} label="Assembled" pct={clade.assembly_percent} />
+      <CoverageMeter
+        kind="annotated"
+        name={label}
+        label="Annotated"
+        pct={clade.annotation_percent}
+      />
+    </Link>
+  );
+}
+
+/** A labelled coverage meter (label + percent + bar) for a featured card. */
+function CoverageMeter({
+  kind,
+  name,
+  label,
+  pct,
+}: {
+  kind: "assembled" | "annotated";
+  name: string;
+  label: string;
+  pct: number;
+}) {
+  return (
+    <div className="featured__metric">
+      <div className="featured__metric-head">
+        <span className="featured__metric-label">{label}</span>
+        <span className="featured__metric-pct">{fmtPct(pct)}%</span>
+      </div>
       <div
-        className="featured__bar"
+        className={`featured__bar featured__bar--${kind}`}
         role="img"
-        aria-label={`${fmtPct(pct)}% of ${label} species have a genome assembly`}
+        aria-label={`${fmtPct(pct)}% of ${name} species are ${label.toLowerCase()}`}
       >
         <div className="featured__bar-fill" style={{ width: `${Math.max(Math.min(pct, 100), 1.5)}%` }} />
       </div>
-      <span className="featured__cov">{fmtPct(pct)}% assembled</span>
-    </Link>
+    </div>
   );
 }

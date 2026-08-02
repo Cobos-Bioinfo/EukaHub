@@ -43,19 +43,6 @@ export const FEATURED_CLADES: Clade[] = [
   { taxid: 2836, label: "Diatoms" },
 ];
 
-// A diverse subset shown as quick-jump chips in the hero — instantly recognizable
-// groups spread across the tree (vertebrates, insects, fungi, plants).
-export const HERO_CHIPS: Clade[] = [
-  FEATURED_CLADES[1], // Mammals
-  FEATURED_CLADES[2], // Birds
-  FEATURED_CLADES[6], // Ray-finned fishes
-  FEATURED_CLADES[10], // Insects
-  FEATURED_CLADES[12], // Butterflies & moths
-  FEATURED_CLADES[15], // Fungi
-  FEATURED_CLADES[18], // Green plants
-  FEATURED_CLADES[19], // Flowering plants
-];
-
 const LABEL_BY_TAXID = new Map(FEATURED_CLADES.map((c) => [c.taxid, c.label]));
 
 /** The friendly display label for a curated taxid, if we have one. Lets the
