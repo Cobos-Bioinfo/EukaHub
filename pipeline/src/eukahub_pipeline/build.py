@@ -178,7 +178,8 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     leaf = assemble_leaf_features(assemblies, annotations, reads)
-    clade = rollup_from_frames(taxon_df, leaf)
+    # Scope the rollup to Eukaryota — `taxon` holds the whole NCBI tree.
+    clade = rollup_from_frames(taxon_df, leaf, root_taxid=EUKARYOTE_TXID)
     log.info("Rolled up into %d clade rows", clade.height)
 
     with psycopg.connect(args.database_url) as conn:

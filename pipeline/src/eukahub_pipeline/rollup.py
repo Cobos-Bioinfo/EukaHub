@@ -116,15 +116,35 @@ def _own_feature_cols() -> list[pl.Expr]:
     ]
 
 
-def _species_rollup(taxon: pl.DataFrame, features: pl.DataFrame) -> pl.DataFrame:
+def _species_rollup(
+    taxon: pl.DataFrame, features: pl.DataFrame, root_taxid: int | None = None
+) -> pl.DataFrame:
     """Sum species features up every lineage into one row per ancestor clade.
 
     A species is included in its own lineage (``path`` ends with its taxid),
     matching Euka-Survey. ``n_rows`` counts the species in each clade's subtree.
+
+    The universe of species is **the taxonomy**, not the feature rows: we start
+    from every ``rank == 'species'`` node and LEFT-join the (sparse) feature data,
+    zero-filling species with none. So ``n_rows`` counts *all* species in a clade
+    (the coverage denominator and the "total species" figure), while c_*/s_* only
+    accumulate the ones that actually carry data. (The fetched sources cover only
+    a small fraction of the ~1.9M eukaryote species, so an inner join here would
+    undercount ``n_rows`` badly.)
+
+    ``root_taxid`` scopes the species universe to that root's subtree — the app
+    is Eukaryota-only, and ``taxon`` holds the whole NCBI tree (all domains), so
+    without it the rollup would also emit ~0.8M zero-data bacterial/viral clades.
+    A species is in-subtree iff ``root_taxid`` is one of its ``path`` labels.
     """
+    species_nodes = taxon.filter(pl.col("rank") == "species").select("taxid", "path")
+    if root_taxid is not None:
+        species_nodes = species_nodes.filter(
+            pl.col("path").str.split(".").list.contains(str(root_taxid))
+        )
     species = (
-        features.join(taxon.select("taxid", "rank", "path"), on="taxid", how="inner")
-        .filter(pl.col("rank") == "species")
+        species_nodes.join(features, on="taxid", how="left")
+        .with_columns([pl.col(c).fill_null(0) for c in _LEAF_COUNT_COLUMNS])
         .with_columns(_own_feature_cols())
     )
 
@@ -215,14 +235,17 @@ def _with_composition_defaults(features: pl.DataFrame) -> pl.DataFrame:
     return features
 
 
-def rollup_from_frames(taxon: pl.DataFrame, features: pl.DataFrame) -> pl.DataFrame:
+def rollup_from_frames(
+    taxon: pl.DataFrame, features: pl.DataFrame, root_taxid: int | None = None
+) -> pl.DataFrame:
     """Roll leaf features into per-clade rollups.
 
     ``taxon`` needs columns (taxid, rank, path); ``features`` needs
     (taxid, short, long, ass, ann) and optionally the additive composition
-    columns (``n_ass_*``, ``n_reference``). Returns one row per taxon with
-    columns (taxid, n_rows, c_*, s_*, *COMPOSITION_COLUMNS) in METRICS order,
-    combining:
+    columns (``n_ass_*``, ``n_reference``). ``root_taxid`` scopes the species
+    universe to that subtree (the pipeline passes Eukaryota). Returns one row per
+    taxon with columns (taxid, n_rows, c_*, s_*, *COMPOSITION_COLUMNS) in METRICS
+    order, combining:
 
     - the **species rollup** — one row per ancestor clade, features summed up
       every species' lineage (``n_rows`` = species in the subtree); and
@@ -234,7 +257,7 @@ def rollup_from_frames(taxon: pl.DataFrame, features: pl.DataFrame) -> pl.DataFr
     ancestor of a species), so a plain vertical concat is exact.
     """
     features = _with_composition_defaults(features)
-    clade = _species_rollup(taxon, features)
+    clade = _species_rollup(taxon, features, root_taxid)
     infra = _infraspecific_rows(taxon, features)
     if infra.height == 0:
         return clade
