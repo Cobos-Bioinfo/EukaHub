@@ -486,3 +486,42 @@ def fetch_annotation_records(
         root_path=root_path, sort=sort, limit=limit, offset=offset,
     )
     return (taxid, root_name, root_rank), total, stats, records
+
+
+def fetch_breakdown_quality(
+    conn: psycopg.Connection, *, root_taxid: int, rank: str
+) -> dict[int, dict[str, float | None]]:
+    """Per-bucket QUALITY_STATS for a rank breakdown, so the "data map" can colour
+    tiles by BUSCO / median genes / median genome size / N50 — distribution stats
+    the additive rollup can't carry.
+
+    One grouped query per source table: every record under the root is attributed
+    to its rank-``rank`` ancestor (``bucket.path @> rec.path``, exactly one per
+    lineage — a path has one node of a given rank), then aggregated per bucket.
+    Returns ``{bucket_taxid: {stat_key: value|None}}`` for the buckets that carry
+    any records; the frontend merges it into the breakdown by taxid. ``rank`` is
+    interpolated-safe (TargetRank enum). Raises ``TaxonNotFound`` for a bad root.
+    """
+    _root_name, _root_rank, root_path = fetch_root(conn, root_taxid)
+    all_keys = [q.key for q in QUALITY_STATS]
+    result: dict[int, dict[str, float | None]] = {}
+    for source in ("assembly", "annotation"):
+        keys = [q.key for q in QUALITY_STATS if q.source == source]
+        if not keys:
+            continue
+        agg = _quality_stats_agg(source)
+        # r = the per-record table, rec = the record's taxon, bucket = that
+        # taxon's ancestor at the target rank (the breakdown tile it rolls into).
+        sql = (
+            f"SELECT bucket.taxid AS bucket_taxid, {agg} "
+            f"FROM {source} r "
+            "JOIN taxon rec ON rec.taxid = r.taxid "
+            "JOIN taxon bucket ON bucket.rank = %s AND bucket.path <@ %s::ltree "
+            "AND bucket.path @> rec.path "
+            "GROUP BY bucket.taxid"
+        )
+        for row in conn.execute(sql, (rank, root_path)).fetchall():
+            entry = result.setdefault(row[0], {k: None for k in all_keys})
+            for k, v in zip(keys, row[1:]):
+                entry[k] = float(v) if v is not None else None
+    return result

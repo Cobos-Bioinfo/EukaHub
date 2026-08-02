@@ -2054,7 +2054,8 @@ button.tree-outline__name:hover {
 .bmap-ctl {
   display: flex;
   align-items: center;
-  gap: 0.6rem;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.6rem;
 }
 
 .bmap {
@@ -2182,7 +2183,21 @@ button.tree-outline__name:hover {
   color: var(--muted);
 }
 .bmap-tip {
-  min-width: 210px;
+  min-width: 216px;
+}
+.bmap-tip__group {
+  margin-top: 0.5rem;
+  margin-bottom: 0.1rem;
+  font-size: 0.64rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+}
+.bmap-legend__loading {
+  font-weight: 400;
+  font-style: italic;
+  color: var(--muted);
 }
 
 /* ---- FAQ page -------------------------------------------------------- */

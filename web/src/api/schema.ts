@@ -28,6 +28,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/clade/{taxid}/breakdown/quality": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Clade Breakdown Quality
+         * @description Per-bucket distribution stats (BUSCO / median genes / genome size / N50)
+         *     for a rank breakdown — the quality lenses of the "data map". One grouped
+         *     `ltree` query per source table attributes every record under the root to its
+         *     rank-`rank` ancestor, then aggregates. Merge into `breakdown` by taxid.
+         */
+        get: operations["clade_breakdown_quality_clade__taxid__breakdown_quality_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/clade/{taxid}/export.tsv": {
         parameters: {
             query?: never;
@@ -448,6 +471,20 @@ export interface components {
             total_matches: number;
         };
         /**
+         * BucketQuality
+         * @description Per-bucket quality stats for a rank breakdown — one entry per breakdown
+         *     tile that carries records, keyed by its ``taxid``. Lets the "data map" colour
+         *     tiles by BUSCO / median genes / median genome size / N50 (the frontend merges
+         *     these into the breakdown by taxid). ``stats`` are keyed like ``QUALITY_STATS``;
+         *     a value is ``null`` when that bucket has no record carrying the field.
+         */
+        BucketQuality: {
+            /** Stats */
+            stats: components["schemas"]["QualityStatValue"][];
+            /** Taxid */
+            taxid: number;
+        };
+        /**
          * CladeSummary
          * @description The Genomic Resource Summary (Q1) payload for one taxon.
          */
@@ -721,6 +758,40 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Breakdown"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    clade_breakdown_quality_clade__taxid__breakdown_quality_get: {
+        parameters: {
+            query: {
+                /** @description Rank the root is broken down by. */
+                rank: components["schemas"]["TargetRank"];
+            };
+            header?: never;
+            path: {
+                taxid: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BucketQuality"][];
                 };
             };
             /** @description Validation Error */
