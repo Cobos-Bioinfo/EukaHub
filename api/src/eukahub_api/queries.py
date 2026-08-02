@@ -57,6 +57,20 @@ AnnotationSort = Enum("AnnotationSort", {c: c for c in _ANNOTATION_SORTS}, type=
 # taxa never surface in the root picker even though `taxon` holds all of life.
 EUKARYOTA_TAXID = 2759
 
+# Featured groups for the landing page's "at a glance" section: recognizable,
+# data-rich clades spread across the tree (a vertebrate / bird / fish / insect /
+# fungus / plant). The frontend maps each taxid to a friendly label; a taxid
+# absent from the serving DB is simply dropped (keeps the slice-seeded CI DB and
+# any future rebuild robust). Order here is the display order.
+FEATURED_TAXIDS: tuple[int, ...] = (
+    40674,  # Mammalia — Mammals
+    8782,   # Aves — Birds
+    7898,   # Actinopterygii — Ray-finned fishes
+    50557,  # Insecta — Insects
+    4751,   # Fungi
+    3398,   # Magnoliopsida — Flowering plants
+)
+
 
 class FilterLogic(str, Enum):
     """How multiple resource-presence filters combine (ported verbatim)."""
@@ -126,6 +140,30 @@ def fetch_summary(
     if features[0] is None:  # LEFT JOIN produced NULLs — no clade_features row
         return name, rank, CladeMetadata.zero(taxid), is_infraspecific
     return name, rank, CladeMetadata(taxid, *features), is_infraspecific
+
+
+def fetch_overview(
+    conn: psycopg.Connection,
+) -> tuple[CladeMetadata, list[tuple[int, str, int, int, int, int]]]:
+    """Landing-page "at a glance" data in one request.
+
+    Returns ``(eukaryota_metadata, featured)`` where ``featured`` is one tuple
+    ``(taxid, name, n_rows, s_ass, c_ass, c_ann)`` per FEATURED group present in
+    the DB, in FEATURED_TAXIDS order. Two small indexed lookups: Eukaryota's own
+    rollup (the global totals) and the featured clades' rollups. A featured taxid
+    missing from ``clade_features`` (e.g. a sliced CI DB) is dropped, never an
+    error, so the section degrades gracefully."""
+    _name, _rank, totals, _inf = fetch_summary(conn, EUKARYOTA_TAXID)
+
+    rows = conn.execute(
+        "SELECT t.taxid, t.name, f.n_rows, f.s_ass, f.c_ass, f.c_ann "
+        "FROM taxon t JOIN clade_features f USING (taxid) "
+        "WHERE t.taxid = ANY(%s)",
+        (list(FEATURED_TAXIDS),),
+    ).fetchall()
+    by_id = {r[0]: r for r in rows}
+    featured = [by_id[t] for t in FEATURED_TAXIDS if t in by_id]
+    return totals, featured
 
 
 def fetch_lineage(conn: psycopg.Connection, taxid: int) -> list[tuple[int, str, str]]:

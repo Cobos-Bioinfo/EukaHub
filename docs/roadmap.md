@@ -282,9 +282,17 @@ under Phase 7 above). Each major one wants a design/scope decision before coding
   dashes and no emojis** in copy or UI, so the old 🎲/🌳 became inline SVG icons
   (`web/src/components/icons.tsx`, `currentColor`) reused in the hero, the app bar,
   and the dashboard tree-link. All hero styles are token-driven so dark mode is
-  automatic (light + dark screenshotted). Build + typecheck clean. Future polish
-  (deferred): the live "at a glance" data strip + featured-clade coverage cards
-  (Direction B) and vertical centring in the viewport.
+  automatic (light + dark screenshotted). Build + typecheck clean.
+  - **[done 2026-08-02] Direction B — the live "at a glance" data strip +
+    featured-group coverage cards.** New cacheable `GET /overview` (global
+    eukaryotic totals + a server-defined featured list, each with assembly/
+    annotation coverage; absent taxids dropped so the sliced CI DB stays robust).
+    `Landing.tsx` renders a non-blocking totals strip (`fmtCompact`) + a responsive
+    grid of featured-group cards (friendly label from `clades.ts`, species count,
+    assembly-coverage meter, dashboard link) — the gap reads instantly (Insects
+    765k species / 0.72% assembled vs Birds 17.4%). 4 slice-safe API tests; 89
+    pass; light + dark screenshotted. Still-deferred polish: vertical centring in
+    the viewport.
 - **[done] Subspecies / infraspecific taxa (2026-08-01)** — decisions: **all
   infraspecific ranks** (subspecies, strain, varietas, forma, isolate, ...),
   **directly-attached counts**. Additive, so the core thesis is untouched: the

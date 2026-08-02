@@ -160,6 +160,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/overview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Overview
+         * @description Landing-page "at a glance": global totals across the eukaryotic tree plus
+         *     a few featured groups with their assembly/annotation coverage — one cacheable
+         *     request so the hero can render live headline numbers + coverage cards.
+         */
+        get: operations["overview_overview_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/quality-config": {
         parameters: {
             query?: never;
@@ -509,6 +531,26 @@ export interface components {
             taxid: number;
         };
         /**
+         * FeaturedClade
+         * @description One featured group on the landing page: its species count and how much of
+         *     it is assembled/annotated. The frontend supplies the friendly display label
+         *     (by taxid); ``name`` is the scientific name as a fallback.
+         */
+        FeaturedClade: {
+            /** Annotation Percent */
+            annotation_percent: number;
+            /** Assemblies */
+            assemblies: number;
+            /** Assembly Percent */
+            assembly_percent: number;
+            /** Name */
+            name: string;
+            /** Species */
+            species: number;
+            /** Taxid */
+            taxid: number;
+        };
+        /**
          * FilterLogic
          * @description How multiple resource-presence filters combine (ported verbatim).
          * @enum {string}
@@ -565,6 +607,35 @@ export interface components {
          * @enum {string}
          */
         MetricFilter: "ass" | "ann" | "rna" | "lng";
+        /**
+         * Overview
+         * @description Landing-page payload: global totals + a handful of featured groups, in one
+         *     cacheable request (served by ``/overview``).
+         */
+        Overview: {
+            /** Featured */
+            featured: components["schemas"]["FeaturedClade"][];
+            totals: components["schemas"]["OverviewTotals"];
+        };
+        /**
+         * OverviewTotals
+         * @description Global "at a glance" totals across the eukaryotic tree (Eukaryota's
+         *     rollup) — the live headline numbers on the landing page.
+         */
+        OverviewTotals: {
+            /** Annotations */
+            annotations: number;
+            /** Assemblies */
+            assemblies: number;
+            /** Long Read */
+            long_read: number;
+            /** Reference Genomes */
+            reference_genomes: number;
+            /** Rna Seq */
+            rna_seq: number;
+            /** Species */
+            species: number;
+        };
         /**
          * QualityStatConfig
          * @description Static chrome for one quality stat — served once by ``/quality-config``
@@ -934,6 +1005,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MetricConfig"][];
+                };
+            };
+        };
+    };
+    overview_overview_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Overview"];
                 };
             };
         };

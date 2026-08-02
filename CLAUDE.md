@@ -423,6 +423,27 @@ passed on the slice unchanged. Verified: full suite green on the slice **and** o
 prod; seed regenerates deterministically; ruff clean repo-wide. Re-run the
 generator only when the schema or needed taxids change.
 
+**Landing "at a glance" data strip + featured groups — done** (2026-08-02, on
+`dev`). First functional feature toward the deploy gate after the CI-DB work; the
+landing page's deferred **Direction B**. New `GET /overview` (one cacheable
+request): global eukaryotic totals (species / assemblies / annotations / RNA-Seq /
+long-read / reference genomes, from Eukaryota's rollup) + a server-defined list of
+**featured groups** (`FEATURED_TAXIDS` = Mammals, Birds, Ray-finned fishes,
+Insects, Fungi, Flowering plants) each with species count + assembly/annotation
+coverage %. A featured taxid absent from `clade_features` is dropped (so the
+sliced CI DB and any rebuild stay robust). `Overview`/`OverviewTotals`/
+`FeaturedClade` schemas, OpenAPI→TS regenerated, `getOverview()` bridge. Frontend:
+`Landing.tsx` renders — **non-blocking, decorative** (hero paints instantly, the
+block is absent while loading / on error) — an at-a-glance totals strip
+(`fmtCompact`: 1.7M / 65.4K / 16.6K / 8.2M) and a responsive grid of
+featured-group cards (friendly label via `cladeLabel()` from `clades.ts`, species
+count, an assembly-coverage meter, link into the dashboard). The gap reads at a
+glance: Insects 765,732 species but **0.72% assembled** vs Birds 17.4%. All CSS
+token-driven, so dark mode is automatic; **light + dark screenshotted** via
+headless Chrome. 4 slice-safe API tests (totals cross-checked against
+`/clade/2759/summary`; Mammalia the stable featured anchor); full suite **89
+passed**; web typecheck+build clean; house style kept (no em dashes / emojis).
+
 ## Read before doing anything
 
 - `docs/data-model.md` — **the core doc.** DB design + taxonomy-tree storage.
@@ -489,11 +510,12 @@ status entry above). The ~42 DB-backed API tests now run in CI against a
 (`test_summary.py:34` → adaptive species-count invariant). Verified green on the
 slice **and** prod.
 
-**NEXT candidates.** With the CI-test-DB follow-up cleared, the remaining threads
-are: (a) a functional feature toward the deploy gate (e.g. a landing "at a glance"
-data strip + featured-clade coverage cards — Direction B from the landing page);
-(b) the remaining enrichment tail; (c) Phase-5 deploy items (still gated on CRG);
-(d) the smaller non-functional follow-ups below.
+**NEXT candidates.** With the CI-test-DB follow-up and the landing "at a glance"
+strip + featured groups (Direction B) both shipped, the remaining threads are:
+(a) more functional features toward the deploy gate (e.g. landing viewport
+centring; deeper featured-group storytelling; other UX polish); (b) the remaining
+enrichment tail; (c) Phase-5 deploy items (still gated on CRG); (d) the smaller
+non-functional follow-ups below.
 
 Tracked non-functional follow-ups (do when relevant): frontend deps on latest
 majors — **npm audit now shows 2 highs** (react-router runtime, low practical

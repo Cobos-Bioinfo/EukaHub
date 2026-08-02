@@ -1979,6 +1979,118 @@ button.tree-outline__name:hover {
   color: var(--muted);
 }
 
+/* ---- Landing "at a glance" strip + featured groups ------------------- */
+.glance {
+  margin-top: clamp(2.5rem, 6vw, 3.5rem);
+}
+.glance__grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.5rem;
+  margin: 0;
+  padding: 1.1rem 0.75rem;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+}
+.glance__stat {
+  display: flex;
+  flex-direction: column-reverse; /* dt then dd in DOM; render value above label */
+  align-items: center;
+  gap: 0.15rem;
+  padding: 0.25rem;
+}
+.glance__value {
+  margin: 0;
+  font-size: clamp(1.5rem, 4.6vw, 2.15rem);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1.05;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.glance__label {
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--muted);
+}
+
+.featured {
+  margin-top: clamp(2.25rem, 5vw, 3rem);
+  text-align: center;
+}
+.featured__heading {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+}
+.featured__sub {
+  margin: 0.35rem auto 0;
+  max-width: 46ch;
+  font-size: 0.9rem;
+  color: var(--ink-2);
+}
+.featured__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 0.75rem;
+  margin-top: 1.25rem;
+}
+.featured__card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.28rem;
+  padding: 0.85rem 0.95rem;
+  text-align: left;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  color: inherit;
+}
+.featured__card:hover {
+  text-decoration: none;
+  border-color: var(--link);
+  box-shadow: var(--shadow);
+}
+.featured__name {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+.featured__species {
+  font-size: 0.82rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.featured__bar {
+  height: 8px;
+  margin-top: 0.35rem;
+  border-radius: 999px;
+  background: var(--track);
+  overflow: hidden;
+}
+.featured__bar-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--link);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.08);
+}
+.featured__cov {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+@media (max-width: 560px) {
+  .glance__grid {
+    grid-template-columns: repeat(2, 1fr);
+    row-gap: 1rem;
+  }
+}
+
 /* ---- Breakdown "data map" -------------------------------------------- */
 .bmap-block {
   margin-top: 2.75rem;

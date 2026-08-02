@@ -56,6 +56,12 @@ export const HERO_CHIPS: Clade[] = [
   FEATURED_CLADES[19], // Flowering plants
 ];
 
+const LABEL_BY_TAXID = new Map(FEATURED_CLADES.map((c) => [c.taxid, c.label]));
+
+/** The friendly display label for a curated taxid, if we have one. Lets the
+ *  landing page show "Mammals" over the API's scientific "Mammalia". */
+export const cladeLabel = (taxid: number): string | undefined => LABEL_BY_TAXID.get(taxid);
+
 /** A random featured taxid, never the one the user is already looking at. */
 export function pickRandomCladeTaxid(exclude?: number): number {
   const pool = FEATURED_CLADES.filter((c) => c.taxid !== exclude);
