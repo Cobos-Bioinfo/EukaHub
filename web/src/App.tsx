@@ -5,7 +5,7 @@ import RandomCladeButton from "./components/RandomCladeButton";
 import RootPicker from "./components/RootPicker";
 import ThemeToggle from "./components/ThemeToggle";
 import { RandomIcon } from "./components/icons";
-import BreakdownLab from "./pages/BreakdownLab";
+import BreakdownPage from "./pages/BreakdownPage";
 import Dashboard from "./pages/Dashboard";
 import Faq from "./pages/Faq";
 import Landing from "./pages/Landing";
@@ -35,8 +35,8 @@ export default function App() {
         <Link className={navClass("/tree/")} to={`/tree/${DEFAULT_TAXID}`}>
           Tree of Life
         </Link>
-        <Link className={navClass("/lab/breakdown/")} to={`/lab/breakdown/${DEFAULT_TAXID}`}>
-          Data map <span className="app__nav-beta">beta</span>
+        <Link className={navClass("/map/")} to={`/map/${DEFAULT_TAXID}`}>
+          Data map
         </Link>
         <div className="app__actions">
           <RootPicker />
@@ -69,7 +69,7 @@ export default function App() {
           <Route path="/" element={<Landing />} />
           <Route path="/clade/:taxid" element={<Dashboard />} />
           <Route path="/tree/:taxid" element={<TreePage />} />
-          <Route path="/lab/breakdown/:taxid" element={<BreakdownLab />} />
+          <Route path="/map/:taxid" element={<BreakdownPage />} />
           <Route path="/faq" element={<Faq />} />
           <Route path="*" element={<p className="notice notice--error">Page not found.</p>} />
         </Routes>
