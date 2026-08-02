@@ -104,6 +104,62 @@ ADR-style. Settled decisions with a one-line why; open forks at the bottom.
   single sequential metric (assembly coverage %), not a categorical palette, so
   the dataviz categorical-separation validator doesn't apply.
 
+## Settled (2026-08-02) — data-model & pipeline enrichment
+
+The pipeline moves off the Phase-1 SQLite bridge to fresh sources, and the data
+model grows from **counts-only** to a **hybrid** that captures per-record
+metadata. The old model reduced every source to `{taxid: count}` and discarded
+everything the fetches returned; the redesign stops discarding it.
+
+- **Hybrid storage (over aggregates-only / full-per-record).** Per-record tables
+  for **assemblies** and **annotations** (bounded: ~68k + ~17k rows), plus the
+  extended additive `clade_features` rollup. **Reads stay aggregated per taxon**
+  — ENA RNA-Seq is ~8.2M runs, too many to serve per-record for the value. This
+  gives drill-down + deep-links where it's cheap, without a giant reads table.
+- **Source split (effort-optimal).**
+  - **NCBI `datasets` CLI → all assemblies + their quality fields.** We already
+    call it; we just **stop discarding** `assembly_level`, `contig_n50`,
+    `total_sequence_length`, `gc_percent`, `refseq_category`, `release_date`,
+    `submitter`, `bioprojects`, FTP url. Assembly quality covers **100%** of the
+    ~68k assemblies.
+  - **Annotrieve (`api/v0`) → annotation richness.** Replace the thin
+    `frequencies/taxid` call with `/annotations` (paginated) to pull **BUSCO**
+    (`complete`/`single_copy`/`duplicated`), **gene counts**
+    (`root_type_counts.gene`, `protein_coding`), transcript stats, source-DB mix,
+    and the direct **GFF `url_path`**. This is where Annotrieve saves us the most
+    effort (we'd otherwise compute BUSCO/gene counts ourselves).
+  - **ENA → reads**, unchanged in source, kept aggregated (optionally add
+    `base_count`).
+- **Annotrieve enriches, does not replace, the assembly count.** Its assembly
+  collection is the **annotated subset** — `/assemblies/frequencies/assembly_level`
+  totals **16,905** (Complete 446 / Chromosome 6,449 / Scaffold 6,677 / Contig
+  3,333), versus our **67,659** total assemblies. So the authoritative count still
+  comes from `datasets`; Annotrieve supplies quality on the annotated ~25%.
+- **New "annotation-quality" dimension (surfaced).** BUSCO complete % and
+  protein-coding gene count become headline stats + sortable breakdown columns —
+  a genuinely new capability, scoped to the reference-quality core (~17k
+  annotated genomes, ~8.5k taxa; the fraction the coverage check quantified).
+- **Distribution stats are computed on demand, not precomputed.** Counts roll up
+  by summation (additive: `clade_features` gains assembly-level composition
+  counts `n_ass_complete/_chromosome/_scaffold/_contig`, `n_reference`, and
+  `s_bases` via the same explode→sum). **Medians/percentiles do not** (median of
+  a subtree ≠ sum of medians), so median N50 / genome size / gene count / BUSCO
+  are computed live from the small per-record tables via an `ltree` subtree
+  aggregation. The per-record tables (~68k / ~17k rows) make live stats + record
+  lists cheap, so we avoid a heavy per-clade quality rollup.
+- **Sequence: data model first, then the breakdown redesign** on top of the new
+  columns (the breakdown was "sparse 4 bars"; enrich the data before redesigning
+  its presentation).
+- **Coupling to a live CRG API is acceptable and synergistic.** Sourcing
+  annotations from Annotrieve makes us a downstream consumer of a guigolab
+  resource — good alignment for the eventual CRG deploy — but the offline build
+  keeps the resumable-snapshot + atomic-swap discipline and pins `api/v0`, so a
+  transient Annotrieve outage never corrupts a served dataset.
+
 ## Open — still to decide
 
-- None — all forks resolved.
+- **Reads `base_count`** — add sequencing *volume* (`s_bases`) beside run counts,
+  or ship run counts only first. Leaning: add it (one extra ENA field).
+- **Quality-stat modelling in `metrics.py`** — annotation-quality is a
+  *distribution stat*, not a count, so it needs a config concept parallel to the
+  count-based `METRICS` (no `c_/s_/p_` triple). Shape TBD in Stage A.

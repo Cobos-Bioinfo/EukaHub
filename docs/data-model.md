@@ -151,6 +151,88 @@ LIMIT :n;
 (We may still materialize the breakdown for the handful of huge common roots as a
 cache — an optimization over a correct general query, not the only path.)
 
+## Enriched data model (2026-08-02) — hybrid per-record + additive rollup
+
+The Phase-1 model was **counts-only** (`clade_features` above): every source was
+reduced to `{taxid: count}` and all other metadata the fetches returned was
+discarded. The enrichment keeps that fast additive rollup and adds two
+**per-record tables** for the metadata worth drilling into. Reads stay
+aggregated (ENA RNA-Seq is ~8.2M runs — too many to serve per-record).
+See [`../DECISIONS.md`](../DECISIONS.md) (2026-08-02) for the source split.
+
+### Per-record tables (drill-down, deep-links, live distribution stats)
+
+```sql
+-- One row per genome assembly. Source: NCBI datasets CLI (all assemblies).
+CREATE TABLE assembly (
+    assembly_accession    TEXT PRIMARY KEY,       -- GCA_.../GCF_...
+    taxid                 INTEGER NOT NULL REFERENCES taxon(taxid),
+    assembly_level        TEXT,      -- Complete Genome | Chromosome | Scaffold | Contig
+    contig_n50            BIGINT,
+    scaffold_n50          BIGINT,
+    total_sequence_length BIGINT,    -- genome size
+    gc_percent            REAL,
+    refseq_category       TEXT,      -- 'reference genome' | 'representative' | NULL
+    release_date          DATE,
+    submitter             TEXT,
+    source_database       TEXT,      -- GenBank | RefSeq
+    bioprojects           TEXT[],    -- deep-link
+    download_url          TEXT       -- deep-link to the actual FASTA
+);
+CREATE INDEX ON assembly (taxid);
+
+-- One row per functional annotation. Source: Annotrieve /annotations (annotated
+-- subset only, ~17k). Carries the quality metadata Annotrieve already computed.
+CREATE TABLE annotation (
+    annotation_id       TEXT PRIMARY KEY,          -- Annotrieve md5 checksum
+    assembly_accession  TEXT REFERENCES assembly(assembly_accession),
+    taxid               INTEGER NOT NULL REFERENCES taxon(taxid),
+    source_database     TEXT,      -- Ensembl | NCBI | ...
+    provider            TEXT,      -- community | ...
+    release_date        DATE,
+    gff_url             TEXT,      -- deep-link to the GFF
+    gene_count          INTEGER,   -- features_summary.root_type_counts.gene
+    protein_coding_count INTEGER,  -- features_statistics ... coding total
+    busco_complete      REAL,      -- busco.complete (%)
+    busco_single_copy   REAL,
+    busco_duplicated    REAL,
+    busco_lineage       TEXT       -- e.g. eukaryota_odb12
+);
+CREATE INDEX ON annotation (taxid);
+```
+
+Both tables key on `taxid` (any rank — an assembly often sits on a strain below
+species). To read "everything under clade X", join to `taxon.path <@ (root path)`
+just like the breakdown; the tables are small (~68k / ~17k), so a subtree scan +
+`GROUP BY` / `percentile_cont` is cheap. **This is why medians are computed live,
+not precomputed:** a median over a subtree is not the sum of child medians, so it
+can't ride the additive rollup — but over ~68k rows a live `ltree` aggregation is
+sub-millisecond, and the same query also returns the per-record list for the
+drill-down UI.
+
+### `clade_features` extension (additive only)
+
+The rollup stays a pure explode→sum (its speed depends on it), so it only gains
+columns that **are** additive — counts, not distribution stats:
+
+```sql
+ALTER TABLE clade_features
+  ADD COLUMN n_ass_complete   INTEGER NOT NULL DEFAULT 0,  -- assemblies by level
+  ADD COLUMN n_ass_chromosome INTEGER NOT NULL DEFAULT 0,
+  ADD COLUMN n_ass_scaffold   INTEGER NOT NULL DEFAULT 0,
+  ADD COLUMN n_ass_contig     INTEGER NOT NULL DEFAULT 0,
+  ADD COLUMN n_reference      INTEGER NOT NULL DEFAULT 0,  -- refseq_category set
+  ADD COLUMN s_bases          BIGINT  NOT NULL DEFAULT 0;  -- ENA base_count sum
+```
+
+These give the breakdown sortable quality columns (e.g. "chromosome-level
+assemblies per clade") without a per-record scan. Distribution stats (median
+N50 / genome size / gene count, best-or-median BUSCO) and the annotation-quality
+dimension are served on demand from `assembly` / `annotation`. The **species-only
+thesis is untouched**: rollup columns still sum over `rank='species'`, and a
+below-species per-record row attaches to its own `taxid` (visible as leaf detail,
+never summed upward) — the same treatment as the existing infraspecific rows.
+
 ## Reuse from Euka-Survey
 
 - The **offline rollup** (`precomputed_clade_features` → `clade_features`).
