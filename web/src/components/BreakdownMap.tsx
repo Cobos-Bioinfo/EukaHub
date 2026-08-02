@@ -1,8 +1,8 @@
 import { hierarchy, treemap, treemapResquarify } from "d3-hierarchy";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 
-import { exportTsvUrl, getBreakdown, getBreakdownQuality } from "../api/queries";
+import { exportTsvUrl, getBreakdown, getBreakdownQuality, getLineage } from "../api/queries";
 import type { CladeSummary, TargetRank, TaxonRef } from "../api/types";
 import { useAsync } from "../hooks/useAsync";
 import { fmt, fmtBp, fmtPct } from "../lib/format";
@@ -118,6 +118,98 @@ interface Hover {
   y: number;
 }
 
+/** The drill trail (root → focus) and the moves over it. On the standalone page
+ *  it lives in the URL as `?d=t1-t2-t3` (the taxids drilled below the root), so
+ *  the browser back/forward buttons walk the drill and a link is shareable; the
+ *  embedded variant keeps it in component state so it never clutters the
+ *  dashboard URL. Trail entries need a name + rank (breadcrumb label + rank
+ *  stepping): an in-session drill carries them straight from the clicked tile,
+ *  and a fresh deep-link load resolves any still-unknown taxids with one lineage
+ *  fetch of the focus (every drilled node is one of its ancestors). */
+function useDrillTrail(root: TaxonRef, rootLineage: TaxonRef[] | undefined, syncUrl: boolean) {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [stateTrail, setStateTrail] = useState<TaxonRef[]>([root]);
+  const [clicked, setClicked] = useState<Record<number, TaxonRef>>({});
+
+  // Embedded variant only: reset to the new root when the parent swaps clade.
+  useEffect(() => {
+    if (!syncUrl) setStateTrail([root]);
+  }, [root.taxid, syncUrl]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const drillTaxids = useMemo(() => {
+    if (!syncUrl) return [];
+    return (searchParams.get("d") ?? "")
+      .split("-")
+      .map(Number)
+      .filter((n) => Number.isInteger(n) && n > 0);
+  }, [syncUrl, searchParams]);
+
+  const focusTaxid = drillTaxids.length ? drillTaxids[drillTaxids.length - 1] : root.taxid;
+  // Names/ranks we already hold: the root, its lineage, and tiles clicked this
+  // session. Anything left is a deep-link node we must look up.
+  const known = useMemo(() => {
+    const m = new Map<number, TaxonRef>([[root.taxid, root]]);
+    for (const t of rootLineage ?? []) m.set(t.taxid, t);
+    for (const t of Object.values(clicked)) m.set(t.taxid, t);
+    return m;
+  }, [root, rootLineage, clicked]);
+  const needLookup = syncUrl && drillTaxids.some((id) => !known.has(id));
+  const recon = useAsync(
+    () => (needLookup ? getLineage(focusTaxid) : Promise.resolve(null)),
+    [needLookup, focusTaxid],
+  );
+
+  const trail = useMemo<TaxonRef[]>(() => {
+    if (!syncUrl) return stateTrail;
+    const fetched = new Map<number, TaxonRef>();
+    for (const t of recon.data?.lineage ?? []) fetched.set(t.taxid, t);
+    const out: TaxonRef[] = [root];
+    for (const id of drillTaxids) {
+      const ref = known.get(id) ?? fetched.get(id);
+      if (!ref) break; // still resolving — stop at what we can name
+      out.push(ref);
+    }
+    return out;
+  }, [syncUrl, stateTrail, root, drillTaxids, known, recon.data]);
+
+  // True while a deep-link trail is still being named (hold the breakdown fetch).
+  const resolving = syncUrl && trail.length < drillTaxids.length + 1;
+
+  const drillTo = (n: CladeSummary) => {
+    const ref: TaxonRef = { taxid: n.taxid, name: n.name, rank: n.rank };
+    if (!syncUrl) {
+      setStateTrail((t) => [...t, ref]);
+      return;
+    }
+    setClicked((c) => ({ ...c, [n.taxid]: ref }));
+    setSearchParams(
+      (p) => {
+        const q = new URLSearchParams(p);
+        q.set("d", [...drillTaxids, n.taxid].join("-"));
+        return q;
+      },
+      { replace: false },
+    );
+  };
+
+  // Truncate the trail to keep entries [0..i] (i is a trail index; 0 = root).
+  const truncateTo = (i: number) => {
+    if (!syncUrl) {
+      setStateTrail((tr) => tr.slice(0, i + 1));
+      return;
+    }
+    const keep = drillTaxids.slice(0, i); // trail index i keeps i drilled taxids
+    setSearchParams((p) => {
+      const q = new URLSearchParams(p);
+      if (keep.length) q.set("d", keep.join("-"));
+      else q.delete("d");
+      return q;
+    });
+  };
+
+  return { trail, resolving, drillTo, truncateTo };
+}
+
 /** The rank breakdown as a click-to-drill "data landscape". Each tile is a
  *  subgroup at the next rank down; area is a chosen size (species or assemblies),
  *  colour is a chosen lens (coverage or quality) on one theme-aware ramp. Big and
@@ -139,25 +231,22 @@ export default function BreakdownMap({
   variant?: "page" | "embed";
 }) {
   const navigate = useNavigate();
-  const [trail, setTrail] = useState<TaxonRef[]>([root]);
+  const { trail, resolving, drillTo, truncateTo } = useDrillTrail(root, rootLineage, variant === "page");
   const [lensKey, setLensKey] = useState("ass");
   const [sizeBy, setSizeBy] = useState<SizeBy>("species");
   const [hover, setHover] = useState<Hover | null>(null);
-
-  // Reset to the given root whenever the parent changes it (new clade).
-  useEffect(() => setTrail([root]), [root.taxid]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const focus = trail[trail.length - 1];
   const rootRanks = useMemo(() => (rootLineage ?? []).map((t) => t.rank), [rootLineage]);
   const targetRank = targetRankFor(focus, rootRanks);
 
   const bd = useAsync(
-    () => (targetRank ? getBreakdown(focus.taxid, { rank: targetRank, sort: "n_rows", exclude_empty: false, limit: 250 }) : Promise.resolve(null)),
-    [focus.taxid, targetRank],
+    () => (targetRank && !resolving ? getBreakdown(focus.taxid, { rank: targetRank, sort: "n_rows", exclude_empty: false, limit: 250 }) : Promise.resolve(null)),
+    [focus.taxid, targetRank, resolving],
   );
   const quality = useAsync(
-    () => (targetRank ? getBreakdownQuality(focus.taxid, targetRank) : Promise.resolve(null)),
-    [focus.taxid, targetRank],
+    () => (targetRank && !resolving ? getBreakdownQuality(focus.taxid, targetRank) : Promise.resolve(null)),
+    [focus.taxid, targetRank, resolving],
   );
   const qmap = useMemo(() => {
     const m = new Map<number, BucketStats>();
@@ -224,7 +313,7 @@ export default function BreakdownMap({
   }, [items, sizeBy, size.w, size.h, ramp, noData, dark, lens, qmap]);
 
   const activate = (n: CladeSummary) => {
-    if (nextRank(n.rank)) setTrail((t) => [...t, { taxid: n.taxid, name: n.name, rank: n.rank }]);
+    if (nextRank(n.rank)) drillTo(n);
     else navigate(`/clade/${n.taxid}`);
   };
 
@@ -269,7 +358,7 @@ export default function BreakdownMap({
           <span key={t.taxid} className="bmap-crumb">
             {i > 0 && <span className="bmap-crumb__sep">›</span>}
             {i < trail.length - 1 ? (
-              <button type="button" className="bmap-crumb__link" onClick={() => setTrail((tr) => tr.slice(0, i + 1))}>
+              <button type="button" className="bmap-crumb__link" onClick={() => truncateTo(i)}>
                 {t.name}
               </button>
             ) : (
@@ -313,7 +402,7 @@ export default function BreakdownMap({
       </div>
 
       <div className={"bmap bmap--" + variant} ref={boxRef}>
-        {bd.loading ? (
+        {bd.loading || resolving ? (
           <p className="notice">Mapping…</p>
         ) : bd.error ? (
           <p className="notice notice--error">{bd.error}</p>

@@ -108,7 +108,7 @@ export default function Dashboard() {
 
           {showBreakdown && (
             <BreakdownMap
-              key={taxid}
+              key={`bmap-${taxid}`}
               root={{ taxid, name: s.name, rank: s.rank }}
               rootLineage={lineage.data?.lineage}
               heading="Breakdown"
@@ -116,9 +116,9 @@ export default function Dashboard() {
             />
           )}
           {showInfra && (
-            <SubspeciesSection key={taxid} taxid={taxid} rank={s.rank} metrics={metrics.data} />
+            <SubspeciesSection key={`subsp-${taxid}`} taxid={taxid} rank={s.rank} metrics={metrics.data} />
           )}
-          {hasRecords && <RecordBrowser key={taxid} taxid={taxid} />}
+          {hasRecords && <RecordBrowser key={`rec-${taxid}`} taxid={taxid} />}
         </div>
       </div>
     </section>
