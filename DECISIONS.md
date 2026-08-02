@@ -193,11 +193,18 @@ everything the fetches returned; the redesign stops discarding it.
   additive, so it can't ride `clade_features` — consistent with the Stage-C live
   stats. Fetched async so the map paints instantly. Worst case ~1 s
   (Eukaryota→phylum); acceptable async + cached, optimisation candidate later.
-- **The old breakdown stays until the map replaces it.** The map ships on a beta
-  route (`/lab/breakdown/:taxid`); `BreakdownSection`/`DivergentBarChart` are
-  untouched on the dashboard. Promoting the map (and dropping the old one) is
-  deferred to a polish pass (user: "when we have something more polished we may
-  discuss finer details").
+- **The map replaced the old breakdown** (promoted 2026-08-02, commit `8ffb026`).
+  Extracted into a reusable `BreakdownMap`; it is the dashboard's Breakdown section
+  (embed variant) and the standalone `/map/:taxid` page (nav "Data map", no beta).
+  `BreakdownSection`/`DivergentBarChart`/`lib/breakdown` are deleted. The TSV export
+  (`export.tsv`) is preserved as a "Download TSV" action; the old client-side
+  "displayed rows" export was dropped. Accessibility is a **"View as a list"**
+  fallback (the map's analogue of the tree's `TreeOutline`), since a treemap is not
+  keyboard-navigable on its own.
+- **House style / no AI-writing tells in UI copy** (user, 2026-08-02). No em dashes
+  in user-facing copy (they read as machine-written and break house style); em
+  dashes only survive as the N/A placeholder glyph and in code comments (matching
+  the existing codebase). See the writing-style memory.
 
 ## Open — still to decide
 

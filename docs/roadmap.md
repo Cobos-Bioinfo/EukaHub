@@ -85,16 +85,20 @@ links); ENA → reads (aggregated, run counts only — no `base_count`).
     tiles + an ordinal-blue assembly-contiguity bar) and `RecordBrowser` (tabbed
     Assemblies/Annotations drill-down with real NCBI/GFF deep links, sortable,
     load-more) on every dashboard.
-  - **Breakdown redesign — the click-to-drill "data map"** (`/lab/breakdown/:taxid`,
-    beta nav link). A proportional treemap (`d3-hierarchy`): area = species or
-    assemblies, colour = a lens (3 coverage + 4 quality) on one theme-aware ramp.
-    Big + pale = a big clade with little data (the gap). Clicking a tile drills to
-    the next meaningful rank (auto-jumps past rankless clades → no rank dropdown);
-    breadcrumb climbs back. New `GET /clade/{taxid}/breakdown/quality?rank=R`
-    (per-bucket BUSCO/genes/genome-size/N50) powers the quality lenses. **The user
-    picked the treemap over a heatmap + a scatter** and confirmed the direction;
-    it's still *beta* — polish + replacing the old `BreakdownSection` come next.
-    The old breakdown is untouched meanwhile.
+  - **Breakdown redesign — the click-to-drill "data map"** (default breakdown;
+    standalone at `/map/:taxid`, nav "Data map"). A proportional treemap
+    (`d3-hierarchy`): area = species or assemblies, colour = a lens (3 coverage +
+    4 quality) on one theme-aware ramp. Big + pale = a big clade with little data
+    (the gap). Clicking a tile drills to the next meaningful rank (auto-jumps past
+    rankless clades, so no rank dropdown); breadcrumb climbs back. New `GET
+    /clade/{taxid}/breakdown/quality?rank=R` (per-bucket BUSCO/genes/genome-size/
+    N50) powers the quality lenses. **The user picked the treemap over a heatmap +
+    a scatter.** Now **promoted**: the reusable `BreakdownMap` is the dashboard's
+    Breakdown section (embed) and the standalone `/map` page; the old
+    `BreakdownSection`/`DivergentBarChart`/`lib/breakdown` are deleted. Polished
+    with a keyboard/SR list fallback, Open/Full-screen/Download-TSV actions,
+    small-tile tooltips, and copy free of em dashes. Remaining niceties: URL-sync
+    the drill path, true load-more past the 250-tile cap.
 
 ## Phase 2 — API
 - FastAPI endpoints: `summary`, `breakdown` (filter/sort/limit pushed down),
