@@ -1,10 +1,18 @@
 import { Link, useParams } from "react-router-dom";
 
-import { getAbout, getLineage, getMetricsConfig, getSummary } from "../api/queries";
+import {
+  getAbout,
+  getLineage,
+  getMetricsConfig,
+  getQualityConfig,
+  getSummary,
+} from "../api/queries";
 import AboutCard from "../components/AboutCard";
 import Breadcrumb from "../components/Breadcrumb";
 import BreakdownSection from "../components/BreakdownSection";
 import MetricCard from "../components/MetricCard";
+import QualitySection from "../components/QualitySection";
+import RecordBrowser from "../components/RecordBrowser";
 import SpeciesLinks from "../components/SpeciesLinks";
 import SubspeciesSection from "../components/SubspeciesSection";
 import { TreeIcon } from "../components/icons";
@@ -20,6 +28,7 @@ export default function Dashboard() {
   const summary = useAsync(() => getSummary(taxid), [taxid]);
   const lineage = useAsync(() => getLineage(taxid), [taxid]);
   const metrics = useAsync(() => getMetricsConfig(), []);
+  const quality = useAsync(() => getQualityConfig(), []);
   // Decorative Wikipedia context — never gates the page; rendered only if it
   // resolves to a summary, its error deliberately ignored.
   const about = useAsync(() => getAbout(taxid), [taxid]);
@@ -40,6 +49,9 @@ export default function Dashboard() {
   const showLinks = isSpecies || isLeaf;
   const showBreakdown = !isSpecies && !isLeaf;
   const showInfra = isSpecies || isLeaf;
+  // Per-record drill-down only when the clade actually has assemblies or
+  // annotations (avoids an empty browser + its fetches for data-less taxa).
+  const hasRecords = s.resources.ass.total > 0 || s.resources.ann.total > 0;
   const rankWord = s.rank && s.rank !== "no rank" ? s.rank : "infraspecific taxon";
 
   return (
@@ -92,6 +104,10 @@ export default function Dashboard() {
             })}
           </div>
 
+          {quality.data && (
+            <QualitySection taxid={taxid} quality={quality.data} composition={s.composition} />
+          )}
+
           {showBreakdown && (
             <BreakdownSection
               key={taxid}
@@ -104,6 +120,7 @@ export default function Dashboard() {
           {showInfra && (
             <SubspeciesSection key={taxid} taxid={taxid} rank={s.rank} metrics={metrics.data} />
           )}
+          {hasRecords && <RecordBrowser key={taxid} taxid={taxid} />}
         </div>
       </div>
     </section>
