@@ -451,13 +451,46 @@ the 250-tile cap** (decided against — a treemap can't show >250 legibly and TS
 has the full data; commit `c86f8b5`), and the **`breakdown/quality` latency**
 (optimised ~3x, `1.19s → 0.39s`, commit `c86f8b5`). Also shipped this session:
 the **rankless-clade breakdown fix**, the **light→deep gradient unification +
-per-lens coverage/quality colours**, and a **duplicate-key fix**. Next candidates:
-a **CI test database** (bigger than it looks — a few tests assert production-scale
-facts like Eukaryota `n_rows > 1M`, so a CI seed needs either the full dataset or
-those scale-only assertions relaxed alongside a consistent-slice seed), the
-remaining enrichment tail (below), a functional feature toward the deploy gate
-(e.g. a landing "at a glance" data strip), and Phase-5 deploy items (still gated
-on CRG).
+per-lens coverage/quality colours**, a **duplicate-key fix**, and the **breakdown
+"level" bar** (rank legibility, commit `bce9dd7`).
+
+**NEXT SESSION — implement the CI test database** (planned 2026-08-02, not yet
+started; see the plan below). The ~42 DB-backed API tests currently *skip* in CI
+(the `client` fixture skips when Postgres is unreachable), so API/query
+regressions aren't caught. Plan:
+- **Approach:** a compact **consistent-slice seed** + one adaptive assertion. NOT
+  the full 2.5 GB dataset (too big) and NOT running the pipeline in CI (needs
+  network + a 500 MB taxdump). CI checks code/query logic; data-scale correctness
+  is already validated at build time.
+- **Only one production-scale pin** exists: `test_summary.py:34` `n_rows >
+  1_000_000`. Make it adaptive → `n_rows == (count of rank='species' under 2759)`,
+  a stronger invariant that passes on both prod and the slice. No other test
+  changes expected (the rest are relational; the self-querying ones in
+  `test_summary.py` adapt/skip on small data).
+- **Seed** (`api/tests/seed.sql`, committed, ~tens of KB): real ancestor chain
+  `root(1)→131567→Eukaryota(2759)→…→Mammalia(40674)`; a small Mammalia subtree
+  with breadth for breakdowns (~3 orders incl. Carnivora+Primates, a few
+  families/genera, ~10–20 species) including H. sapiens (9606) + its 2 subspecies;
+  a few dozen `assembly`/`annotation` rows (some with BUSCO), ≥1 assembly on a
+  subspecies (infraspecific test) and ≥1 taxon left out of the rollup (zero-fill
+  test); a minimal `Bacteria→…→E. coli(562)` branch (search scope test asserts 562
+  is excluded — `test_search.py:41`); `clade_features` **recomputed** for the
+  sliced universe via `eukahub_pipeline`'s rollup so `n_rows` is exact/consistent.
+- **Generator:** a one-off script (run locally vs the full DB) selects the taxa,
+  pulls their real records, recomputes the rollup, emits `seed.sql`. Re-run only
+  when schema/needed-taxids change.
+- **CI** (`.github/workflows/ci.yml`): add a `postgres:17` service; apply
+  `infra/postgres/init/*.sql` (ltree + schema), load `seed.sql`, set
+  `DATABASE_URL`; the existing pytest step then connects and the 42 tests run.
+- **Local verify (no docker/sudo):** create a throwaway `eukahub_test` DB in the
+  running Postgres (`localhost:5432`, `eukahub`/`eukahub`), load schema + seed,
+  point `DATABASE_URL` at it, `pytest api/tests` → iterate to green there first.
+- **Effort ~half a day;** keep the seed tiny so CI stays fast; all public NCBI
+  data, no secrets.
+
+Other candidates after that: the remaining enrichment tail (below), a functional
+feature toward the deploy gate (e.g. a landing "at a glance" data strip), and
+Phase-5 deploy items (still gated on CRG).
 
 Tracked non-functional follow-ups (do when relevant): frontend deps on latest
 majors — **npm audit now shows 2 highs** (react-router runtime, low practical
