@@ -369,9 +369,22 @@ duplicate-key warning: `Dashboard` rendered `BreakdownMap`/`SubspeciesSection`/
 `RecordBrowser` as siblings all keyed `key={taxid}`, colliding whenever a
 data-rich clade shows the map + records together; the remount keys are now
 namespaced (`bmap-`/`subsp-`/`rec-`). Build clean; deep-link reconstruction +
-clean console verified via headless Chrome (Eutheria→Carnivora→Felidae). Still
-open from the list: true "load more" past the 250-tile cap, and the ~1s
-worst-case `breakdown/quality` latency on Eukaryota→phylum.
+clean console verified via headless Chrome (Eutheria→Carnivora→Felidae).
+
+**Breakdown/quality perf + the "load more" decision** (2026-08-02, on `dev`,
+commit `c86f8b5`). Cleared the last two data-map niceties. (1) **"Load more" past
+the 250-tile cap: decided NOT to build it.** A breakdown exceeds 250 in only ~0.5%
+of clades (603 of 105k genera, 61 of 11k families, Eukaryota→phylum is 79), and a
+treemap can't legibly show >250 tiles anyway (they become slivers); the full data
+is already one click away (Download TSV streams the complete breakdown) and
+drilling reduces the count. So the cap stays. (2) **`breakdown/quality` ~3x
+faster.** It matched every per-record row to its rank-R ancestor via ltree
+containment, so Eukaryota→phylum ran a 69,703×79 nested loop (~5.4M filtered
+comparisons) per source (~1.2s). Now a CTE resolves each *distinct* record-bearing
+taxon to its bucket once, then the records join back for the stats — same output
+(21 targeted + full 68-test suite green), work scales with distinct taxa (~29k)
+not records (~88k). Live: Eukaryota→phylum **1.19s → 0.39s**. Repeat hits were
+already covered by the `Cache-Control` browser cache; this fixes the first hit.
 
 ## Read before doing anything
 
@@ -422,13 +435,19 @@ drill-down + quality dimension, and the UI surfaces both: dashboard quality card
 user's chosen direction, live on `/lab/breakdown/:taxid` behind a beta nav link).
 
 **Resume here.** Stage D is done and the data map is promoted + polished (see the
-two Status entries above). Remaining data-map niceties, none blocking: **URL-sync
-the drill path** (back-button + shareable deep links; deliberately skipped so far
-because the internal trail gives a cleaner breadcrumb than re-rooting the route);
-a true **"load more" past the 250-tile cap** (today it shows the largest 250 with
-a note); and the ~1 s worst-case `breakdown/quality` latency on Eukaryota→phylum
-(two grouped subtree aggregations, fine async + cached, optimisable). Then the
-remaining enrichment tail (below) and Phase-5 deploy items (still gated on CRG).
+Status entries above). The three data-map niceties from this list are now all
+resolved: **URL-sync the drill path** (done, commit `1839a5b`), **"load more" past
+the 250-tile cap** (decided against — a treemap can't show >250 legibly and TSV
+has the full data; commit `c86f8b5`), and the **`breakdown/quality` latency**
+(optimised ~3x, `1.19s → 0.39s`, commit `c86f8b5`). Also shipped this session:
+the **rankless-clade breakdown fix**, the **light→deep gradient unification +
+per-lens coverage/quality colours**, and a **duplicate-key fix**. Next candidates:
+a **CI test database** (bigger than it looks — a few tests assert production-scale
+facts like Eukaryota `n_rows > 1M`, so a CI seed needs either the full dataset or
+those scale-only assertions relaxed alongside a consistent-slice seed), the
+remaining enrichment tail (below), a functional feature toward the deploy gate
+(e.g. a landing "at a glance" data strip), and Phase-5 deploy items (still gated
+on CRG).
 
 Tracked non-functional follow-ups (do when relevant): frontend deps on latest
 majors — **npm audit now shows 2 highs** (react-router runtime, low practical
