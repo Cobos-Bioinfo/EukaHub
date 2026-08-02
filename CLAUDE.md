@@ -270,10 +270,24 @@ reused): **2.9M taxon, 69,703 assemblies, 18,475 annotations (15,409 with BUSCO)
 exactly; composition level-split sums to `s_ass`. 17 pipeline tests pass. Rebuild
 needs a fresh volume (`sudo docker compose -f infra/docker-compose.yml down -v &&
 up -d db`) then `uv run --package eukahub-pipeline python -m eukahub_pipeline.build
---skip-download`. **Next: Stage C** — API drill-down endpoints
-(`/taxon/{taxid}/assemblies` + `/annotations` with live distribution stats),
-widen `summary`/`breakdown` with the composition columns + quality dimension,
-regenerate TS types. Then Stage D (dashboard + breakdown redesign).
+--skip-download`.
+
+**Stage C DONE** (2026-08-02, on `dev`, commit `901e66d`). The enrichment reaches
+the API. New: `GET /taxon/{taxid}/assemblies` + `/annotations` (real per-record
+lists with deep links, paginated, PK tiebreaker for stable paging) each carrying
+**live distribution stats** (median genome size / contig N50; best BUSCO / median
+protein-coding genes) computed from the per-record tables via one `ltree` subtree
+query; `GET /quality-config` (chrome for the quality dimension, analogue of
+`/metrics-config`, from `QUALITY_STATS`). `summary`/`breakdown`/`children` now
+carry `composition` (assembly-level split + reference count) — `CladeMetadata`
+gained the additive columns, so `SortColumn` sorts by them too. dict_row +
+field-aliased SELECTs; stats built config-driven from `QUALITY_STATS`. OpenAPI +
+TS regenerated; web typecheck+build clean; 79 tests pass (data-dependent tests
+relaxed to rebuild-safe invariants). **Next: Stage D** — the frontend: annotation-
+quality cards + genome-size/N50 on the dashboard, per-record "Get the data"
+deep-link lists (from the two new endpoints), then the **breakdown redesign**
+(design-first, 2-3 directions). The web app still renders the old 4-metric shape
+until Stage D lands.
 
 ## Read before doing anything
 
