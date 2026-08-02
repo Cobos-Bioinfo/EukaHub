@@ -137,10 +137,16 @@ links); ENA → reads (aggregated, run counts only — no `base_count`).
   healthchecks, only web published). User-verified end-to-end.
 - **[done]** Health checks (`/health` liveness, `/health/ready` DB) + structured
   JSON logging (`logging_config.py`, per-request middleware).
-- **[done]** CI (`.github/workflows/ci.yml`): ruff lint + pytest (pipeline/core;
-  the DB-backed API tests skip without a seeded DB — follow-up) + web
+- **[done]** CI (`.github/workflows/ci.yml`): ruff lint + pytest + web
   typecheck/build; secret scan (gitleaks) + dependency audits (pip-audit, npm
   audit) + Dependabot. Also fixed 8 pre-existing repo-wide lint errors.
+- **[done 2026-08-02]** CI test database: the DB-backed API tests no longer skip
+  in CI. A `postgres:17` service is seeded with a compact consistent slice
+  (`scripts/generate_ci_seed.py` → committed `api/tests/seed.sql`, applied by
+  `scripts/load_ci_db.py`) whose `clade_features` is recomputed via the pipeline
+  rollup so every aggregate is exact; the suite runs 85 tests with zero skips.
+  Only one assertion changed (`test_summary.py` `n_rows` → adaptive species-count
+  invariant, exact on both prod and the slice).
 - Scheduled offline **dataset** rebuild (GitHub Actions cron or Nextflow) keeping
   the resumable-snapshot + atomic-swap discipline; staging vs prod DB; basic
   metrics.

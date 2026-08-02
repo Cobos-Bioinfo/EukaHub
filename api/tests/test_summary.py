@@ -30,8 +30,15 @@ def test_summary_eukaryota(client):
     assert body["name"] == "Eukaryota"
     assert body["rank"] == "domain"
     assert body["is_infraspecific"] is False
-    # Eukaryota is the whole app domain — a very large species count.
-    assert body["n_rows"] > 1_000_000
+    # n_rows is the count of species in the subtree. Assert exactly that (a
+    # stronger, dataset-size-agnostic invariant than a magic threshold), so it
+    # holds on the full production DB *and* on the compact CI seed slice.
+    with psycopg.connect(database_url()) as conn:
+        species = conn.execute(
+            "SELECT count(*) FROM taxon "
+            "WHERE rank = 'species' AND path <@ (SELECT path FROM taxon WHERE taxid = 2759)"
+        ).fetchone()[0]
+    assert body["n_rows"] == species
 
     assert set(body["resources"]) == {"ass", "ann", "rna", "lng"}
     for res in body["resources"].values():

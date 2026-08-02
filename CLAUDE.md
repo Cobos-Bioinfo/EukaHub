@@ -396,6 +396,33 @@ the subtitle to the size/colour encoding, and the single-node drill trail is now
 hidden at the root (the level bar names it; the trail reappears as a clickable
 path once you drill). Standalone map + dashboard embed; light+dark screenshotted.
 
+**CI test database — done** (2026-08-02, on `dev`). The ~42 DB-backed API tests
+used to *skip* in CI (the `client` fixture skips when Postgres is unreachable),
+so API/query regressions went uncaught. Now CI runs a `postgres:17` service
+seeded with a **compact consistent slice** and the tests run against it (68 API
++ 17 pipeline/core = **85, zero skips**). Pieces: (1) `scripts/generate_ci_seed.py`
+— a one-off generator (run locally vs the full DB) that picks a taxon slice
+(ancestor-closure of ~10 anchor species so every lineage + `parent_id` chain is
+complete; Eukaryota's 21 real direct children for the tree/children tests; a
+minimal Bacteria→E. coli branch for the search-scope test), pulls real
+`assembly`/`annotation` records (capped: human 120 assemblies / 20 annotations
+so the record tests' `>100`/`>10` hold while the file stays tiny), reconstructs
+per-species reads from the prod rollup, and **recomputes `clade_features` for the
+slice via the pipeline's own rollup scoped to Eukaryota** — so `n_rows` and every
+aggregate are exact and self-consistent with the seeded records. (2)
+`api/tests/seed.sql` — the committed ~104 KB output (118 taxa / 88 clade rows /
+232 assemblies / 69 annotations). (3) `scripts/load_ci_db.py` — applies
+`infra/postgres/init/*.sql` + the seed to any `DATABASE_URL` (used by CI and
+handy locally). (4) CI (`.github/workflows/ci.yml`): the `python` job gains the
+Postgres service + a "Load CI test database" step + `DATABASE_URL`. **Only one
+test changed** (as planned): `test_summary.py:34`'s `n_rows > 1_000_000` magic
+pin became adaptive — `n_rows == (count of rank='species' under 2759)`, a
+stronger invariant that holds on **both** the full prod DB and the slice. All
+other DB-backed tests were already rebuild-safe (relational invariants), so they
+passed on the slice unchanged. Verified: full suite green on the slice **and** on
+prod; seed regenerates deterministically; ruff clean repo-wide. Re-run the
+generator only when the schema or needed taxids change.
+
 ## Read before doing anything
 
 - `docs/data-model.md` — **the core doc.** DB design + taxonomy-tree storage.
@@ -454,49 +481,25 @@ the **rankless-clade breakdown fix**, the **light→deep gradient unification +
 per-lens coverage/quality colours**, a **duplicate-key fix**, and the **breakdown
 "level" bar** (rank legibility, commit `bce9dd7`).
 
-**NEXT SESSION — implement the CI test database** (planned 2026-08-02, not yet
-started; see the plan below). The ~42 DB-backed API tests currently *skip* in CI
-(the `client` fixture skips when Postgres is unreachable), so API/query
-regressions aren't caught. Plan:
-- **Approach:** a compact **consistent-slice seed** + one adaptive assertion. NOT
-  the full 2.5 GB dataset (too big) and NOT running the pipeline in CI (needs
-  network + a 500 MB taxdump). CI checks code/query logic; data-scale correctness
-  is already validated at build time.
-- **Only one production-scale pin** exists: `test_summary.py:34` `n_rows >
-  1_000_000`. Make it adaptive → `n_rows == (count of rank='species' under 2759)`,
-  a stronger invariant that passes on both prod and the slice. No other test
-  changes expected (the rest are relational; the self-querying ones in
-  `test_summary.py` adapt/skip on small data).
-- **Seed** (`api/tests/seed.sql`, committed, ~tens of KB): real ancestor chain
-  `root(1)→131567→Eukaryota(2759)→…→Mammalia(40674)`; a small Mammalia subtree
-  with breadth for breakdowns (~3 orders incl. Carnivora+Primates, a few
-  families/genera, ~10–20 species) including H. sapiens (9606) + its 2 subspecies;
-  a few dozen `assembly`/`annotation` rows (some with BUSCO), ≥1 assembly on a
-  subspecies (infraspecific test) and ≥1 taxon left out of the rollup (zero-fill
-  test); a minimal `Bacteria→…→E. coli(562)` branch (search scope test asserts 562
-  is excluded — `test_search.py:41`); `clade_features` **recomputed** for the
-  sliced universe via `eukahub_pipeline`'s rollup so `n_rows` is exact/consistent.
-- **Generator:** a one-off script (run locally vs the full DB) selects the taxa,
-  pulls their real records, recomputes the rollup, emits `seed.sql`. Re-run only
-  when schema/needed-taxids change.
-- **CI** (`.github/workflows/ci.yml`): add a `postgres:17` service; apply
-  `infra/postgres/init/*.sql` (ltree + schema), load `seed.sql`, set
-  `DATABASE_URL`; the existing pytest step then connects and the 42 tests run.
-- **Local verify (no docker/sudo):** create a throwaway `eukahub_test` DB in the
-  running Postgres (`localhost:5432`, `eukahub`/`eukahub`), load schema + seed,
-  point `DATABASE_URL` at it, `pytest api/tests` → iterate to green there first.
-- **Effort ~half a day;** keep the seed tiny so CI stays fast; all public NCBI
-  data, no secrets.
+**CI test database — DONE** (2026-08-02, on `dev`; see the "CI test database"
+status entry above). The ~42 DB-backed API tests now run in CI against a
+`postgres:17` service seeded with a compact consistent slice
+(`scripts/generate_ci_seed.py` → `api/tests/seed.sql`, loaded by
+`scripts/load_ci_db.py`); 85 tests, zero skips. Exactly one assertion changed
+(`test_summary.py:34` → adaptive species-count invariant). Verified green on the
+slice **and** prod.
 
-Other candidates after that: the remaining enrichment tail (below), a functional
-feature toward the deploy gate (e.g. a landing "at a glance" data strip), and
-Phase-5 deploy items (still gated on CRG).
+**NEXT candidates.** With the CI-test-DB follow-up cleared, the remaining threads
+are: (a) a functional feature toward the deploy gate (e.g. a landing "at a glance"
+data strip + featured-clade coverage cards — Direction B from the landing page);
+(b) the remaining enrichment tail; (c) Phase-5 deploy items (still gated on CRG);
+(d) the smaller non-functional follow-ups below.
 
 Tracked non-functional follow-ups (do when relevant): frontend deps on latest
 majors — **npm audit now shows 2 highs** (react-router runtime, low practical
-risk; the dev-only openapi-typescript chain cleared upstream); seed a **small CI
-database** so the API tests run in CI, and caching layers (nginx `proxy_cache`/CDN,
-ETag/304). **A headless browser IS available** in the dev env via
+risk; the dev-only openapi-typescript chain cleared upstream); and caching layers
+(nginx `proxy_cache`/CDN, ETag/304). **A headless browser IS available** in the
+dev env via
 `google-chrome-stable` — use it to screenshot/verify UI changes (this note
 supersedes earlier "no headless browser" remarks).
 

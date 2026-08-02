@@ -16,6 +16,25 @@ jobs:
   python:
     name: Python — lint, tests, audit
     runs-on: ubuntu-latest
+    services:
+      # Throwaway Postgres seeded with a compact slice of the dataset
+      # (api/tests/seed.sql) so the DB-backed API tests run in CI instead of
+      # skipping. ltree + pg_trgm ship with the official image.
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: eukahub
+          POSTGRES_PASSWORD: eukahub
+          POSTGRES_DB: eukahub
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U eukahub"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql://eukahub:eukahub@localhost:5432/eukahub
     steps:
       - uses: actions/checkout@v4
       - name: Install uv
@@ -24,11 +43,14 @@ jobs:
           enable-cache: true
       - name: Ruff lint
         run: uv run ruff check .
+      - name: Load CI test database
+        # Applies the schema + seed slice to the service Postgres. The API tests
+        # then connect (via DATABASE_URL) and run instead of skipping.
+        run: uv run python scripts/load_ci_db.py
       - name: Tests
-        # No Postgres in CI, so the DB-backed API tests skip cleanly (see
-        # api/tests/conftest.py) while the pipeline/core unit tests run. Seeding
-        # a CI database to also run the integration tests is a documented
-        # follow-up (see docs/roadmap.md).
+        # The DB-backed API integration tests now run against the seeded service
+        # DB alongside the pipeline/core unit tests. Regenerate the seed with
+        # scripts/generate_ci_seed.py when the schema or needed taxids change.
         run: uv run pytest -q
       - name: Dependency audit (pip-audit)
         # Informational: dependencies are pinned in uv.lock; a fresh advisory
