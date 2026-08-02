@@ -55,17 +55,23 @@ annotation footprint).
 `api/v0`** → annotation richness (BUSCO, gene/transcript counts, source-DB, GFF
 links); ENA → reads (aggregated, run counts only — no `base_count`).
 
-- **Stage A — schema + config.** New `assembly` / `annotation` tables + the
+- **Stage A [done 2026-08-02].** New `assembly` / `annotation` tables + the
   additive `clade_features` extension (`n_ass_*`, `n_reference`) in
-  `infra/postgres/init`. Extend `core/metrics.py`: a config concept for the
+  `infra/postgres/init`. `core/metrics.py`: `QualityStat` / `QUALITY_STATS` — the
   **annotation-quality** stats (BUSCO %, gene count) *parallel* to the count-based
-  `METRICS` (they're distribution stats, no `c_/s_/p_` triple).
-- **Stage B — pipeline.** Enhance the `datasets` fetch to keep the full
-  per-assembly record → `assembly`; add a paginated Annotrieve `/annotations`
-  fetch (BUSCO + gene stats + GFF url) → `annotation`, replacing the thin
-  frequencies call; keep ENA (run counts only, no `base_count`). Extend `rollup.py` to
-  compute the new additive columns from the per-record tables (species-only).
-  Keep resumable-snapshot + atomic-swap; pin Annotrieve `api/v0`.
+  `METRICS` (distribution stats, no `c_/s_/p_` triple).
+- **Stage B [done 2026-08-02].** `fetch_assemblies` (datasets, full per-assembly
+  record), `fetch_annotations` (paginated Annotrieve `/annotations`: BUSCO + gene
+  stats + GFF url), `fetch_reads` (ENA, run counts only). `snapshot.py` caches
+  each source to parquet (`--refresh-sources` forces re-fetch). `rollup.py`:
+  `assemble_leaf_features` combines the three sources; the fan-out carries the
+  additive composition columns. `build.py` rewired off the SQLite bridge.
+  **Two correctness fixes** (sparse fresh data vs the old all-species SQLite):
+  `n_rows` takes the species universe from `taxon` (LEFT-join sparse features) so
+  it counts ALL species; the rollup is **scoped to Eukaryota** (`root_taxid`,
+  since `taxon` holds the whole NCBI tree). Rebuilt + verified: 69,703 assemblies
+  / 18,475 annotations (15,409 BUSCO) / 1,881,955 clade rows; `n_rows` matches a
+  direct `taxon` species count exactly. Needs a fresh volume (schema changed).
 - **Stage C — API.** Widen `summary` / `breakdown` with the new columns; add
   per-record drill-down endpoints (`/taxon/{taxid}/assemblies`, `/annotations`)
   returning real records + deep links + live distribution stats; regenerate

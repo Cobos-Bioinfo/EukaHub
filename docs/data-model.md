@@ -234,6 +234,18 @@ thesis is untouched**: rollup columns still sum over `rank='species'`, and a
 below-species per-record row attaches to its own `taxid` (visible as leaf detail,
 never summed upward) — the same treatment as the existing infraspecific rows.
 
+**Rollup species universe (a correctness detail).** The fresh sources cover only
+a small fraction of species (~54k taxa carry any data), so the rollup takes the
+species universe from **the taxonomy** — every `rank='species'` node — and
+LEFT-joins the sparse feature data (zero-filling the rest). That keeps `n_rows`
+(the coverage denominator and the "total species" figure) counting *all* species
+in a clade, while `c_*`/`s_*` only accumulate those that carry data. Because
+`taxon` holds the whole NCBI tree (all domains), the rollup is **scoped to
+Eukaryota** (a `root_taxid` on `rollup_from_frames`); without it, ~0.8M zero-data
+bacterial/viral clades would be emitted. Verified after the rebuild:
+`clade_features.n_rows` equals a direct `taxon` species count for every clade
+checked.
+
 ## Reuse from Euka-Survey
 
 - The **offline rollup** (`precomputed_clade_features` → `clade_features`).

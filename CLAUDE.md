@@ -250,10 +250,30 @@ links), taxonomy, organisms, bioprojects. **Source split:** `datasets` → all
 annotation-quality dimension** (BUSCO %, gene count) surfaced as headline stats +
 sortable breakdown columns. Distribution stats (medians, BUSCO) are computed **on
 demand** from the small per-record tables (medians aren't additive); only counts
-join the rollup. Coverage check **done** (67,659 assemblies / 15,810 annotations /
-8.24M runs). Design written to `DECISIONS.md` (2026-08-02), `docs/data-model.md`
-(Enriched data model), `docs/roadmap.md` (Stages A–D). **Next: Stage A** — schema
-+ `metrics.py` config.
+join the rollup. Design written to `DECISIONS.md` (2026-08-02), `docs/data-model.md`
+(Enriched data model), `docs/roadmap.md` (Stages A–D).
+
+**Stages A + B DONE + DB rebuilt & verified** (2026-08-02, on `dev`, commits
+`1cd01d1` `5a1dead` `8f01410` `740ccad`). Stage A: `assembly`/`annotation` tables
++ additive `clade_features` composition columns + `QualityStat`/`QUALITY_STATS` in
+`core/metrics.py`. Stage B: `fetch_assemblies` (datasets), `fetch_annotations`
+(Annotrieve, paginated), `fetch_reads` (ENA), `snapshot.py` (parquet source cache,
+`--refresh-sources`), `assemble_leaf_features` + rollup carrying the composition
+columns, `load_assembly`/`load_annotation`, `build.py` rewired off the SQLite
+bridge. **Two rollup bugs fixed during the rebuild** (both from sparse fresh
+fetches vs the old all-species SQLite): (1) `n_rows` now takes the species
+universe from `taxon` (LEFT-join sparse features), so it counts ALL species not
+just those with data; (2) the rollup is **scoped to Eukaryota** via
+`root_taxid` (taxon holds the whole NCBI tree). Live rebuild (~3.5 min, snapshots
+reused): **2.9M taxon, 69,703 assemblies, 18,475 annotations (15,409 with BUSCO),
+1,881,955 clade_features**; `n_rows` matches a direct `taxon` species count
+exactly; composition level-split sums to `s_ass`. 17 pipeline tests pass. Rebuild
+needs a fresh volume (`sudo docker compose -f infra/docker-compose.yml down -v &&
+up -d db`) then `uv run --package eukahub-pipeline python -m eukahub_pipeline.build
+--skip-download`. **Next: Stage C** — API drill-down endpoints
+(`/taxon/{taxid}/assemblies` + `/annotations` with live distribution stats),
+widen `summary`/`breakdown` with the composition columns + quality dimension,
+regenerate TS types. Then Stage D (dashboard + breakdown redesign).
 
 ## Read before doing anything
 
@@ -298,14 +318,16 @@ Google Form → GitHub issue** (see Status).
 
 **In flight: the data-model enrichment + refresh pipeline** (see the Status entry
 above and `docs/roadmap.md` "Data-model enrichment"). Chosen with the user
-2026-08-02; the **breakdown redesign folds into it as Stage D**. Plan locked in
-the docs; coverage check done. **Resume at Stage A** — new `assembly` /
-`annotation` tables + additive `clade_features` columns in
-`infra/postgres/init/001_schema.sql`, and the annotation-quality config in
-`core/src/eukahub_core/metrics.py` (a stat concept parallel to the count-based
-`METRICS`). Then Stage B (pipeline fetches: `datasets` full record + Annotrieve
-`/annotations`), Stage C (API drill-down endpoints), Stage D (dashboard cards +
-per-record deep-links + breakdown redesign).
+2026-08-02; the **breakdown redesign folds into it as Stage D**. **Stages A + B
+are done and the DB is rebuilt + verified** (see the Status entry). **Resume at
+Stage C** — the API: add per-record drill-down endpoints
+(`/taxon/{taxid}/assemblies`, `/annotations`) returning real records + deep links
++ live distribution stats (median N50 / genome size / gene count, best BUSCO)
+computed from the per-record tables; widen `summary`/`breakdown` with the
+composition columns + the `QUALITY_STATS` dimension; regenerate the OpenAPI → TS
+types. Then Stage D (dashboard quality cards + per-record deep-link lists +
+breakdown redesign). The API + web code is untouched so far, so the live app
+still renders the old 4-metric shape until Stage C/D land.
 
 Tracked non-functional follow-ups (do when relevant): frontend deps on latest
 majors — **npm audit now shows 2 highs** (react-router runtime, low practical
