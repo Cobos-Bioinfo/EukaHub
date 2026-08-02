@@ -386,6 +386,16 @@ taxon to its bucket once, then the records join back for the stats — same outp
 not records (~88k). Live: Eukaryota→phylum **1.19s → 0.39s**. Repeat hits were
 already covered by the `Cache-Control` browser cache; this fixes the first hit.
 
+**Breakdown rank-legibility: the "level" bar** (2026-08-02, on `dev`, commit
+`bce9dd7`). The current position's rank was a tiny badge in the drill trail and
+the tile rank was hover-only + small foot text, so "what rank am I at / what am I
+looking at" took prior knowledge. Added an always-visible `bmap-level` bar under
+the trail that states both as prominent rank badges: **"Viewing {focus} [RANK] →
+broken down by [TILE RANK] · N groups"** (tile rank in the accent colour). Trimmed
+the subtitle to the size/colour encoding, and the single-node drill trail is now
+hidden at the root (the level bar names it; the trail reappears as a clickable
+path once you drill). Standalone map + dashboard embed; light+dark screenshotted.
+
 ## Read before doing anything
 
 - `docs/data-model.md` — **the core doc.** DB design + taxonomy-tree storage.
