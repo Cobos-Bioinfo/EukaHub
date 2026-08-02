@@ -58,26 +58,24 @@ export default function Dashboard() {
     <section className="dashboard">
       {lineage.data && <Breadcrumb lineage={lineage.data.lineage} currentTaxid={taxid} />}
 
-      <header className="dashboard__head">
-        <div className="dashboard__title">
-          <h1 className="dashboard__name">{s.name}</h1>
-          <span className="rank-badge">{s.rank}</span>
-        </div>
-        {isLeaf ? (
-          <p className="dashboard__note">
-            This {rankWord} has its own data. It is not counted toward its parent species or any
-            higher group.{" "}
-            <Link to="/faq#subspecies">See FAQs</Link>
-          </p>
-        ) : (
-          <p className="dashboard__species">
-            <strong>{fmt(s.n_rows)}</strong> species in this clade
-          </p>
-        )}
-      </header>
-
       <div className="dashboard__body">
         <aside className="dashboard__side">
+          <header className="dashboard__head">
+            <div className="dashboard__title">
+              <h1 className="dashboard__name">{s.name}</h1>
+              <span className="rank-badge">{s.rank}</span>
+            </div>
+            {isLeaf ? (
+              <p className="dashboard__note">
+                This {rankWord} has its own data. It is not counted toward its parent species or any
+                higher group. <Link to="/faq#subspecies">See FAQs</Link>
+              </p>
+            ) : (
+              <p className="dashboard__species">
+                <strong>{fmt(s.n_rows)}</strong> species in this clade
+              </p>
+            )}
+          </header>
           {about.data && <AboutCard about={about.data} />}
           {!isLeaf && (
             <Link className="dashboard__tree-link" to={`/tree/${taxid}`}>

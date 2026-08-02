@@ -325,6 +325,12 @@ a:hover {
     top: 68px; /* clear the sticky app bar */
   }
 }
+/* The identity header (name, rank, species count) lives at the top of the rail
+   so it stays pinned with the About card while the content scrolls. The flex
+   gap handles spacing, so drop its own margin. */
+.dashboard__side .dashboard__head {
+  margin-bottom: 0;
+}
 /* About card, when it lives in the rail: stack vertically, banner thumbnail,
    no trailing margin (the flex gap handles spacing). */
 .dashboard__side .about-card {
