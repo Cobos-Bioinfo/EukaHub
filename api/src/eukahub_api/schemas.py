@@ -9,7 +9,14 @@ render one card per resource.
 
 from __future__ import annotations
 
-from eukahub_core.metrics import METRIC_KEYS, CladeMetadata, Metric
+from datetime import date
+
+from eukahub_core.metrics import (
+    METRIC_KEYS,
+    CladeMetadata,
+    Metric,
+    QualityStat,
+)
 from pydantic import BaseModel
 
 
@@ -71,6 +78,28 @@ class ResourceSummary(BaseModel):
     percent: float  # covered / n_rows * 100 (0.0 when n_rows == 0)
 
 
+class AssemblyComposition(BaseModel):
+    """Additive assembly-composition counts for a clade (from ``clade_features``):
+    genome assemblies split by level, plus the reference/representative count.
+    Summed species-only up the lineage like the s_* totals."""
+
+    complete: int
+    chromosome: int
+    scaffold: int
+    contig: int
+    reference: int  # assemblies with a refseq_category set
+
+    @classmethod
+    def from_metadata(cls, meta: CladeMetadata) -> AssemblyComposition:
+        return cls(
+            complete=meta.n_ass_complete,
+            chromosome=meta.n_ass_chromosome,
+            scaffold=meta.n_ass_scaffold,
+            contig=meta.n_ass_contig,
+            reference=meta.n_reference,
+        )
+
+
 class CladeSummary(BaseModel):
     """The Genomic Resource Summary (Q1) payload for one taxon."""
 
@@ -84,6 +113,7 @@ class CladeSummary(BaseModel):
     # detail (own resource counts + source links), not a clade coverage summary.
     is_infraspecific: bool = False
     resources: dict[str, ResourceSummary]  # keyed by metric key, in METRICS order
+    composition: AssemblyComposition  # assembly-level split + reference count
 
     @classmethod
     def from_metadata(
@@ -103,6 +133,7 @@ class CladeSummary(BaseModel):
                 )
                 for key in METRIC_KEYS
             },
+            composition=AssemblyComposition.from_metadata(meta),
         )
 
 
@@ -147,6 +178,7 @@ class TaxonNode(CladeSummary):
             n_rows=s.n_rows,
             is_infraspecific=s.is_infraspecific,
             resources=s.resources,
+            composition=s.composition,
             has_children=has_children,
         )
 
@@ -183,3 +215,102 @@ class Breakdown(BaseModel):
     total_matches: int  # taxa matching the filter, before `limit`
     returned: int  # rows actually included (== len(items) <= limit)
     items: list[CladeSummary]  # sorted, limited
+
+
+# --- Quality dimension (per-record drill-down + live distribution stats) -----
+
+
+class QualityStatConfig(BaseModel):
+    """Static chrome for one quality stat — served once by ``/quality-config``
+    and joined client-side to the per-taxon ``QualityStatValue`` by ``key``.
+    The analogue of ``MetricConfig`` for the annotation/assembly-quality
+    dimension (BUSCO %, gene count, genome size, N50)."""
+
+    key: str
+    source: str  # "assembly" | "annotation" — which per-record table it comes from
+    card_title: str
+    help: str
+    unit: str | None  # "%", "bp", "genes", ...
+    fmt: str  # "percent" | "integer" | "basepairs" — how the frontend renders it
+    headline: bool  # True for the surfaced annotation-quality figures
+
+    @classmethod
+    def from_stat(cls, q: QualityStat) -> QualityStatConfig:
+        return cls(
+            key=q.key,
+            source=q.source,
+            card_title=q.card_title,
+            help=q.help,
+            unit=q.unit,
+            fmt=q.fmt,
+            headline=q.headline,
+        )
+
+
+class QualityStatValue(BaseModel):
+    """A quality stat computed live over a taxon's subtree records (median or
+    max per QUALITY_STATS). ``value`` is ``null`` when the subtree has no records
+    carrying that field."""
+
+    key: str
+    value: float | None
+
+
+class AssemblyRecord(BaseModel):
+    """One genome assembly (from the ``assembly`` table), for the drill-down list.
+    Fields mirror the aliased SELECT so the endpoint builds it from a dict_row."""
+
+    assembly_accession: str
+    taxid: int
+    organism: str  # scientific name at the record's taxid
+    assembly_level: str | None
+    contig_n50: int | None
+    scaffold_n50: int | None
+    total_sequence_length: int | None
+    gc_percent: float | None
+    refseq_category: str | None
+    release_date: date | None
+    submitter: str | None
+    source_database: str | None
+    bioprojects: list[str]
+    download_url: str | None
+
+
+class AnnotationRecord(BaseModel):
+    """One functional annotation (from the ``annotation`` table), for the
+    drill-down list — the Annotrieve-sourced BUSCO + gene metadata + GFF link."""
+
+    annotation_id: str
+    assembly_accession: str | None
+    taxid: int
+    organism: str
+    source_database: str | None
+    provider: str | None
+    release_date: date | None
+    gff_url: str | None
+    gene_count: int | None
+    protein_coding_count: int | None
+    busco_complete: float | None
+    busco_single_copy: float | None
+    busco_duplicated: float | None
+    busco_lineage: str | None
+
+
+class AssemblyList(BaseModel):
+    """Assemblies under a taxon: live assembly-quality stats + a paginated list."""
+
+    root: TaxonRef
+    total: int  # records in the subtree, before limit/offset
+    returned: int
+    stats: list[QualityStatValue]  # median genome size / contig N50
+    items: list[AssemblyRecord]
+
+
+class AnnotationList(BaseModel):
+    """Annotations under a taxon: live annotation-quality stats + a paginated list."""
+
+    root: TaxonRef
+    total: int
+    returned: int
+    stats: list[QualityStatValue]  # best BUSCO, median protein-coding gene count
+    items: list[AnnotationRecord]

@@ -308,9 +308,12 @@ class CladeMetadata:
     """Typed per-taxon rollup from ``clade_features``.
 
     Field names mirror the SQL columns (``n_rows``, ``c_<key>``,
-    ``s_<key>``) so dynamic lookup via ``getattr(meta, m.coverage_key)``
-    keeps working for code that iterates METRICS. Percentages are derived
-    on demand via ``percent(key)`` — not stored.
+    ``s_<key>``, and the additive composition columns) so dynamic lookup via
+    ``getattr(meta, m.coverage_key)`` keeps working for code that iterates
+    METRICS. Percentages are derived on demand via ``percent(key)`` — not
+    stored. The composition fields (``n_ass_*``, ``n_reference``) default to 0,
+    so a caller may still construct the core (n_rows + c_*/s_*) shape
+    positionally; they mirror ``COMPOSITION_COLUMNS`` order.
     """
 
     taxid: int
@@ -323,6 +326,11 @@ class CladeMetadata:
     s_ann: int
     s_rna: int
     s_lng: int
+    n_ass_complete: int = 0
+    n_ass_chromosome: int = 0
+    n_ass_scaffold: int = 0
+    n_ass_contig: int = 0
+    n_reference: int = 0
 
     def percent(self, key: str) -> float:
         """Coverage percentage ``c_<key> / n_rows * 100``.
@@ -332,6 +340,10 @@ class CladeMetadata:
         """
         coverage: int = getattr(self, f"c_{key}")
         return (coverage / self.n_rows * 100) if self.n_rows else 0.0
+
+    def composition(self) -> dict[str, int]:
+        """The additive assembly-composition counts, keyed by column name."""
+        return {c: getattr(self, c) for c in COMPOSITION_COLUMNS}
 
     @classmethod
     def zero(cls, taxid: int) -> "CladeMetadata":

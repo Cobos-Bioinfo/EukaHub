@@ -1,6 +1,446 @@
 {
   "components": {
     "schemas": {
+      "AnnotationList": {
+        "description": "Annotations under a taxon: live annotation-quality stats + a paginated list.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AnnotationRecord"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "returned": {
+            "title": "Returned",
+            "type": "integer"
+          },
+          "root": {
+            "$ref": "#/components/schemas/TaxonRef"
+          },
+          "stats": {
+            "items": {
+              "$ref": "#/components/schemas/QualityStatValue"
+            },
+            "title": "Stats",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "root",
+          "total",
+          "returned",
+          "stats",
+          "items"
+        ],
+        "title": "AnnotationList",
+        "type": "object"
+      },
+      "AnnotationRecord": {
+        "description": "One functional annotation (from the ``annotation`` table), for the\ndrill-down list \u2014 the Annotrieve-sourced BUSCO + gene metadata + GFF link.",
+        "properties": {
+          "annotation_id": {
+            "title": "Annotation Id",
+            "type": "string"
+          },
+          "assembly_accession": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assembly Accession"
+          },
+          "busco_complete": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Busco Complete"
+          },
+          "busco_duplicated": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Busco Duplicated"
+          },
+          "busco_lineage": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Busco Lineage"
+          },
+          "busco_single_copy": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Busco Single Copy"
+          },
+          "gene_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gene Count"
+          },
+          "gff_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gff Url"
+          },
+          "organism": {
+            "title": "Organism",
+            "type": "string"
+          },
+          "protein_coding_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Protein Coding Count"
+          },
+          "provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider"
+          },
+          "release_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Release Date"
+          },
+          "source_database": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Database"
+          },
+          "taxid": {
+            "title": "Taxid",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "annotation_id",
+          "assembly_accession",
+          "taxid",
+          "organism",
+          "source_database",
+          "provider",
+          "release_date",
+          "gff_url",
+          "gene_count",
+          "protein_coding_count",
+          "busco_complete",
+          "busco_single_copy",
+          "busco_duplicated",
+          "busco_lineage"
+        ],
+        "title": "AnnotationRecord",
+        "type": "object"
+      },
+      "AnnotationSort": {
+        "enum": [
+          "busco_complete",
+          "protein_coding_count",
+          "release_date"
+        ],
+        "title": "AnnotationSort",
+        "type": "string"
+      },
+      "AssemblyComposition": {
+        "description": "Additive assembly-composition counts for a clade (from ``clade_features``):\ngenome assemblies split by level, plus the reference/representative count.\nSummed species-only up the lineage like the s_* totals.",
+        "properties": {
+          "chromosome": {
+            "title": "Chromosome",
+            "type": "integer"
+          },
+          "complete": {
+            "title": "Complete",
+            "type": "integer"
+          },
+          "contig": {
+            "title": "Contig",
+            "type": "integer"
+          },
+          "reference": {
+            "title": "Reference",
+            "type": "integer"
+          },
+          "scaffold": {
+            "title": "Scaffold",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "complete",
+          "chromosome",
+          "scaffold",
+          "contig",
+          "reference"
+        ],
+        "title": "AssemblyComposition",
+        "type": "object"
+      },
+      "AssemblyList": {
+        "description": "Assemblies under a taxon: live assembly-quality stats + a paginated list.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AssemblyRecord"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "returned": {
+            "title": "Returned",
+            "type": "integer"
+          },
+          "root": {
+            "$ref": "#/components/schemas/TaxonRef"
+          },
+          "stats": {
+            "items": {
+              "$ref": "#/components/schemas/QualityStatValue"
+            },
+            "title": "Stats",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "root",
+          "total",
+          "returned",
+          "stats",
+          "items"
+        ],
+        "title": "AssemblyList",
+        "type": "object"
+      },
+      "AssemblyRecord": {
+        "description": "One genome assembly (from the ``assembly`` table), for the drill-down list.\nFields mirror the aliased SELECT so the endpoint builds it from a dict_row.",
+        "properties": {
+          "assembly_accession": {
+            "title": "Assembly Accession",
+            "type": "string"
+          },
+          "assembly_level": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assembly Level"
+          },
+          "bioprojects": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Bioprojects",
+            "type": "array"
+          },
+          "contig_n50": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contig N50"
+          },
+          "download_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Download Url"
+          },
+          "gc_percent": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gc Percent"
+          },
+          "organism": {
+            "title": "Organism",
+            "type": "string"
+          },
+          "refseq_category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Refseq Category"
+          },
+          "release_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Release Date"
+          },
+          "scaffold_n50": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scaffold N50"
+          },
+          "source_database": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Database"
+          },
+          "submitter": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Submitter"
+          },
+          "taxid": {
+            "title": "Taxid",
+            "type": "integer"
+          },
+          "total_sequence_length": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Sequence Length"
+          }
+        },
+        "required": [
+          "assembly_accession",
+          "taxid",
+          "organism",
+          "assembly_level",
+          "contig_n50",
+          "scaffold_n50",
+          "total_sequence_length",
+          "gc_percent",
+          "refseq_category",
+          "release_date",
+          "submitter",
+          "source_database",
+          "bioprojects",
+          "download_url"
+        ],
+        "title": "AssemblyRecord",
+        "type": "object"
+      },
+      "AssemblySort": {
+        "enum": [
+          "release_date",
+          "contig_n50",
+          "total_sequence_length"
+        ],
+        "title": "AssemblySort",
+        "type": "string"
+      },
       "Breakdown": {
         "description": "The breakdown (Q2) payload: a root's descendants at a target rank.",
         "properties": {
@@ -40,6 +480,9 @@
       "CladeSummary": {
         "description": "The Genomic Resource Summary (Q1) payload for one taxon.",
         "properties": {
+          "composition": {
+            "$ref": "#/components/schemas/AssemblyComposition"
+          },
           "is_infraspecific": {
             "default": false,
             "title": "Is Infraspecific",
@@ -74,7 +517,8 @@
           "name",
           "rank",
           "n_rows",
-          "resources"
+          "resources",
+          "composition"
         ],
         "title": "CladeSummary",
         "type": "object"
@@ -212,6 +656,83 @@
         "title": "MetricFilter",
         "type": "string"
       },
+      "QualityStatConfig": {
+        "description": "Static chrome for one quality stat \u2014 served once by ``/quality-config``\nand joined client-side to the per-taxon ``QualityStatValue`` by ``key``.\nThe analogue of ``MetricConfig`` for the annotation/assembly-quality\ndimension (BUSCO %, gene count, genome size, N50).",
+        "properties": {
+          "card_title": {
+            "title": "Card Title",
+            "type": "string"
+          },
+          "fmt": {
+            "title": "Fmt",
+            "type": "string"
+          },
+          "headline": {
+            "title": "Headline",
+            "type": "boolean"
+          },
+          "help": {
+            "title": "Help",
+            "type": "string"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit"
+          }
+        },
+        "required": [
+          "key",
+          "source",
+          "card_title",
+          "help",
+          "unit",
+          "fmt",
+          "headline"
+        ],
+        "title": "QualityStatConfig",
+        "type": "object"
+      },
+      "QualityStatValue": {
+        "description": "A quality stat computed live over a taxon's subtree records (median or\nmax per QUALITY_STATS). ``value`` is ``null`` when the subtree has no records\ncarrying that field.",
+        "properties": {
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          }
+        },
+        "required": [
+          "key",
+          "value"
+        ],
+        "title": "QualityStatValue",
+        "type": "object"
+      },
       "ResourceSummary": {
         "description": "Per-resource rollup for one clade.",
         "properties": {
@@ -246,7 +767,12 @@
           "s_ass",
           "s_ann",
           "s_rna",
-          "s_lng"
+          "s_lng",
+          "n_ass_complete",
+          "n_ass_chromosome",
+          "n_ass_scaffold",
+          "n_ass_contig",
+          "n_reference"
         ],
         "title": "SortColumn",
         "type": "string"
@@ -370,6 +896,9 @@
       "TaxonNode": {
         "description": "One node in the interactive tree: a taxon's summary metrics plus a\n``has_children`` hint, so the UI can show an expand affordance for a node\nwithout a second round-trip to discover it's a leaf.",
         "properties": {
+          "composition": {
+            "$ref": "#/components/schemas/AssemblyComposition"
+          },
           "has_children": {
             "title": "Has Children",
             "type": "boolean"
@@ -409,6 +938,7 @@
           "rank",
           "n_rows",
           "resources",
+          "composition",
           "has_children"
         ],
         "title": "TaxonNode",
@@ -801,6 +1331,29 @@
         "summary": "Metrics Config"
       }
     },
+    "/quality-config": {
+      "get": {
+        "description": "The annotation/assembly-quality stats \u2014 static card chrome rendered once,\nkeyed by the stat keys the per-taxon quality values use (BUSCO, gene count,\ngenome size, N50). The analogue of ``/metrics-config`` for the new dimension.",
+        "operationId": "quality_config_quality_config_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/QualityStatConfig"
+                  },
+                  "title": "Response Quality Config Quality Config Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Quality Config"
+      }
+    },
     "/search": {
       "get": {
         "description": "Case-insensitive taxon-name search for the root picker. Substring match,\nprefix-matches first (served by the `pg_trgm` GIN index on `taxon.name`).",
@@ -947,6 +1500,150 @@
           }
         },
         "summary": "Taxon About"
+      }
+    },
+    "/taxon/{taxid}/annotations": {
+      "get": {
+        "description": "Functional annotations anywhere under a taxon, for the drill-down list +\nthe live annotation-quality stats (best BUSCO, median protein-coding gene\ncount). Subtree join to the `annotation` table; default sort surfaces the\nbest-annotated genomes first. 404 if the taxid is unknown.",
+        "operationId": "taxon_annotations_taxon__taxid__annotations_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "taxid",
+            "required": true,
+            "schema": {
+              "title": "Taxid",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/AnnotationSort",
+              "default": "busco_complete"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnnotationList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Taxon Annotations"
+      }
+    },
+    "/taxon/{taxid}/assemblies": {
+      "get": {
+        "description": "Genome assemblies anywhere under a taxon (the whole subtree), for the\ndrill-down list + the live assembly-quality stats (median genome size /\ncontig N50). One indexed `ltree` subtree join to the small `assembly` table,\npaginated. 404 if the taxid is unknown; an empty subtree returns `[]`.",
+        "operationId": "taxon_assemblies_taxon__taxid__assemblies_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "taxid",
+            "required": true,
+            "schema": {
+              "title": "Taxid",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/AssemblySort",
+              "default": "release_date"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssemblyList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Taxon Assemblies"
       }
     },
     "/taxon/{taxid}/children": {

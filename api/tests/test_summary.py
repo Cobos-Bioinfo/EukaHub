@@ -12,35 +12,41 @@ from dataclasses import fields
 import psycopg
 import pytest
 from eukahub_api.db import database_url
-from eukahub_core.metrics import COVERAGE_KEYS, TOTAL_KEYS, CladeMetadata
-
-# Eukaryota (2759) — the Phase-1-validated reference row, column order
-# taxid, n_rows, c_ass, c_ann, c_rna, c_lng, s_ass, s_ann, s_rna, s_lng.
-EUKARYOTA = {
-    "taxid": 2759,
-    "name": "Eukaryota",
-    "rank": "domain",
-    "n_rows": 1647009,
-    "ass": {"covered": 25505, "total": 63371},
-    "ann": {"covered": 7511, "total": 14237},
-    "rna": {"covered": 34718, "total": 8081230},
-    "lng": {"covered": 2010, "total": 118584},
-}
+from eukahub_core.metrics import (
+    COMPOSITION_COLUMNS,
+    COVERAGE_KEYS,
+    TOTAL_KEYS,
+    CladeMetadata,
+)
 
 
 def test_summary_eukaryota(client):
+    """Eukaryota's summary: stable taxonomy facts + structural invariants that
+    survive a data rebuild. Exact counts change on every refresh, so we assert
+    relationships (covered <= species, total >= covered, percent math) rather
+    than frozen numbers."""
     body = client.get("/clade/2759/summary").json()
-    assert body["taxid"] == EUKARYOTA["taxid"]
-    assert body["name"] == EUKARYOTA["name"]
-    assert body["rank"] == EUKARYOTA["rank"]
-    assert body["n_rows"] == EUKARYOTA["n_rows"]
+    assert body["taxid"] == 2759
+    assert body["name"] == "Eukaryota"
+    assert body["rank"] == "domain"
+    assert body["is_infraspecific"] is False
+    # Eukaryota is the whole app domain — a very large species count.
+    assert body["n_rows"] > 1_000_000
 
-    for key in ("ass", "ann", "rna", "lng"):
-        res = body["resources"][key]
-        assert res["covered"] == EUKARYOTA[key]["covered"]
-        assert res["total"] == EUKARYOTA[key]["total"]
-        expected_pct = round(EUKARYOTA[key]["covered"] / EUKARYOTA["n_rows"] * 100, 2)
-        assert res["percent"] == pytest.approx(expected_pct)
+    assert set(body["resources"]) == {"ass", "ann", "rna", "lng"}
+    for res in body["resources"].values():
+        assert 0 <= res["covered"] <= body["n_rows"]  # covered species <= all species
+        assert res["total"] >= res["covered"]  # >=1 resource per covered species
+        assert res["percent"] == pytest.approx(
+            res["covered"] / body["n_rows"] * 100, abs=0.01
+        )
+
+    # Assembly composition: the per-level split can't exceed the assemblies
+    # total, and the reference-genome count can't exceed it either.
+    comp = body["composition"]
+    level_sum = comp["complete"] + comp["chromosome"] + comp["scaffold"] + comp["contig"]
+    assert level_sum <= body["resources"]["ass"]["total"]
+    assert 0 <= comp["reference"] <= body["resources"]["ass"]["total"]
 
 
 def test_summary_not_found(client):
@@ -105,4 +111,4 @@ def test_clade_metadata_field_order():
     """Guard: CladeMetadata field order == the SELECT column order in
     queries.py, so ``CladeMetadata(taxid, *features)`` stays correct."""
     names = [f.name for f in fields(CladeMetadata)]
-    assert names == ["taxid", "n_rows", *COVERAGE_KEYS, *TOTAL_KEYS]
+    assert names == ["taxid", "n_rows", *COVERAGE_KEYS, *TOTAL_KEYS, *COMPOSITION_COLUMNS]

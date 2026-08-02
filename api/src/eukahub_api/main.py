@@ -2,17 +2,19 @@
 
 Phase 2 read endpoints:
 
-- ``GET /clade/{taxid}/summary``    — the Genomic Resource Summary (Q1).
-- ``GET /clade/{taxid}/breakdown``  — descendants at a target rank (Q2).
-- ``GET /clade/{taxid}/export.tsv`` — the full breakdown as a TSV download.
-- ``GET /taxon/{taxid}``            — the root→node lineage breadcrumb.
-- ``GET /taxon/{taxid}/children``   — direct children for the interactive tree.
-- ``GET /taxon/{taxid}/about``      — Wikipedia "About" summary (decorative).
-- ``GET /search``                   — name search for the root picker.
+- ``GET /clade/{taxid}/summary``       — the Genomic Resource Summary (Q1).
+- ``GET /clade/{taxid}/breakdown``     — descendants at a target rank (Q2).
+- ``GET /clade/{taxid}/export.tsv``    — the full breakdown as a TSV download.
+- ``GET /taxon/{taxid}``               — the root→node lineage breadcrumb.
+- ``GET /taxon/{taxid}/children``      — direct children for the interactive tree.
+- ``GET /taxon/{taxid}/assemblies``    — genome assemblies in the subtree (+ stats).
+- ``GET /taxon/{taxid}/annotations``   — annotations in the subtree (+ BUSCO stats).
+- ``GET /taxon/{taxid}/about``         — Wikipedia "About" summary (decorative).
+- ``GET /search``                      — name search for the root picker.
 
-``/health`` (liveness) + ``/health/ready`` (DB readiness) and ``/metrics-config``
-round out the service. Every request is logged as one structured JSON line (see
-``logging_config``).
+``/health`` (liveness) + ``/health/ready`` (DB readiness), ``/metrics-config`` and
+``/quality-config`` round out the service. Every request is logged as one
+structured JSON line (see ``logging_config``).
 """
 
 import logging
@@ -21,7 +23,7 @@ import time
 from contextlib import asynccontextmanager
 from typing import Annotated
 
-from eukahub_core.metrics import METRICS
+from eukahub_core.metrics import METRICS, QUALITY_STATS
 from fastapi import FastAPI, HTTPException, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
@@ -30,11 +32,15 @@ from eukahub_api.db import Conn
 from eukahub_api.db import lifespan as db_lifespan
 from eukahub_api.logging_config import configure_logging
 from eukahub_api.queries import (
+    AnnotationSort,
+    AssemblySort,
     FilterLogic,
     MetricFilter,
     SortColumn,
     TargetRank,
     TaxonNotFound,
+    fetch_annotation_records,
+    fetch_assembly_records,
     fetch_breakdown,
     fetch_children,
     fetch_lineage,
@@ -44,9 +50,15 @@ from eukahub_api.queries import (
     search_taxa,
 )
 from eukahub_api.schemas import (
+    AnnotationList,
+    AnnotationRecord,
+    AssemblyList,
+    AssemblyRecord,
     Breakdown,
     CladeSummary,
     MetricConfig,
+    QualityStatConfig,
+    QualityStatValue,
     TaxonAbout,
     TaxonChildren,
     TaxonLineage,
@@ -178,6 +190,14 @@ def metrics_config() -> list[MetricConfig]:
     return [MetricConfig.from_metric(m) for m in METRICS]
 
 
+@app.get("/quality-config", response_model=list[QualityStatConfig])
+def quality_config() -> list[QualityStatConfig]:
+    """The annotation/assembly-quality stats — static card chrome rendered once,
+    keyed by the stat keys the per-taxon quality values use (BUSCO, gene count,
+    genome size, N50). The analogue of ``/metrics-config`` for the new dimension."""
+    return [QualityStatConfig.from_stat(q) for q in QUALITY_STATS]
+
+
 @app.get("/clade/{taxid}/summary", response_model=CladeSummary)
 def clade_summary(taxid: int, conn: Conn) -> CladeSummary:
     """Genomic Resource Summary for one taxon: species count + per-resource
@@ -279,6 +299,62 @@ def taxon_children(
             TaxonNode.from_child(name, rank, meta, has_children, is_infraspecific)
             for name, rank, meta, has_children, is_infraspecific in items
         ],
+    )
+
+
+@app.get("/taxon/{taxid}/assemblies", response_model=AssemblyList)
+def taxon_assemblies(
+    taxid: int,
+    conn: Conn,
+    sort: AssemblySort = AssemblySort.release_date,
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> AssemblyList:
+    """Genome assemblies anywhere under a taxon (the whole subtree), for the
+    drill-down list + the live assembly-quality stats (median genome size /
+    contig N50). One indexed `ltree` subtree join to the small `assembly` table,
+    paginated. 404 if the taxid is unknown; an empty subtree returns `[]`."""
+    try:
+        root_ref, total, stats, records = fetch_assembly_records(
+            conn, taxid=taxid, sort=sort.value, limit=limit, offset=offset
+        )
+    except TaxonNotFound:
+        raise HTTPException(status_code=404, detail=f"taxon {taxid} not found")
+    r_taxid, r_name, r_rank = root_ref
+    return AssemblyList(
+        root=TaxonRef(taxid=r_taxid, name=r_name, rank=r_rank),
+        total=total,
+        returned=len(records),
+        stats=[QualityStatValue(key=k, value=v) for k, v in stats.items()],
+        items=[AssemblyRecord(**r) for r in records],
+    )
+
+
+@app.get("/taxon/{taxid}/annotations", response_model=AnnotationList)
+def taxon_annotations(
+    taxid: int,
+    conn: Conn,
+    sort: AnnotationSort = AnnotationSort.busco_complete,
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> AnnotationList:
+    """Functional annotations anywhere under a taxon, for the drill-down list +
+    the live annotation-quality stats (best BUSCO, median protein-coding gene
+    count). Subtree join to the `annotation` table; default sort surfaces the
+    best-annotated genomes first. 404 if the taxid is unknown."""
+    try:
+        root_ref, total, stats, records = fetch_annotation_records(
+            conn, taxid=taxid, sort=sort.value, limit=limit, offset=offset
+        )
+    except TaxonNotFound:
+        raise HTTPException(status_code=404, detail=f"taxon {taxid} not found")
+    r_taxid, r_name, r_rank = root_ref
+    return AnnotationList(
+        root=TaxonRef(taxid=r_taxid, name=r_name, rank=r_rank),
+        total=total,
+        returned=len(records),
+        stats=[QualityStatValue(key=k, value=v) for k, v in stats.items()],
+        items=[AnnotationRecord(**r) for r in records],
     )
 
 
