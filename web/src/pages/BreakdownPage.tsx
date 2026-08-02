@@ -20,7 +20,12 @@ export default function BreakdownPage() {
   const root = { taxid: lineage.data.taxid, name: lineage.data.name, rank: lineage.data.rank };
   return (
     <section className="bmap-page">
-      <BreakdownMap root={root} heading="Where's the data?" variant="page" />
+      <BreakdownMap
+        root={root}
+        rootLineage={lineage.data.lineage}
+        heading="Where's the data?"
+        variant="page"
+      />
     </section>
   );
 }

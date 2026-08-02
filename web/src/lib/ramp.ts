@@ -7,7 +7,6 @@ export type RGB = [number, number, number];
 
 const WHITE: RGB = [255, 255, 255];
 const BLACK: RGB = [0, 0, 0];
-const DARK_SURF: RGB = [23, 27, 33]; // matches --card (dark)
 
 export const NO_DATA_LIGHT = "#d3d8df"; // pale slate, recessive on white
 export const NO_DATA_DARK = "#333a44"; // dim slate, recessive on the dark surface
@@ -21,13 +20,18 @@ export const rgbStr = (c: RGB): string => `rgb(${c[0]}, ${c[1]}, ${c[2]})`;
 const mix = (c: RGB, t: RGB, f: number): RGB =>
   [0, 1, 2].map((i) => Math.round(c[i] + (t[i] - c[i]) * f)) as RGB;
 
-/** A hue's sequential ramp, anchored for the theme: light canvas runs
- *  faint→hue→dark (more ink = more), dark canvas runs dim→hue→bright. */
+/** A hue's sequential ramp for the theme. Both canvases run light→hue→deep, so
+ *  more ink always means more data — the light-mode intuition, kept in dark mode
+ *  so the "big pale tiles are the gaps" reading holds either way. The low end is
+ *  a pale tint; the high end is the hue deepened well toward black so the ramp
+ *  spans a readable range even from a pale identity hue (the fills are large, and
+ *  colours like the assemblies light-blue have little tone of their own). On the
+ *  dark canvas the deep end still clears the surface, so high values stay legible. */
 export function buildRamp(hex: string, dark: boolean): RGB[] {
   const c = hexRgb(hex);
   return dark
-    ? [mix(c, DARK_SURF, 0.45), c, mix(c, WHITE, 0.5)]
-    : [mix(c, WHITE, 0.85), c, mix(c, BLACK, 0.28)];
+    ? [mix(c, WHITE, 0.45), c, mix(c, BLACK, 0.5)]
+    : [mix(c, WHITE, 0.82), c, mix(c, BLACK, 0.5)];
 }
 
 /** Map a 0–100 percentage to an RGB tuple along `ramp`, gamma-spreading the low
