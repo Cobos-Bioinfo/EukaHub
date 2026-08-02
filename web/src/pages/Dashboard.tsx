@@ -9,7 +9,7 @@ import {
 } from "../api/queries";
 import AboutCard from "../components/AboutCard";
 import Breadcrumb from "../components/Breadcrumb";
-import BreakdownSection from "../components/BreakdownSection";
+import BreakdownMap from "../components/BreakdownMap";
 import MetricCard from "../components/MetricCard";
 import QualitySection from "../components/QualitySection";
 import RecordBrowser from "../components/RecordBrowser";
@@ -109,12 +109,11 @@ export default function Dashboard() {
           )}
 
           {showBreakdown && (
-            <BreakdownSection
+            <BreakdownMap
               key={taxid}
-              taxid={taxid}
-              rootName={s.name}
-              rootRank={s.rank}
-              metrics={metrics.data}
+              root={{ taxid, name: s.name, rank: s.rank }}
+              heading="Breakdown"
+              variant="embed"
             />
           )}
           {showInfra && (

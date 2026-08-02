@@ -153,7 +153,7 @@ function CompositionBar({ composition }: { composition: AssemblyComposition }) {
         {composition.reference > 0 && (
           <span
             className="comp__ref"
-            title="NCBI reference or representative genomes — a curated quality marker"
+            title="NCBI reference or representative genomes, a curated quality marker"
           >
             {fmt(composition.reference)} reference
           </span>
