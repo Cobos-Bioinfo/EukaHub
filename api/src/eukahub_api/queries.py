@@ -510,15 +510,24 @@ def fetch_breakdown_quality(
         if not keys:
             continue
         agg = _quality_stats_agg(source)
-        # r = the per-record table, rec = the record's taxon, bucket = that
-        # taxon's ancestor at the target rank (the breakdown tile it rolls into).
+        # Two phases so the ltree ancestor match runs once per *distinct* taxon
+        # with records, not once per record (a taxon often has several): `mp`
+        # resolves each record-bearing taxon to its rank-`rank` ancestor (the tile
+        # it rolls into), then the records join back in for the stats. On the wide
+        # roots (Eukaryota->phylum, ~88k records over ~29k taxa) this ~halves the
+        # nested-loop containment work vs matching every record. r = per-record
+        # table, rec = record's taxon, bucket = its ancestor at the target rank.
         sql = (
-            f"SELECT bucket.taxid AS bucket_taxid, {agg} "
-            f"FROM {source} r "
-            "JOIN taxon rec ON rec.taxid = r.taxid "
-            "JOIN taxon bucket ON bucket.rank = %s AND bucket.path <@ %s::ltree "
-            "AND bucket.path @> rec.path "
-            "GROUP BY bucket.taxid"
+            "WITH mp AS ("
+            "  SELECT rec.taxid AS rec_taxid, bucket.taxid AS bucket_taxid"
+            f"  FROM (SELECT DISTINCT taxid FROM {source}) d"
+            "  JOIN taxon rec ON rec.taxid = d.taxid"
+            "  JOIN taxon bucket ON bucket.rank = %s AND bucket.path <@ %s::ltree"
+            "  AND bucket.path @> rec.path"
+            ") "
+            f"SELECT mp.bucket_taxid, {agg} "
+            f"FROM {source} r JOIN mp ON mp.rec_taxid = r.taxid "
+            "GROUP BY mp.bucket_taxid"
         )
         for row in conn.execute(sql, (rank, root_path)).fetchall():
             entry = result.setdefault(row[0], {k: None for k in all_keys})
