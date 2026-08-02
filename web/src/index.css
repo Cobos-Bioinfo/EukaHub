@@ -218,6 +218,9 @@ a:hover {
   box-shadow: var(--shadow);
   max-height: 340px;
   overflow-y: auto;
+  /* Sit above positioned page content below the input (e.g. the compare chart),
+     so the results overlay it rather than being painted under it. */
+  z-index: 40;
 }
 
 .picker__item {
@@ -2091,8 +2094,9 @@ button.tree-outline__name:hover {
 }
 .cmp__lede {
   margin: 0.4rem 0 0;
-  max-width: 62ch;
+  max-width: 64ch;
   color: var(--ink-2);
+  text-wrap: pretty; /* avoid ragged/orphaned line breaks */
 }
 .cmp__controls {
   display: flex;
@@ -2102,7 +2106,11 @@ button.tree-outline__name:hover {
   margin-bottom: 1.5rem;
 }
 .cmp__add .picker {
-  width: min(340px, 100%);
+  /* A definite width (not a percentage that collapses inside the flex row), so
+     the placeholder isn't clipped; margin-left:0 overrides the base right-push. */
+  width: 340px;
+  max-width: 100%;
+  margin-left: 0;
 }
 .cmp__chips {
   display: flex;

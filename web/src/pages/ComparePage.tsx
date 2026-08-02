@@ -98,8 +98,8 @@ export default function ComparePage() {
       <header className="cmp__head">
         <h1 className="cmp__title">Compare groups</h1>
         <p className="cmp__lede">
-          Line groups up side by side to see how their genomic-data coverage compares. Coverage is
-          the share of species with data, so groups of very different sizes compare fairly.
+          Line up groups side by side to compare their genomic data coverage. Coverage is the share
+          of species with data, so groups of very different sizes compare fairly.
         </p>
       </header>
 
