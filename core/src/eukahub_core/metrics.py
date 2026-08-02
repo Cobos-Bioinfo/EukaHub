@@ -188,7 +188,7 @@ def clade_feature_columns() -> tuple[str, ...]:
     mirrors and that the pipeline INSERT/COPY targets.
 
     Stage B of the data-model enrichment (docs/data-model.md) appends the
-    additive quality columns here (``n_ass_complete`` etc., ``s_bases``)
+    additive quality columns here (``n_ass_complete`` etc., ``n_reference``)
     *together with* the rollup that fills them, so this stays the one place the
     schema and pipeline agree on.
     """

@@ -53,17 +53,17 @@ annotation footprint).
 
 **Source split:** `datasets` → all assemblies + quality fields; **Annotrieve
 `api/v0`** → annotation richness (BUSCO, gene/transcript counts, source-DB, GFF
-links); ENA → reads (aggregated, optionally + `base_count`).
+links); ENA → reads (aggregated, run counts only — no `base_count`).
 
 - **Stage A — schema + config.** New `assembly` / `annotation` tables + the
-  additive `clade_features` extension (`n_ass_*`, `n_reference`, `s_bases`) in
+  additive `clade_features` extension (`n_ass_*`, `n_reference`) in
   `infra/postgres/init`. Extend `core/metrics.py`: a config concept for the
   **annotation-quality** stats (BUSCO %, gene count) *parallel* to the count-based
   `METRICS` (they're distribution stats, no `c_/s_/p_` triple).
 - **Stage B — pipeline.** Enhance the `datasets` fetch to keep the full
   per-assembly record → `assembly`; add a paginated Annotrieve `/annotations`
   fetch (BUSCO + gene stats + GFF url) → `annotation`, replacing the thin
-  frequencies call; keep ENA (optionally add `base_count`). Extend `rollup.py` to
+  frequencies call; keep ENA (run counts only, no `base_count`). Extend `rollup.py` to
   compute the new additive columns from the per-record tables (species-only).
   Keep resumable-snapshot + atomic-swap; pin Annotrieve `api/v0`.
 - **Stage C — API.** Widen `summary` / `breakdown` with the new columns; add

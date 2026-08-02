@@ -43,7 +43,7 @@ CREATE TABLE IF NOT EXISTS clade_features (
 );
 -- Stage B (data-model enrichment, docs/data-model.md) extends clade_features
 -- with additive quality columns (n_ass_complete/_chromosome/_scaffold/_contig,
--- n_reference, s_bases) *together with* the rollup that fills them and
+-- n_reference) *together with* the rollup that fills them and
 -- eukahub_core.metrics.clade_feature_columns(), so the single-source invariant
 -- (this table mirrors that function) stays intact.
 
