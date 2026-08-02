@@ -2060,6 +2060,48 @@ button.tree-outline__name:hover {
   color: var(--muted);
 }
 
+/* The "level" bar: always states which rank you're viewing and which rank the
+   tiles are, as two rank badges, so the position isn't buried in the trail and
+   the tile rank isn't hover-only. */
+.bmap-level {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.7rem;
+  margin: 0.9rem 0;
+  padding: 0.5rem 0.75rem;
+  background: var(--track);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 0.92rem;
+  width: fit-content;
+  max-width: 100%;
+}
+.bmap-level__part {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.bmap-level__cap {
+  color: var(--muted);
+}
+.bmap-level__name {
+  color: var(--ink);
+}
+.bmap-level__arrow {
+  color: var(--muted);
+  font-weight: 700;
+}
+.bmap-level__count {
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+.rank-badge--now {
+  color: var(--link);
+  border-color: var(--link);
+  background: transparent;
+}
+
 .bmap-controls {
   display: flex;
   flex-wrap: wrap;

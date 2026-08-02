@@ -330,9 +330,9 @@ export default function BreakdownMap({
           <Heading className="bmap-block__title">{heading}</Heading>
           {targetRank && (
             <p className="bmap-block__sub">
-              Each tile is one {rankNoun} of <strong>{focus.name}</strong>. Its size is the number of{" "}
-              {sizeBy}; its colour shows {lens.legend}. The big pale tiles are the gaps: large groups
-              with little data. Click a tile to go deeper, or use the trail to come back.
+              Tile size is the number of {sizeBy}; colour shows {lens.legend}. The big pale tiles are
+              the gaps: large groups with little data. Click a tile to go deeper, or use the trail to
+              come back.
             </p>
           )}
         </div>
@@ -353,22 +353,48 @@ export default function BreakdownMap({
         </div>
       </header>
 
-      <nav className="bmap-crumbs" aria-label="Drill path">
-        {trail.map((t, i) => (
-          <span key={t.taxid} className="bmap-crumb">
-            {i > 0 && <span className="bmap-crumb__sep">›</span>}
-            {i < trail.length - 1 ? (
-              <button type="button" className="bmap-crumb__link" onClick={() => truncateTo(i)}>
-                {t.name}
-              </button>
-            ) : (
-              <span className="bmap-crumb__here">
-                {t.name} <span className="bmap-crumb__rank">{t.rank}</span>
+      {/* The drill trail is a clickable way back; at the root it's a single node
+          the level bar below already names, so show it only once you've drilled. */}
+      {trail.length > 1 && (
+        <nav className="bmap-crumbs" aria-label="Drill path">
+          {trail.map((t, i) => (
+            <span key={t.taxid} className="bmap-crumb">
+              {i > 0 && <span className="bmap-crumb__sep">›</span>}
+              {i < trail.length - 1 ? (
+                <button type="button" className="bmap-crumb__link" onClick={() => truncateTo(i)}>
+                  {t.name}
+                </button>
+              ) : (
+                <span className="bmap-crumb__here">
+                  {t.name} <span className="bmap-crumb__rank">{t.rank}</span>
+                </span>
+              )}
+            </span>
+          ))}
+        </nav>
+      )}
+
+      {targetRank && (
+        <div className="bmap-level">
+          <span className="bmap-level__part">
+            <span className="bmap-level__cap">Viewing</span>
+            <strong className="bmap-level__name">{focus.name}</strong>
+            <span className="rank-badge">{focus.rank}</span>
+          </span>
+          <span className="bmap-level__arrow" aria-hidden="true">
+            →
+          </span>
+          <span className="bmap-level__part">
+            <span className="bmap-level__cap">broken down by</span>
+            <span className="rank-badge rank-badge--now">{rankNoun}</span>
+            {bd.data && (
+              <span className="bmap-level__count">
+                {fmt(bd.data.total_matches)} {bd.data.total_matches === 1 ? "group" : "groups"}
               </span>
             )}
           </span>
-        ))}
-      </nav>
+        </div>
+      )}
 
       <div className="bmap-controls">
         <div className="bmap-ctl">
