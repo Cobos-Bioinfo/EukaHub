@@ -330,6 +330,28 @@ TSV** actions, small-tile **title tooltips**, a capped-count note past the
 avoid AI-writing tells). Verified: build clean, light+dark + list-view
 screenshotted.
 
+**Data-map clade-rank fix + colour/gradient refinement** (2026-08-02, on `dev`,
+commit `d7af73e`). Three follow-ups the user flagged on the data map. (1) **Rankless
+clade bug** (was tracked in memory): a `clade`/`no rank` focus (Eutheria,
+Bilateria, Opisthokonta, ...) broke the breakdown with "No phyla to map..." because
+`nextRank("clade")` fell through to phylum, which is empty below a clade like
+Eutheria. Fix: `targetRankFor` picks the rank from the **deepest canonical-ranked
+ancestor** in the focus's lineage (Eutheria → class Mammalia → **order**; a clade
+above phylum still resolves to phylum). The root lineage is threaded into
+`BreakdownMap` from both callers (`Dashboard`, `BreakdownPage`); drilled tiles are
+always canonical ranks so they're unaffected. (2) **Gradient direction unified**:
+the sequential ramp (`lib/ramp.ts` for the map, `RadialTree` for the tree) now runs
+**light→deep in both themes** (was dim→bright on the dark canvas), so "more ink =
+more" and "big pale tiles are the gaps" hold in light and dark alike; the treemap
+ramp's high end is deepened for readable range from pale hues. (3) **Per-lens
+colours** (dataviz skill, user picked the scheme): coverage lenses take their
+resource colour family (assemblies/annotations blue, RNA-Seq green — the two pale
+card tints saturated so they fill a treemap), the four quality lenses share one
+**purple** so "quality" reads as one dimension; only one lens is on screen at a
+time. The genes lens is now explicitly **protein-coding** (button "Coding genes",
+legend/list "Protein-coding genes"). Web build+typecheck clean; light+dark
+screenshotted across lenses; no API change.
+
 ## Read before doing anything
 
 - `docs/data-model.md` — **the core doc.** DB design + taxonomy-tree storage.
