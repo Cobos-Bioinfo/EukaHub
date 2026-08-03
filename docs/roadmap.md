@@ -348,15 +348,30 @@ under Phase 7 above). Each major one wants a design/scope decision before coding
   filled **CTA buttons** (`ViewSwitcher.tsx`) under the About card — canonical
   order Dashboard - Tree of Life - Data map, current omitted, Tree of Life green +
   Data map blue, plus an "Add to compare" link. The user preferred the CTA-button
-  style over a segmented switcher, so the in-page control is dashboard-only; the
-  Tree + Map pages rely on the top nav (and the Tree page got its intro description
-  restored to full width). Open sub-decision: whether to also surface the CTA
-  buttons on the Tree/Map pages as a horizontal row.
+  style over a segmented switcher, so the in-page control is CTA buttons (not a
+  segmented switcher); the Tree page also got its intro description restored to
+  full width. **Follow-up (done):** `ViewSwitcher` gained a `layout` prop and the
+  CTA buttons now also appear on the **Tree + Map** pages as a compact horizontal
+  **row** in the header (`layout="row"`, current view omitted, same canonical
+  order), so cross-nav is in-page on all three taxon-scoped views (not just the
+  dashboard rail).
 
 Smaller follow-ups from this session:
 - Verify the **API docs behind the proxy** (`/api/docs`) render with
   `root_path="/api"` once the full stack runs (couldn't test headless here).
 - The header isn't wrap-friendly on very narrow viewports (desktop-first today).
+- **react-router audit highs (deferred 2026-08-03, user chose "document & defer").**
+  `npm audit` flags 2 highs on react-router: an **RSC-mode CSRF bypass**
+  (GHSA-qwww-vcr4-c8h2), **not reachable** in our client-only declarative SPA
+  (`BrowserRouter` + `Routes`/hooks, no server/RSC routing). The first patched
+  version is **react-router 8.3.0**, which requires **React >= 19.2.7 + Node >=
+  22.22** and drops the `react-router-dom` package (DOM bindings merged into
+  `react-router`) — so there is no in-place patch on our React 18 / react-router-dom
+  7.18.2 stack. Staying on 7.18.2; the CI `npm audit` step is already
+  `continue-on-error` (informational). **Fix it as part of a future React 18 -> 19
+  upgrade** (bump React + react-dom + @types + plugin, swap `react-router-dom`
+  imports to `react-router@^8`, drop `react-router-dom`); that upgrade is the
+  natural home for this and clears the advisory with the actual patched version.
 
 ## Reuse vs rebuild vs delete
 

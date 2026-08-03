@@ -2,6 +2,7 @@ import { useParams } from "react-router-dom";
 
 import { getLineage } from "../api/queries";
 import BreakdownMap from "../components/BreakdownMap";
+import ViewSwitcher from "../components/ViewSwitcher";
 import { useAsync } from "../hooks/useAsync";
 
 /** Full-screen home for the data map. Resolves the route taxon's name + rank
@@ -20,6 +21,7 @@ export default function BreakdownPage() {
   const root = { taxid: lineage.data.taxid, name: lineage.data.name, rank: lineage.data.rank };
   return (
     <section className="bmap-page">
+      <ViewSwitcher taxid={root.taxid} name={root.name} current="map" layout="row" />
       <BreakdownMap
         root={root}
         rootLineage={lineage.data.lineage}

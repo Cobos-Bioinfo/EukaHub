@@ -78,6 +78,11 @@ jobs:
       - name: Build (tsc + vite build)
         run: npm run build
       - name: Dependency audit (npm)
+        # Informational (non-blocking). Known finding: the 2 react-router highs are
+        # an RSC-mode CSRF advisory (GHSA-qwww-vcr4-c8h2) not reachable in our
+        # client-only declarative SPA (no server/RSC routing). The first patched
+        # version, react-router 8.3.0, requires React 19 + Node 22.22, so the fix is
+        # deferred to a future React 19 upgrade. See docs/roadmap.md.
         continue-on-error: true
         run: npm audit --audit-level=high
 

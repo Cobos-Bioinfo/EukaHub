@@ -524,7 +524,13 @@ search moved onto the title row via `.tree-page__topline`). (4) **CI**
 github-actions scan would propose). Verified: web build + typecheck clean; **95
 tests pass** (frontend-only change); light + dark headless screenshots (via
 `web/node_modules/puppeteer-core`) of the rail buttons, the tree search highlight
-(Felidae located under Carnivora), and the not-found fallback.
+(Felidae located under Carnivora), and the not-found fallback. **Follow-up
+(2026-08-03):** `ViewSwitcher` gained a `layout` prop and the CTA buttons now also
+appear on the **Tree + Map** pages as a compact horizontal **row** in the header
+(`layout="row"`), so cross-nav is in-page on all three views; and the react-router
+`npm audit` highs were assessed and **deferred** into a future React 18 -> 19
+upgrade (not exploitable here; patched only in react-router 8.3.0 which needs
+React 19 — see `docs/roadmap.md`).
 
 ## Read before doing anything
 
@@ -601,21 +607,32 @@ sidebar-only; Tree/Map use the top nav). **#3 in-tree search highlight** shipped
 (`useTree.reveal` + `RadialTree` focus/pan/pulse). The `checkout@v7`/
 `gitleaks-action@v3` bump landed too.
 
+**Follow-up done (2026-08-03):** the clade CTA buttons now **also** appear on the
+Tree + Map pages as a compact horizontal **row** (`ViewSwitcher` `layout="row"`,
+current view omitted) — cross-nav is in-page on all three taxon-scoped views. And
+the **react-router audit** was assessed + **deferred** (user chose "document &
+defer"): the 2 highs are an RSC-mode CSRF advisory (GHSA-qwww-vcr4-c8h2) **not
+reachable** in our declarative SPA; the only patched version (react-router 8.3.0)
+needs **React 19 + Node 22.22** and drops `react-router-dom`, so it's folded into
+a future React 18 -> 19 upgrade (see `docs/roadmap.md`). CI `npm audit` stays
+non-blocking with a comment explaining the finding.
+
 **Then (pick next):** (a) more functional polish toward the deploy gate (landing
-viewport centring; deeper featured-group storytelling); (b) the remaining
-enrichment tail; (c) Phase-5 deploy items (still gated on CRG); (d) the smaller
-non-functional follow-ups below. One open sub-decision the user may raise: whether
-the clade CTA buttons should **also** appear on the Tree/Map pages (as a
-horizontal row near the title) — deferred, top nav covers those pages today.
+viewport centring; deeper featured-group storytelling); (b) a **React 18 -> 19
+upgrade** (also clears the react-router audit highs via react-router 8); (c) a
+**responsive / mobile pass** (header wrap + wide views are desktop-first today);
+(d) Phase-5 deploy items (still gated on CRG).
 
 **UI-polish backlog (user-reported 2026-08-03) — ALL SIX DONE** (2026-08-03, on
 `dev`; see the "UI-polish alignment batch" status entry above for the per-item
 fixes + the description-measure standardization follow-up).
 
 Tracked non-functional follow-ups (do when relevant): frontend deps on latest
-majors — **npm audit now shows 2 highs** (react-router runtime, low practical
-risk; the dev-only openapi-typescript chain cleared upstream); and caching layers
-(nginx `proxy_cache`/CDN, ETag/304). **A headless browser IS available** in the
+majors — the **2 npm-audit highs are react-router's RSC-mode CSRF advisory**
+(GHSA-qwww-vcr4-c8h2), **not exploitable** in our declarative SPA; patched only in
+react-router 8.3.0 (needs React 19 + Node 22.22, drops `react-router-dom`), so
+**deferred into a React 18 -> 19 upgrade** (assessed 2026-08-03; see
+`docs/roadmap.md`). Also caching layers (nginx `proxy_cache`/CDN, ETag/304). **A headless browser IS available** in the
 dev env via
 `google-chrome-stable` — use it to screenshot/verify UI changes (this note
 supersedes earlier "no headless browser" remarks).
