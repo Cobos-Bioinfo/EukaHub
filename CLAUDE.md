@@ -585,6 +585,30 @@ Verified: 0 page overflow at 390; build+typecheck clean; **95 tests pass**
 cards + the unchanged desktop table. Also logged the **"where are the gaps?"
 discovery feature** to the roadmap Backlog (the user's chosen next-session work).
 
+**"Where are the gaps?" discovery feature — done** (2026-08-03, on `dev`). The
+app's thesis surfaced directly, and the user's chosen next-session work
+(design-first: they picked **missing-species scoring**, a **dedicated page + a
+landing teaser**, and a **ranked leaderboard**). New cacheable `GET
+/gaps?root=&rank=&resource=&limit=` ranks a root's descendant clades at a rank by
+the **gap = species with no data for the chosen resource** (`n_rows -
+c_<resource>`, biggest first; fully-covered clades dropped) — one indexed `ltree`
+subtree query reusing the `fetch_breakdown` machinery, only the ordering differs.
+`GapItem`/`Gaps` schemas; defaults Eukaryota / order / assemblies / top 25;
+species-weighted scoring self-handles the floor (a tiny obscure clade can't
+outrank Diptera). Frontend `GapsPage` at **`/gaps`** (nav "Gaps"): a ranked
+leaderboard, each row an amber gap-magnitude bar (normalized to the top gap in
+view) + the missing-species headline + species/coverage % + Dashboard/Tree/Map
+cross-links + a **"Look inside"** re-root one rank finer; root/rank/resource live
+in the URL (shareable). A non-blocking **landing teaser** (top-5 orders + "See all
+gaps") sits below the featured groups. New `--gap` amber token (light+dark,
+distinct from the blue/green coverage hues; single-series magnitude bar per the
+**dataviz** skill). 7 slice-safe API tests anchored on long-read gaps (they
+survive the CI slice's coverage caps — verified green on prod **and** a
+freshly-loaded CI slice); whole suite **102 passed**, zero skips; web
+build+typecheck clean; light + dark + mobile + drilled screenshotted. No em
+dashes / emojis. Deferred: a scatter (species vs coverage) secondary view +
+quality columns in the leaderboard. See `docs/roadmap.md` Backlog.
+
 ## Read before doing anything
 
 - `docs/data-model.md` — **the core doc.** DB design + taxonomy-tree storage.
@@ -673,11 +697,16 @@ non-blocking with a comment explaining the finding.
 **NEXT — (b) React 18 -> 19, (c) responsive / mobile pass, and the mobile
 card-layout follow-on are now DONE** (2026-08-03; see the "React 18 -> 19 ...
 responsive / mobile pass" and "Mobile card layouts for the wide data tables" status
-entries above). **Then (pick next):** the **"where are the gaps?" discovery
-feature** is queued in the roadmap Backlog as the user's chosen next-session work
-(design-first — bring 2-3 directions first). Also open: (a) more functional polish
-toward the deploy gate (landing viewport centring; deeper featured-group
-storytelling); (d) Phase-5 deploy items (still gated on CRG).
+entries above).
+
+**NEXT — the "where are the gaps?" discovery feature is now DONE** (2026-08-03, on
+`dev`; see the "Where are the gaps?" status entry above). Shipped as `GET /gaps` +
+the `/gaps` ranked leaderboard (nav "Gaps") + a landing teaser; the user's chosen
+missing-species scoring / dedicated-page+teaser / leaderboard directions.
+**Then (pick next):** (a) more functional polish toward the deploy gate (landing
+viewport centring; deeper featured-group storytelling; a gaps **scatter** secondary
+view or quality columns in the leaderboard); (d) Phase-5 deploy items (still gated
+on CRG).
 
 **UI-polish backlog (user-reported 2026-08-03) — ALL SIX DONE** (2026-08-03, on
 `dev`; see the "UI-polish alignment batch" status entry above for the per-item

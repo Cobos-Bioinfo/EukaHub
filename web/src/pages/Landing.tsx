@@ -1,7 +1,7 @@
 import { Link } from "react-router";
 
-import { getOverview } from "../api/queries";
-import type { FeaturedClade } from "../api/types";
+import { getGaps, getOverview } from "../api/queries";
+import type { FeaturedClade, GapItem } from "../api/types";
 import RandomCladeButton from "../components/RandomCladeButton";
 import RootPicker from "../components/RootPicker";
 import { RandomIcon, SearchIcon, TreeIcon } from "../components/icons";
@@ -52,7 +52,60 @@ export default function Landing() {
       </div>
 
       <LandingOverview />
+      <LandingGaps />
     </section>
+  );
+}
+
+/** A teaser for the "Where are the gaps?" leaderboard: the few eukaryotic orders
+ *  with the most species still lacking a genome assembly, linking to the full
+ *  view. Non-blocking and decorative — absent while loading or on error. */
+function LandingGaps() {
+  const { data } = useAsync(() => getGaps({ limit: 5 }), []);
+  const items = data?.items ?? [];
+  if (items.length === 0) return null;
+  const maxGap = items[0].gap; // sorted gap-desc
+
+  return (
+    <section className="gaps-teaser" aria-label="Biggest data gaps">
+      <div className="gaps-teaser__head">
+        <h2 className="gaps-teaser__heading">Where are the gaps?</h2>
+        <Link to="/gaps" className="gaps-teaser__all">
+          See all gaps →
+        </Link>
+      </div>
+      <p className="gaps-teaser__sub">
+        The eukaryotic orders with the most species still lacking a genome assembly.
+      </p>
+      <ol className="gaps-teaser__list">
+        {items.map((it) => (
+          <TeaserRow key={it.taxid} item={it} maxGap={maxGap} />
+        ))}
+      </ol>
+    </section>
+  );
+}
+
+/** One teaser row: name, a gap-magnitude bar, and the missing-species count. */
+function TeaserRow({ item, maxGap }: { item: GapItem; maxGap: number }) {
+  const label = cladeLabel(item.taxid) ?? item.name;
+  const width = Math.max((item.gap / maxGap) * 100, 3);
+  return (
+    <li>
+      <Link to={`/clade/${item.taxid}`} className="gaps-teaser__row">
+        <span className="gaps-teaser__name">{label}</span>
+        <span
+          className="gaps-teaser__bar"
+          role="img"
+          aria-label={`${fmt(item.gap)} species with no genome assembly`}
+        >
+          <span className="gaps-teaser__bar-fill" style={{ width: `${width}%` }} />
+        </span>
+        <span className="gaps-teaser__gap">
+          <strong>{fmtCompact(item.gap)}</strong> missing
+        </span>
+      </Link>
+    </li>
   );
 }
 

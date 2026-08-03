@@ -4,6 +4,7 @@ Phase 2 read endpoints:
 
 - ``GET /overview``                    — landing-page totals + featured groups.
 - ``GET /compare``                     — several groups lined up side by side.
+- ``GET /gaps``                        — the biggest under-sequenced groups.
 - ``GET /clade/{taxid}/summary``       — the Genomic Resource Summary (Q1).
 - ``GET /clade/{taxid}/breakdown``     — descendants at a target rank (Q2).
 - ``GET /clade/{taxid}/export.tsv``    — the full breakdown as a TSV download.
@@ -34,6 +35,7 @@ from eukahub_api.db import Conn
 from eukahub_api.db import lifespan as db_lifespan
 from eukahub_api.logging_config import configure_logging
 from eukahub_api.queries import (
+    EUKARYOTA_TAXID,
     AnnotationSort,
     AssemblySort,
     FilterLogic,
@@ -47,6 +49,7 @@ from eukahub_api.queries import (
     fetch_breakdown_quality,
     fetch_children,
     fetch_compare,
+    fetch_gaps,
     fetch_lineage,
     fetch_overview,
     fetch_root,
@@ -65,6 +68,8 @@ from eukahub_api.schemas import (
     Compare,
     CompareGroup,
     FeaturedClade,
+    GapItem,
+    Gaps,
     MetricConfig,
     Overview,
     OverviewTotals,
@@ -279,6 +284,58 @@ def compare(
             )
         )
     return Compare(groups=groups)
+
+
+@app.get("/gaps", response_model=Gaps)
+def gaps(
+    conn: Conn,
+    root: Annotated[
+        int, Query(description="Root taxon to search under (default Eukaryota).")
+    ] = EUKARYOTA_TAXID,
+    rank: Annotated[
+        TargetRank, Query(description="Rank of the groups to rank by gap.")
+    ] = TargetRank.order,
+    resource: Annotated[
+        MetricFilter, Query(description="Resource whose coverage gap to measure.")
+    ] = MetricFilter.ass,
+    limit: Annotated[int, Query(ge=1, le=200)] = 25,
+) -> Gaps:
+    """The biggest under-sequenced groups: the app's thesis surfaced directly.
+
+    Ranks ``root``'s descendant clades at ``rank`` by the number of species with
+    no ``resource`` data (``n_rows - covered``), largest gap first — so the huge,
+    barely-sequenced clades (e.g. insect orders with a genome for <1% of species)
+    rise to the top without any navigating. One indexed ``ltree`` subtree query;
+    fully-covered clades are omitted. Defaults: Eukaryota, order level,
+    assemblies, top 25.
+    """
+    try:
+        root_ref, items, total = fetch_gaps(
+            conn, root_taxid=root, rank=rank.value, resource=resource.value, limit=limit
+        )
+    except TaxonNotFound:
+        raise HTTPException(status_code=404, detail=f"taxon {root} not found")
+
+    r_taxid, r_name, r_rank = root_ref
+    return Gaps(
+        root=TaxonRef(taxid=r_taxid, name=r_name, rank=r_rank),
+        rank=rank.value,
+        resource=resource.value,
+        total_matches=total,
+        returned=len(items),
+        items=[
+            GapItem(
+                taxid=meta.taxid,
+                name=name,
+                rank=rk,
+                n_rows=meta.n_rows,
+                covered=getattr(meta, f"c_{resource.value}"),
+                percent=round(meta.percent(resource.value), 2),
+                gap=meta.n_rows - getattr(meta, f"c_{resource.value}"),
+            )
+            for name, rk, meta in items
+        ],
+    )
 
 
 @app.get("/clade/{taxid}/summary", response_model=CladeSummary)

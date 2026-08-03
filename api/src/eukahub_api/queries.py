@@ -359,6 +359,55 @@ def fetch_breakdown(
     return root_ref, items, total
 
 
+def fetch_gaps(
+    conn: psycopg.Connection,
+    *,
+    root_taxid: int,
+    rank: str,
+    resource: str,
+    limit: int,
+) -> tuple[tuple[int, str, str], list[tuple[str, str, CladeMetadata]], int]:
+    """The biggest under-sequenced groups: descendants of ``root_taxid`` at
+    ``rank`` ranked by the "gap" = species with no ``resource`` data
+    (``n_rows - c_<resource>``), largest first — the app's thesis surfaced
+    directly. Big clade + little coverage rises to the top; a fully-covered
+    clade (gap 0) is dropped since it isn't a gap.
+
+    Returns ``((taxid, name, rank), [(name, rank, metadata), ...], total)`` where
+    ``total`` is the count of clades with any gap (before ``limit``). One indexed
+    ``ltree`` subtree query — the same machinery as ``fetch_breakdown``, only the
+    ordering differs. ``rank``/``resource`` are interpolated as identifiers, so
+    callers must pass TargetRank / MetricFilter-validated values (the endpoint
+    does). Raises ``TaxonNotFound`` if the root taxid is absent.
+    """
+    root_name, root_rank, root_path = fetch_root(conn, root_taxid)
+    # gap = species in the clade lacking this resource (c_<key> <= n_rows always,
+    # so it is >= 0). Ordered by the gap; species count breaks ties so among
+    # equal-gap clades the larger group leads.
+    gap = f"(f.n_rows - f.c_{resource})"
+    feature_cols = ", ".join(f"f.{c}" for c in _FEATURE_COLS)
+    sql = (
+        f"SELECT t.taxid, t.name, t.rank, {feature_cols}, COUNT(*) OVER () "
+        "FROM taxon t "
+        "JOIN clade_features f USING (taxid) "
+        "WHERE t.path <@ %s::ltree AND t.rank = %s "
+        f"AND {gap} > 0 "
+        f"ORDER BY {gap} DESC, f.n_rows DESC "
+        "LIMIT %s"
+    )
+    rows = conn.execute(sql, (root_path, rank, limit)).fetchall()
+
+    root_ref = (root_taxid, root_name, root_rank)
+    if not rows:
+        return root_ref, [], 0
+    total = rows[0][-1]
+    items = [
+        (name, item_rank, CladeMetadata(taxid, *features))
+        for taxid, name, item_rank, *features in (row[:-1] for row in rows)
+    ]
+    return root_ref, items, total
+
+
 # Public TSV schema (ported from Euka-Survey's generate_tsv): fixed prefix, then
 # every per-metric species-covered count, then every per-metric total — all in
 # METRICS order, so header and row stay aligned with the SELECT below.

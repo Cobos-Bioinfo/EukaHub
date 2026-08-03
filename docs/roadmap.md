@@ -355,25 +355,31 @@ under Phase 7 above). Each major one wants a design/scope decision before coding
   **row** in the header (`layout="row"`, current view omitted, same canonical
   order), so cross-nav is in-page on all three taxon-scoped views (not just the
   dashboard rail).
-- **[planned] "Where are the gaps?" discovery feature** (design-first; the app's
-  thesis, surfaced directly). Today you have to *navigate* to find under-sequenced
-  clades; the landing only hints at the gap with 6 hand-picked featured groups. Add
-  a view that **surfaces the biggest gaps automatically**: a ranked list of the
-  largest groups (highest species count) with the **lowest** coverage for a chosen
-  resource + rank — e.g. "biggest genome-assembly gaps at the order level". This is
-  the "more functionally interesting" kind of feature the user set as the deploy
-  gate, and it leans into what makes EukaHub distinct (big + pale = a big clade with
-  little data). Sketch: a new cacheable endpoint over the existing `clade_features`
-  rollup — pick a rank R under a root (default Eukaryota), rank its descendant
-  clades at R by species count, return each with its coverage %s + quality stats,
-  sortable/filterable by "gap size" (species x low coverage). Reuses the breakdown
-  machinery (one `ltree` subtree query at rank R) and the metric/quality configs;
-  the frontend is a sortable list/table + maybe a scatter (species vs coverage,
-  the gaps in the lower-right). **Design decisions to make first:** the exact "gap
-  score" (raw low-coverage vs species-weighted), default root/rank, and whether it
-  is its own page (e.g. `/gaps`) or folded into the landing. Bring 2-3 directions
-  before building. Groundwork already exists: `/overview` featured groups,
-  `/compare`, and the data-map lenses all touch the same coverage-vs-size framing.
+- **[done 2026-08-03] "Where are the gaps?" discovery feature** (design-first; the
+  user chose **missing-species scoring**, a **dedicated page + a landing teaser**,
+  and a **ranked leaderboard**). The app's thesis surfaced directly: instead of
+  navigating to find under-sequenced clades, a view **ranks the biggest gaps
+  automatically**. New cacheable `GET /gaps?root=&rank=&resource=&limit=` over the
+  existing `clade_features` rollup — one indexed `ltree` subtree query (the
+  `fetch_breakdown` machinery, only the ordering differs), ranking a root's
+  descendant clades at a rank by the **"gap" = species with no data for the chosen
+  resource** (`n_rows - c_<resource>`, biggest first; fully-covered clades dropped).
+  `GapItem`/`Gaps` schemas; defaults Eukaryota / order / assemblies / top 25. The
+  gap score is **species-weighted** (`species x uncovered`), which self-handles the
+  floor (a tiny obscure clade can't outrank Diptera) and reads as a real number.
+  Frontend: `GapsPage` at **`/gaps`** (nav "Gaps") — a ranked leaderboard with an
+  amber gap-magnitude bar per row (normalized to the top gap), the missing-species
+  headline, species + coverage %, cross-links (Dashboard / Tree / Map) and a
+  **"Look inside"** re-root that walks one rank finer; root/rank/resource live in
+  the URL (shareable). A **landing teaser** ("Where are the gaps?" + top-5 orders +
+  "See all gaps") sits below the featured groups, non-blocking. New `--gap` amber
+  token (light + dark, distinct from the blue/green coverage hues; a single-series
+  magnitude bar per the dataviz skill). 7 slice-safe API tests (anchored on
+  long-read gaps, which survive the CI slice's coverage caps; verified green on both
+  prod **and** a freshly-loaded CI slice). Whole suite **102 passed**, zero skips;
+  web build+typecheck clean; light + dark + mobile + drilled screenshotted. House
+  style kept (no em dashes / emojis). Deferred: a scatter (species vs coverage) as a
+  secondary view, and quality-stat columns (BUSCO/genes) in the leaderboard.
 
 Smaller follow-ups from this session:
 - Verify the **API docs behind the proxy** (`/api/docs`) render with

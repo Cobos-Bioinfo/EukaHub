@@ -12,6 +12,7 @@ import type {
   CladeSummary,
   Compare,
   FilterLogic,
+  Gaps,
   MetricConfig,
   MetricFilter,
   Overview,
@@ -54,6 +55,19 @@ export const getOverview = async (): Promise<Overview> => unwrap(await api.GET("
 // Compare several groups side by side (2-6). Unknown taxids are dropped server-side.
 export const getCompare = async (taxids: number[]): Promise<Compare> =>
   unwrap(await api.GET("/compare", { params: { query: { taxids: taxids.join(",") } } }));
+
+// The biggest under-sequenced groups ("Where are the gaps?"): descendant clades
+// of `root` at `rank`, ranked by species missing `resource` data (largest first).
+// Every param carries the API default when omitted (Eukaryota / order / ass / 25).
+export interface GapsParams {
+  root?: number;
+  rank?: TargetRank;
+  resource?: MetricFilter;
+  limit?: number;
+}
+
+export const getGaps = async (params: GapsParams = {}): Promise<Gaps> =>
+  unwrap(await api.GET("/gaps", { params: { query: params } }));
 
 export const getSummary = async (taxid: number): Promise<CladeSummary> =>
   unwrap(await api.GET("/clade/{taxid}/summary", { params: { path: { taxid } } }));

@@ -250,6 +250,34 @@ class Breakdown(BaseModel):
     items: list[CladeSummary]  # sorted, limited
 
 
+class GapItem(BaseModel):
+    """One under-sequenced group in the "Where are the gaps?" leaderboard: its
+    species count, its coverage for the chosen resource, and the ``gap`` = species
+    with no such data (``n_rows - covered``). The frontend ranks/visualizes by
+    ``gap`` (biggest hole first)."""
+
+    taxid: int
+    name: str
+    rank: str
+    n_rows: int  # species in the clade
+    covered: int  # species with >=1 of the chosen resource (c_<resource>)
+    percent: float  # covered / n_rows * 100 — the coverage %
+    gap: int  # n_rows - covered — species missing the resource (the "gap")
+
+
+class Gaps(BaseModel):
+    """The "Where are the gaps?" payload: the biggest under-sequenced groups at a
+    rank under a root, ranked by missing species for one resource (served by
+    ``/gaps``)."""
+
+    root: TaxonRef
+    rank: str  # the rank the root was broken down by
+    resource: str  # the metric key the gap is measured for ("ass"/"ann"/...)
+    total_matches: int  # clades with any gap, before `limit`
+    returned: int  # rows actually included (== len(items) <= limit)
+    items: list[GapItem]  # sorted by gap desc, limited
+
+
 # --- Quality dimension (per-record drill-down + live distribution stats) -----
 
 

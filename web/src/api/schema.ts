@@ -119,6 +119,33 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/gaps": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Gaps
+         * @description The biggest under-sequenced groups: the app's thesis surfaced directly.
+         *
+         *     Ranks ``root``'s descendant clades at ``rank`` by the number of species with
+         *     no ``resource`` data (``n_rows - covered``), largest gap first — so the huge,
+         *     barely-sequenced clades (e.g. insect orders with a genome for <1% of species)
+         *     rise to the top without any navigating. One indexed ``ltree`` subtree query;
+         *     fully-covered clades are omitted. Defaults: Eukaryota, order level,
+         *     assemblies, top 25.
+         */
+        get: operations["gaps_gaps_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/health": {
         parameters: {
             query?: never;
@@ -610,6 +637,48 @@ export interface components {
          * @enum {string}
          */
         FilterLogic: "AND" | "OR";
+        /**
+         * GapItem
+         * @description One under-sequenced group in the "Where are the gaps?" leaderboard: its
+         *     species count, its coverage for the chosen resource, and the ``gap`` = species
+         *     with no such data (``n_rows - covered``). The frontend ranks/visualizes by
+         *     ``gap`` (biggest hole first).
+         */
+        GapItem: {
+            /** Covered */
+            covered: number;
+            /** Gap */
+            gap: number;
+            /** N Rows */
+            n_rows: number;
+            /** Name */
+            name: string;
+            /** Percent */
+            percent: number;
+            /** Rank */
+            rank: string;
+            /** Taxid */
+            taxid: number;
+        };
+        /**
+         * Gaps
+         * @description The "Where are the gaps?" payload: the biggest under-sequenced groups at a
+         *     rank under a root, ranked by missing species for one resource (served by
+         *     ``/gaps``).
+         */
+        Gaps: {
+            /** Items */
+            items: components["schemas"]["GapItem"][];
+            /** Rank */
+            rank: string;
+            /** Resource */
+            resource: string;
+            /** Returned */
+            returned: number;
+            root: components["schemas"]["TaxonRef"];
+            /** Total Matches */
+            total_matches: number;
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -1018,6 +1087,43 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Compare"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    gaps_gaps_get: {
+        parameters: {
+            query?: {
+                /** @description Root taxon to search under (default Eukaryota). */
+                root?: number;
+                /** @description Rank of the groups to rank by gap. */
+                rank?: components["schemas"]["TargetRank"];
+                /** @description Resource whose coverage gap to measure. */
+                resource?: components["schemas"]["MetricFilter"];
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Gaps"];
                 };
             };
             /** @description Validation Error */

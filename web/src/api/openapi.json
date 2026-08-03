@@ -655,6 +655,91 @@
         "title": "FilterLogic",
         "type": "string"
       },
+      "GapItem": {
+        "description": "One under-sequenced group in the \"Where are the gaps?\" leaderboard: its\nspecies count, its coverage for the chosen resource, and the ``gap`` = species\nwith no such data (``n_rows - covered``). The frontend ranks/visualizes by\n``gap`` (biggest hole first).",
+        "properties": {
+          "covered": {
+            "title": "Covered",
+            "type": "integer"
+          },
+          "gap": {
+            "title": "Gap",
+            "type": "integer"
+          },
+          "n_rows": {
+            "title": "N Rows",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "percent": {
+            "title": "Percent",
+            "type": "number"
+          },
+          "rank": {
+            "title": "Rank",
+            "type": "string"
+          },
+          "taxid": {
+            "title": "Taxid",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "taxid",
+          "name",
+          "rank",
+          "n_rows",
+          "covered",
+          "percent",
+          "gap"
+        ],
+        "title": "GapItem",
+        "type": "object"
+      },
+      "Gaps": {
+        "description": "The \"Where are the gaps?\" payload: the biggest under-sequenced groups at a\nrank under a root, ranked by missing species for one resource (served by\n``/gaps``).",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/GapItem"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "rank": {
+            "title": "Rank",
+            "type": "string"
+          },
+          "resource": {
+            "title": "Resource",
+            "type": "string"
+          },
+          "returned": {
+            "title": "Returned",
+            "type": "integer"
+          },
+          "root": {
+            "$ref": "#/components/schemas/TaxonRef"
+          },
+          "total_matches": {
+            "title": "Total Matches",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "root",
+          "rank",
+          "resource",
+          "total_matches",
+          "returned",
+          "items"
+        ],
+        "title": "Gaps",
+        "type": "object"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -1539,6 +1624,83 @@
           }
         },
         "summary": "Compare"
+      }
+    },
+    "/gaps": {
+      "get": {
+        "description": "The biggest under-sequenced groups: the app's thesis surfaced directly.\n\nRanks ``root``'s descendant clades at ``rank`` by the number of species with\nno ``resource`` data (``n_rows - covered``), largest gap first \u2014 so the huge,\nbarely-sequenced clades (e.g. insect orders with a genome for <1% of species)\nrise to the top without any navigating. One indexed ``ltree`` subtree query;\nfully-covered clades are omitted. Defaults: Eukaryota, order level,\nassemblies, top 25.",
+        "operationId": "gaps_gaps_get",
+        "parameters": [
+          {
+            "description": "Root taxon to search under (default Eukaryota).",
+            "in": "query",
+            "name": "root",
+            "required": false,
+            "schema": {
+              "default": 2759,
+              "description": "Root taxon to search under (default Eukaryota).",
+              "title": "Root",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Rank of the groups to rank by gap.",
+            "in": "query",
+            "name": "rank",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/TargetRank",
+              "default": "order",
+              "description": "Rank of the groups to rank by gap."
+            }
+          },
+          {
+            "description": "Resource whose coverage gap to measure.",
+            "in": "query",
+            "name": "resource",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/MetricFilter",
+              "default": "ass",
+              "description": "Resource whose coverage gap to measure."
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 25,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Gaps"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Gaps"
       }
     },
     "/health": {
