@@ -636,6 +636,50 @@ stay deploy-gated** (CRG). The Actions run itself is unverified end-to-end here 
 way to trigger Actions from this env; the fetch is heavy) — first real run happens
 on GitHub via the schedule or a manual dispatch.
 
+**Pre-deploy polish batch: gaps scatter + quality, landing polish, API caching —
+done** (2026-08-04, on `dev`). Clearing the remaining non-deployment backlog so
+CRG is the only thing left. Three slices. (1) **Gaps scatter + quality columns**
+(the two deferred `/gaps` items). API: `GET /gaps` now attaches per-clade quality
+stats (best BUSCO / median coding genes / genome size / N50) for the covered
+subset via a new `fetch_quality_for_taxids` (the two-phase `fetch_breakdown_quality`
+shape, but bucketed on an explicit taxid set so it stays cheap — ~0.4s for the top
+25 vs 5.2s to compute all 907 order buckets); gated behind `include_quality`
+(default on; the landing teaser passes `false` to stay light). `GapItem.stats`
+added (`QualityStatValue` moved above it in `schemas.py`). Frontend: a **List /
+Scatter** toggle on `/gaps` (URL-synced `?view=`); the scatter (`GapsScatter.tsx`)
+is a single-series bubble chart — x = species (log, padded to whole-power ticks),
+y = coverage %, bubble size = the gap, one `--gap` amber (already validated as the
+gap bar, so no categorical palette), per-mark hover tooltip carrying the quality
+stats, List view as the accessible table fallback (dataviz skill). List rows gained
+a "Where data exists" quality line. (2) **Landing polish** (the deferred bits): the
+focal hero (`.hero__focal`) now vertically centres in ~66svh so it reads as a
+composed hero with the data strip peeking below the fold; each featured card gained
+a concrete gap line ("N species with no genome yet", amber, from existing data — no
+API change). (3) **API caching: ETag/304** — the response middleware now buffers
+materialized JSON GETs, sets a weak `ETag`, and returns a bodyless **304** on a
+matching `If-None-Match` (streamed `export.tsv` and `no-store` health skipped);
+`_etag_of` / `_if_none_match` helpers, 7 tests. Plus **nginx `proxy_cache`** in
+`web/nginx.conf` (a shared reverse-proxy micro-cache with `proxy_cache_revalidate`
+so an expired entry becomes a cheap upstream 304, and `X-Cache-Status` for
+visibility) — validated by container `nginx -t` at startup (hand-off below).
+TS types regenerated; **114 tests on prod / 97 API on the CI slice** (via a scratch
+`eukahub_ci` DB in the same Postgres), ruff clean; gaps (list+scatter+hover) +
+landing (light/dark/mobile, 0 overflow) headless-screenshotted; ETag/304 live-curl
+verified; `/docs` with `API_ROOT_PATH=/api` confirmed to reference
+`/api/openapi.json`. **Two env-gated hand-off checks remain** (need the user; not
+CRG-gated): bring up the prod stack (`sudo docker compose -f
+infra/docker-compose.prod.yml up --build -d`) to click **`/api/docs`** + confirm
+`X-Cache-Status` HIT on a repeat GET, and dispatch a first **`rebuild.yml`** run on
+GitHub (`gh workflow run rebuild.yml`). **NB — the prod compose starts an EMPTY
+Postgres** (fresh volume; real data comes from the deploy-time `pg_dump` restore),
+so every *data* endpoint 404s (`/api/gaps` -> `taxon 2759 not found`) and a 404 is
+correctly not cached. Test the cache against a **static config endpoint** that is
+200 without loaded data: `curl -s -D - -o /dev/null
+http://localhost:8080/api/metrics-config | grep -i x-cache-status` twice (MISS then
+HIT). The nginx cache is confirmed functional (it writes `/var/cache/nginx/api/`
+entries); the MISS->HIT + ETag 304 on a 200 endpoint is the user's final click. No
+em dashes / emojis kept.
+
 ## Read before doing anything
 
 - `docs/data-model.md` — **the core doc.** DB design + taxonomy-tree storage.
@@ -738,11 +782,23 @@ deployment / CRG conversation until everything else is finished** (also: summer 
 bad time to reach the CRG team), then work the pipeline automation. Delivered:
 `.github/workflows/rebuild.yml` (monthly, invariant-gated, publishes a validated
 `pg_dump` artifact) + the `dataset_meta` stamp surfaced as the "Data updated"
-footer. **Then (pick next):** (a) small functional polish (landing viewport
-centring; deeper featured-group storytelling; a gaps **scatter** secondary view or
-quality columns in the leaderboard); (b) trigger a first real `rebuild.yml` run on
-GitHub (manual `workflow_dispatch`) to confirm the heavy fetch end-to-end;
-(d) deployment / CRG (deferred by the user until the rest is done).
+footer.
+
+**NEXT — the pre-deploy polish batch is now DONE** (2026-08-04, on `dev`; see the
+"Pre-deploy polish batch" status entry above). Part (a) small functional polish is
+done (gaps **scatter** + **quality columns**; landing **viewport centring** +
+**featured storytelling**), and the caching follow-up (**ETag/304 + nginx
+`proxy_cache`**) landed too. This clears the codeable non-deployment backlog. **The
+two remaining items both need the user / an env this session can't reach, and
+neither is CRG-gated:** (b) trigger a first real `rebuild.yml` run on GitHub
+(`gh workflow run rebuild.yml`, or the Actions "Run workflow" button) to confirm
+the heavy fetch + invariant gate + `pg_dump` artifact end-to-end; and the prod-stack
+hand-off check (`sudo docker compose -f infra/docker-compose.prod.yml up --build -d`)
+to click **`/api/docs`** and confirm the nginx cache serves `X-Cache-Status: HIT`
+on a repeat GET of a **config** endpoint (`/api/metrics-config` — the smoke-test DB
+is empty, so data endpoints 404; see the caveat in the polish-batch status entry).
+After those, only (d) **deployment / CRG** is left (deferred by the user until
+everything else is done).
 
 **UI-polish backlog (user-reported 2026-08-03) — ALL SIX DONE** (2026-08-03, on
 `dev`; see the "UI-polish alignment batch" status entry above for the per-item
@@ -751,8 +807,10 @@ fixes + the description-measure standardization follow-up).
 Tracked non-functional follow-ups (do when relevant): the **2 npm-audit highs on
 react-router are now RESOLVED** — the React 18 -> 19 + react-router 8 upgrade
 (2026-08-03) landed the patched version, and `npm audit` reports 0 vulnerabilities.
-Remaining: caching layers (nginx `proxy_cache`/CDN, ETag/304). **A headless browser
-IS available** in the dev env via
+**Caching layers are now DONE** (2026-08-04): app-level **ETag/304** conditional
+requests + an nginx **`proxy_cache`** (see the "Pre-deploy polish batch" entry); a
+CDN in front + an in-process LRU remain optional future scale-ups, not required.
+**A headless browser IS available** in the dev env via
 `google-chrome-stable` — use it to screenshot/verify UI changes (this note
 supersedes earlier "no headless browser" remarks).
 

@@ -206,6 +206,42 @@ everything the fetches returned; the redesign stops discarding it.
   dashes only survive as the N/A placeholder glyph and in code comments (matching
   the existing codebase). See the writing-style memory.
 
+## Settled (2026-08-04) — pre-deploy polish batch
+
+- **Gaps quality via a taxid-scoped stats query, not the full breakdown.** `/gaps`
+  attaches per-clade quality (best BUSCO / median coding genes / genome size / N50)
+  through `fetch_quality_for_taxids`, which reuses the two-phase shape of
+  `fetch_breakdown_quality` but buckets on the explicit set of returned taxids.
+  Reusing `fetch_breakdown_quality(root, rank)` instead would compute *every*
+  bucket: measured at the gaps default (Eukaryota -> order) that is 907 buckets in
+  ~5.2s vs ~0.4s for the top 25 the leaderboard actually shows. It is **gated
+  behind `include_quality`** (default on) because the scan cost is independent of
+  `limit`; the landing teaser passes `false` so it stays light.
+- **Gaps scatter is a single-series bubble chart** (dataviz skill): x = species
+  (log, padded to whole-power ticks), y = coverage %, bubble size = the gap, one
+  `--gap` amber (already validated as the leaderboard gap bar, so no categorical
+  palette to validate), per-mark hover tooltip. No legend (single series, the title
+  names it); the **List view is the accessible table fallback** (same pattern as the
+  treemap's "view as a list" and the tree's outline). Chosen over recolouring by
+  gap magnitude, since bubble size already carries the gap.
+- **ETag = a weak tag over the buffered JSON body, in the response middleware.**
+  BaseHTTPMiddleware exposes only a streaming wrapper (no `.body`), so the
+  middleware **buffers `application/json` GET bodies** to fingerprint them (cheap
+  for these small payloads) and returns a bodyless **304** on a matching
+  `If-None-Match`. Weak comparison (RFC 7232); `md5(usedforsecurity=False)` as a
+  content fingerprint, not a security primitive. The **streamed `export.tsv`**
+  (text/tab-separated-values) and `no-store` health are **skipped** (never
+  buffered). Alternative — a pure-ASGI middleware that taps the body without
+  buffering — was more code for no real memory win here (JSONResponse already holds
+  the whole body in memory).
+- **nginx `proxy_cache` complements the ETag, it doesn't replace it.** A shared
+  reverse-proxy micro-cache (`web/nginx.conf`, http-context `proxy_cache_path`)
+  means repeat GETs across all clients skip the API and DB; `proxy_cache_revalidate
+  on` turns an expired entry into a cheap upstream 304 (using the ETag) instead of
+  a full re-fetch; nginx still honours the API's `Cache-Control` (so `no-store`
+  health is never cached). `X-Cache-Status` is surfaced for tuning. A CDN and an
+  in-process LRU remain optional future scale-ups.
+
 ## Open — still to decide
 
 - None — the two data-model forks are resolved: **no `base_count`** (settled

@@ -135,7 +135,8 @@ export interface paths {
          *     barely-sequenced clades (e.g. insect orders with a genome for <1% of species)
          *     rise to the top without any navigating. One indexed ``ltree`` subtree query;
          *     fully-covered clades are omitted. Defaults: Eukaryota, order level,
-         *     assemblies, top 25.
+         *     assemblies, top 25. ``include_quality`` adds the quality of the data that
+         *     *does* exist per clade (a second, small subtree query over the shown clades).
          */
         get: operations["gaps_gaps_get"];
         put?: never;
@@ -697,6 +698,11 @@ export interface components {
             percent: number;
             /** Rank */
             rank: string;
+            /**
+             * Stats
+             * @default []
+             */
+            stats: components["schemas"]["QualityStatValue"][];
             /** Taxid */
             taxid: number;
         };
@@ -1150,6 +1156,8 @@ export interface operations {
                 /** @description Resource whose coverage gap to measure. */
                 resource?: components["schemas"]["MetricFilter"];
                 limit?: number;
+                /** @description Attach per-clade quality stats (best BUSCO / median coding genes / genome size / N50) for the covered subset. Off for lightweight callers like the landing teaser. */
+                include_quality?: boolean;
             };
             header?: never;
             path?: never;

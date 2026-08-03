@@ -164,8 +164,14 @@ links); ENA → reads (aggregated, run counts only — no `base_count`).
   prod DB, and pushing the snapshot to a live serving DB.
 - **[done]** Response caching: `Cache-Control: public, max-age=$CACHE_MAX_AGE`
   on cacheable GETs (health = `no-store`), so browsers / a CDN / a reverse proxy
-  cache between rebuilds. Follow-ups: nginx `proxy_cache` or a CDN in front,
-  ETag/304 conditional requests, and an in-process LRU for the hottest clades.
+  cache between rebuilds. **[done 2026-08-04]** the two named follow-ups: app-level
+  **ETag/304** conditional requests (weak ETag over the buffered JSON body in the
+  response middleware; streamed `export.tsv` + `no-store` health skipped;
+  `If-None-Match` short-circuits to a bodyless 304) and an nginx **`proxy_cache`**
+  in `web/nginx.conf` (shared reverse-proxy micro-cache, `proxy_cache_revalidate`
+  turning an expired entry into a cheap upstream 304, `X-Cache-Status` for
+  visibility). Still optional (not required): a CDN in front, and an in-process LRU
+  for the hottest clades.
 
 ### Security & secrets — assistant owns this; acknowledge & fix each when reached
 Credential externalization is **done** (compose reads `${POSTGRES_*:-eukahub}`,
@@ -309,8 +315,10 @@ under Phase 7 above). Each major one wants a design/scope decision before coding
     grid of featured-group cards (friendly label from `clades.ts`, species count,
     assembly-coverage meter, dashboard link) — the gap reads instantly (Insects
     765k species / 0.72% assembled vs Birds 17.4%). 4 slice-safe API tests; 89
-    pass; light + dark screenshotted. Still-deferred polish: vertical centring in
-    the viewport.
+    pass; light + dark screenshotted. **[done 2026-08-04]** the deferred polish:
+    the focal hero (`.hero__focal`) vertically centres in ~66svh (composed hero,
+    data strip peeking below the fold), and each featured card gained a concrete
+    gap line ("N species with no genome yet", amber, computed from existing data).
 - **[done] Subspecies / infraspecific taxa (2026-08-01)** — decisions: **all
   infraspecific ranks** (subspecies, strain, varietas, forma, isolate, ...),
   **directly-attached counts**. Additive, so the core thesis is untouched: the
@@ -389,8 +397,15 @@ under Phase 7 above). Each major one wants a design/scope decision before coding
   long-read gaps, which survive the CI slice's coverage caps; verified green on both
   prod **and** a freshly-loaded CI slice). Whole suite **102 passed**, zero skips;
   web build+typecheck clean; light + dark + mobile + drilled screenshotted. House
-  style kept (no em dashes / emojis). Deferred: a scatter (species vs coverage) as a
-  secondary view, and quality-stat columns (BUSCO/genes) in the leaderboard.
+  style kept (no em dashes / emojis). **[done 2026-08-04]** the two deferred bits: a
+  **List / Scatter** toggle (URL-synced `?view=`) whose scatter (`GapsScatter.tsx`)
+  is a single-series bubble chart (x = species log, y = coverage %, size = the gap,
+  `--gap` amber, hover tooltip, List as the accessible fallback), and **quality-stat
+  columns** — `GET /gaps` now attaches per-clade best-BUSCO / median coding-genes /
+  genome-size / N50 for the covered subset (`fetch_quality_for_taxids`, scoped to
+  the returned taxids so it stays ~0.4s; gated behind `include_quality`, off for the
+  landing teaser), shown on each list row and in the scatter tooltip. 3 more
+  slice-safe API tests.
 
 Smaller follow-ups from this session:
 - Verify the **API docs behind the proxy** (`/api/docs`) render with

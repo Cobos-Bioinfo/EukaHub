@@ -2061,8 +2061,19 @@ button.tree-outline__name:hover {
 .hero {
   max-width: 760px;
   margin: 0 auto;
-  padding: clamp(2.5rem, 7vw, 5.5rem) 0 clamp(2.5rem, 6vw, 4rem);
+  padding: clamp(1.25rem, 3vw, 2.5rem) 0 clamp(2.5rem, 6vw, 4rem);
   text-align: center;
+}
+/* The focal hero (name, search, primary journeys) centres itself in roughly the
+   first screenful, so it reads as a composed hero rather than clinging to the
+   header; capped so it never gets cavernous on very tall displays, and it simply
+   uses natural height when the content is taller than the cap (short viewports).
+   The data strip that follows peeks in below the fold, inviting a scroll. */
+.hero__focal {
+  min-height: min(66svh, 560px);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
 }
 /* EukaHub name, front and centre. Solid two-tone (no gradient): "Hub" adopts the
    link accent, matching the small header brand. */
@@ -2265,6 +2276,21 @@ button.tree-outline__name:hover {
 }
 .featured__bar--annotated .featured__bar-fill {
   background: var(--cov-annotated);
+}
+/* The gap in plain numbers: species with no genome yet. Pinned to the card
+   bottom (margin-top:auto) so the line sits level across cards, and coloured with
+   the shared gap amber to tie the featured cards to the "where are the gaps" theme. */
+.featured__gap {
+  margin-top: auto;
+  padding-top: 0.55rem;
+  border-top: 1px dashed var(--border);
+  font-size: 0.82rem;
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+.featured__gap strong {
+  color: var(--gap);
+  font-weight: 700;
 }
 @media (max-width: 560px) {
   .glance__grid {
@@ -3209,6 +3235,147 @@ button.tree-outline__name:hover {
 }
 .gaps-row__inside {
   font-weight: 600;
+}
+/* The quality of the data a clade *does* have (best BUSCO, median coding genes),
+   shown next to its missing-species gap. */
+.gaps-row__quality {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.25rem 0.9rem;
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px dashed var(--border);
+}
+.gaps-row__qlabel {
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+.gaps-row__qstat {
+  font-size: 0.85rem;
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+.gaps-row__qstat strong {
+  color: var(--ink);
+  font-weight: 700;
+}
+.gaps-row__qstat--none {
+  color: var(--muted);
+  font-style: italic;
+}
+
+/* Toolbar above the results: the summary line + the List / Scatter toggle. */
+.gaps__toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+}
+.gaps__toolbar .gaps__summary {
+  margin: 0;
+}
+
+/* The scatter secondary view: species (log) vs coverage %, bubble = gap. */
+.gscatter {
+  position: relative;
+  margin-top: 0.4rem;
+}
+.gscatter__svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.gscatter__grid {
+  stroke: var(--border);
+  stroke-width: 1;
+}
+.gscatter__grid--v {
+  stroke-dasharray: 2 4;
+}
+.gscatter__ylab,
+.gscatter__xlab {
+  fill: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.gscatter__axis {
+  fill: var(--ink-2);
+  font-size: 12px;
+  font-weight: 600;
+}
+.gscatter__dot {
+  fill: var(--gap);
+  fill-opacity: 0.68;
+  stroke: var(--card); /* 2px surface ring so overlapping bubbles separate */
+  stroke-width: 2;
+  cursor: pointer;
+  transition:
+    fill-opacity 0.1s ease,
+    stroke 0.1s ease;
+}
+.gscatter__dot:hover,
+.gscatter__dot--on {
+  fill-opacity: 0.9;
+  stroke: var(--ink);
+}
+.gscatter__tip {
+  position: absolute;
+  transform: translate(-50%, calc(-100% - 14px));
+  min-width: 12rem;
+  max-width: 18rem;
+  padding: 0.55rem 0.7rem;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: var(--shadow-lg, var(--shadow));
+  pointer-events: none;
+  z-index: 5;
+}
+.gscatter__tip--below {
+  transform: translate(-50%, 14px);
+}
+.gscatter__tip-name {
+  font-weight: 700;
+  color: var(--ink);
+  margin-bottom: 0.15rem;
+}
+.gscatter__tip-row {
+  font-size: 0.88rem;
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+.gscatter__tip-row strong {
+  color: var(--gap);
+  font-weight: 700;
+}
+.gscatter__tip-muted {
+  color: var(--muted);
+}
+.gscatter__tip-q {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  margin-top: 0.4rem;
+  padding-top: 0.4rem;
+  border-top: 1px dashed var(--border);
+  font-size: 0.82rem;
+  color: var(--ink-2);
+}
+.gscatter__tip-qstat strong {
+  color: var(--ink);
+}
+.gscatter__note {
+  margin: 0.5rem 0 0;
+  font-size: 0.82rem;
+  color: var(--muted);
 }
 
 /* Landing teaser: the top few gaps, linking to the full leaderboard. */

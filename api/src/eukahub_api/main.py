@@ -21,6 +21,7 @@ round out the service. Every request is logged as one structured JSON line (see
 ``logging_config``).
 """
 
+import hashlib
 import logging
 import os
 import time
@@ -54,6 +55,7 @@ from eukahub_api.queries import (
     fetch_gaps,
     fetch_lineage,
     fetch_overview,
+    fetch_quality_for_taxids,
     fetch_root,
     fetch_summary,
     iter_export_tsv,
@@ -107,6 +109,24 @@ _SECURITY_HEADERS = {
 # Tune CACHE_MAX_AGE (seconds) to the rebuild cadence; health stays uncached.
 _CACHE_MAX_AGE = int(os.environ.get("CACHE_MAX_AGE", "3600"))
 
+
+def _etag_of(body: bytes) -> str:
+    """A weak ETag over the exact response bytes. md5 is a content fingerprint
+    here (not a security primitive); weak so downstream transforms (gzip) don't
+    invalidate the match, which is the semantics we want for a whole-body tag."""
+    return f'W/"{hashlib.md5(body, usedforsecurity=False).hexdigest()}"'
+
+
+def _if_none_match(header: str | None, etag: str) -> bool:
+    """RFC 7232 If-None-Match test (weak comparison): ``*`` matches anything,
+    otherwise the client's list must contain our tag, ignoring the ``W/`` prefix."""
+    if not header:
+        return False
+    if header.strip() == "*":
+        return True
+    norm = etag.removeprefix("W/").strip()
+    return any(t.strip().removeprefix("W/").strip() == norm for t in header.split(","))
+
 # The SPA reaches the API through a proxy (Vite in dev, nginx in prod) that
 # strips a `/api` prefix. Setting root_path tells FastAPI its external mount
 # point so the docs at `/api/docs` reference `/api/openapi.json` correctly.
@@ -147,20 +167,39 @@ app.add_middleware(
 
 @app.middleware("http")
 async def add_response_headers(request: Request, call_next):
-    """Baseline security headers on every response, plus Cache-Control on
-    cacheable GETs (setdefault so a handler that set its own keeps precedence)."""
+    """Baseline security headers on every response, plus Cache-Control and an
+    ETag on cacheable GETs (setdefault so a handler that set its own keeps
+    precedence). A matching If-None-Match short-circuits to a bodyless 304."""
     response = await call_next(request)
     for header, value in _SECURITY_HEADERS.items():
         response.headers.setdefault(header, value)
+    # Caching applies to GET (the routes are GET-only — a HEAD gets 405, which is
+    # never cached, so `curl -I` shows a reverse-proxy MISS; test the cache with a
+    # real GET).
+    if request.method != "GET":
+        return response
     # Health must stay fresh; other successful GETs are cacheable until rebuild.
-    if request.method == "GET":
-        if request.url.path.startswith("/health"):
-            response.headers.setdefault("Cache-Control", "no-store")
-        elif response.status_code == 200:
-            response.headers.setdefault(
-                "Cache-Control", f"public, max-age={_CACHE_MAX_AGE}"
-            )
-    return response
+    if request.url.path.startswith("/health"):
+        response.headers.setdefault("Cache-Control", "no-store")
+        return response
+    if response.status_code != 200:
+        return response
+    response.headers.setdefault("Cache-Control", f"public, max-age={_CACHE_MAX_AGE}")
+    # ETag + conditional requests for materialized JSON. The middleware runs over
+    # a streaming wrapper (BaseHTTPMiddleware), so buffer the body to fingerprint
+    # it — cheap for these small JSON payloads. The streamed TSV export
+    # (text/tab-separated-values) is left untouched. A revalidating client that
+    # already holds this exact body gets a bodyless 304.
+    if not response.headers.get("content-type", "").startswith("application/json"):
+        return response
+    body = b"".join([chunk async for chunk in response.body_iterator])
+    etag = _etag_of(body)
+    response.headers.setdefault("ETag", etag)
+    headers = dict(response.headers)
+    headers.pop("content-length", None)  # recomputed from the body / empty 304
+    if _if_none_match(request.headers.get("if-none-match"), etag):
+        return Response(status_code=304, headers=headers)
+    return Response(content=body, status_code=response.status_code, headers=headers)
 
 
 @app.middleware("http")
@@ -322,6 +361,14 @@ def gaps(
         MetricFilter, Query(description="Resource whose coverage gap to measure.")
     ] = MetricFilter.ass,
     limit: Annotated[int, Query(ge=1, le=200)] = 25,
+    include_quality: Annotated[
+        bool,
+        Query(
+            description="Attach per-clade quality stats (best BUSCO / median "
+            "coding genes / genome size / N50) for the covered subset. Off for "
+            "lightweight callers like the landing teaser."
+        ),
+    ] = True,
 ) -> Gaps:
     """The biggest under-sequenced groups: the app's thesis surfaced directly.
 
@@ -330,7 +377,8 @@ def gaps(
     barely-sequenced clades (e.g. insect orders with a genome for <1% of species)
     rise to the top without any navigating. One indexed ``ltree`` subtree query;
     fully-covered clades are omitted. Defaults: Eukaryota, order level,
-    assemblies, top 25.
+    assemblies, top 25. ``include_quality`` adds the quality of the data that
+    *does* exist per clade (a second, small subtree query over the shown clades).
     """
     try:
         root_ref, items, total = fetch_gaps(
@@ -338,6 +386,14 @@ def gaps(
         )
     except TaxonNotFound:
         raise HTTPException(status_code=404, detail=f"taxon {root} not found")
+
+    # The quality of the data that *does* exist, alongside the missing-species
+    # gap: best BUSCO / median coding genes / genome size / N50 per gap clade.
+    # Scoped to just the returned clades, so the extra query stays cheap; skipped
+    # entirely (empty stats) when the caller doesn't need it.
+    quality: dict[int, dict[str, float | None]] = {}
+    if include_quality:
+        quality = fetch_quality_for_taxids(conn, [meta.taxid for _, _, meta in items])
 
     r_taxid, r_name, r_rank = root_ref
     return Gaps(
@@ -355,6 +411,12 @@ def gaps(
                 covered=getattr(meta, f"c_{resource.value}"),
                 percent=round(meta.percent(resource.value), 2),
                 gap=meta.n_rows - getattr(meta, f"c_{resource.value}"),
+                stats=[
+                    QualityStatValue(key=q.key, value=quality[meta.taxid][q.key])
+                    for q in QUALITY_STATS
+                ]
+                if include_quality
+                else [],
             )
             for name, rk, meta in items
         ],

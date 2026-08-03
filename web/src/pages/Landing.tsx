@@ -20,35 +20,39 @@ const EUKARYOTA_TAXID = 2759;
 export default function Landing() {
   return (
     <section className="hero">
-      <h1 className="hero__wordmark">
-        Euka<span>Hub</span>
-      </h1>
-      <p className="hero__tagline">Genomic data across the eukaryotic tree of life</p>
-      <p className="hero__lede">
-        See how much public genomic data exists for any group, and how it is spread across the
-        tree of life beneath it.
-      </p>
+      {/* The focal block (name, search, primary journeys) centres itself in the
+          first screenful; the data strip below peeks at the fold to invite a scroll. */}
+      <div className="hero__focal">
+        <h1 className="hero__wordmark">
+          Euka<span>Hub</span>
+        </h1>
+        <p className="hero__tagline">Genomic data across the eukaryotic tree of life</p>
+        <p className="hero__lede">
+          See how much public genomic data exists for any group, and how it is spread across the
+          tree of life beneath it.
+        </p>
 
-      <div className="hero__search">
-        <RootPicker />
-      </div>
+        <div className="hero__search">
+          <RootPicker />
+        </div>
 
-      <div className="hero__cta">
-        <Link to={`/clade/${EUKARYOTA_TAXID}`} className="hero__btn hero__btn--primary">
-          <SearchIcon size={17} />
-          Explore Eukaryota
-        </Link>
-        <Link to={`/tree/${EUKARYOTA_TAXID}`} className="hero__btn hero__btn--tree">
-          <TreeIcon size={17} />
-          Tree of Life
-        </Link>
-        <RandomCladeButton
-          className="hero__btn hero__btn--surprise"
-          title="Jump to a random group"
-        >
-          <RandomIcon size={17} />
-          Surprise me
-        </RandomCladeButton>
+        <div className="hero__cta">
+          <Link to={`/clade/${EUKARYOTA_TAXID}`} className="hero__btn hero__btn--primary">
+            <SearchIcon size={17} />
+            Explore Eukaryota
+          </Link>
+          <Link to={`/tree/${EUKARYOTA_TAXID}`} className="hero__btn hero__btn--tree">
+            <TreeIcon size={17} />
+            Tree of Life
+          </Link>
+          <RandomCladeButton
+            className="hero__btn hero__btn--surprise"
+            title="Jump to a random group"
+          >
+            <RandomIcon size={17} />
+            Surprise me
+          </RandomCladeButton>
+        </div>
       </div>
 
       <LandingOverview />
@@ -61,7 +65,7 @@ export default function Landing() {
  *  with the most species still lacking a genome assembly, linking to the full
  *  view. Non-blocking and decorative — absent while loading or on error. */
 function LandingGaps() {
-  const { data } = useAsync(() => getGaps({ limit: 5 }), []);
+  const { data } = useAsync(() => getGaps({ limit: 5, include_quality: false }), []);
   const items = data?.items ?? [];
   if (items.length === 0) return null;
   const maxGap = items[0].gap; // sorted gap-desc
@@ -165,6 +169,9 @@ function LandingOverview() {
  *  meters (assembled / annotated), linking into the group's dashboard. */
 function FeaturedCard({ clade }: { clade: FeaturedClade }) {
   const label = cladeLabel(clade.taxid) ?? clade.name;
+  // The gap in absolute terms: species with no genome assembly yet. Reframes the
+  // card around the app's thesis (scale, then coverage, then the concrete gap).
+  const missing = Math.max(0, Math.round(clade.species * (1 - clade.assembly_percent / 100)));
   return (
     <Link to={`/clade/${clade.taxid}`} className="featured__card">
       <span className="featured__name">{label}</span>
@@ -176,6 +183,9 @@ function FeaturedCard({ clade }: { clade: FeaturedClade }) {
         label="Annotated"
         pct={clade.annotation_percent}
       />
+      <span className="featured__gap">
+        <strong>{fmtCompact(missing)}</strong> species with no genome yet
+      </span>
     </Link>
   );
 }

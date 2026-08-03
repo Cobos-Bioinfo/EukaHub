@@ -77,3 +77,46 @@ def test_gaps_is_cacheable(client):
     r = client.get("/gaps")
     assert r.status_code == 200
     assert "public" in r.headers.get("cache-control", "")
+
+
+def _stats_dict(stats: list[dict]) -> dict[str, float | None]:
+    return {s["key"]: s["value"] for s in stats}
+
+
+def test_gaps_quality_stats_shape(client):
+    """By default each item carries the quality of the data it *does* have: one
+    entry per QUALITY_STATS key (from /quality-config), each float-or-null."""
+    keys = {q["key"] for q in client.get("/quality-config").json()}
+    assert keys  # the quality dimension is configured
+    body = client.get("/gaps", params={"rank": "class", "resource": "lng"}).json()
+    assert body["items"]
+    for it in body["items"]:
+        stats = _stats_dict(it["stats"])
+        assert set(stats) == keys
+        for v in stats.values():
+            assert v is None or isinstance(v, (int, float))
+
+
+def test_gaps_include_quality_false_omits_stats(client):
+    """The lightweight path (used by the landing teaser) returns empty stats."""
+    body = client.get(
+        "/gaps", params={"rank": "class", "resource": "lng", "include_quality": "false"}
+    ).json()
+    assert body["items"]
+    assert all(it["stats"] == [] for it in body["items"])
+
+
+def test_gaps_quality_matches_record_endpoints(client):
+    """A gap clade's quality stats are the same live distribution stats the
+    per-record endpoints serve over that clade's subtree — no separate source of
+    truth. Assembly-source keys match /assemblies, annotation-source keys match
+    /annotations."""
+    source = {q["key"]: q["source"] for q in client.get("/quality-config").json()}
+    body = client.get("/gaps", params={"rank": "class", "resource": "lng"}).json()
+    it = body["items"][0]  # Mammalia on both slice and prod
+    gaps_stats = _stats_dict(it["stats"])
+    asm = _stats_dict(client.get(f"/taxon/{it['taxid']}/assemblies").json()["stats"])
+    ann = _stats_dict(client.get(f"/taxon/{it['taxid']}/annotations").json()["stats"])
+    for key, val in gaps_stats.items():
+        expected = asm[key] if source[key] == "assembly" else ann[key]
+        assert val == expected

@@ -724,6 +724,14 @@
             "title": "Rank",
             "type": "string"
           },
+          "stats": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/QualityStatValue"
+            },
+            "title": "Stats",
+            "type": "array"
+          },
           "taxid": {
             "title": "Taxid",
             "type": "integer"
@@ -1670,7 +1678,7 @@
     },
     "/gaps": {
       "get": {
-        "description": "The biggest under-sequenced groups: the app's thesis surfaced directly.\n\nRanks ``root``'s descendant clades at ``rank`` by the number of species with\nno ``resource`` data (``n_rows - covered``), largest gap first \u2014 so the huge,\nbarely-sequenced clades (e.g. insect orders with a genome for <1% of species)\nrise to the top without any navigating. One indexed ``ltree`` subtree query;\nfully-covered clades are omitted. Defaults: Eukaryota, order level,\nassemblies, top 25.",
+        "description": "The biggest under-sequenced groups: the app's thesis surfaced directly.\n\nRanks ``root``'s descendant clades at ``rank`` by the number of species with\nno ``resource`` data (``n_rows - covered``), largest gap first \u2014 so the huge,\nbarely-sequenced clades (e.g. insect orders with a genome for <1% of species)\nrise to the top without any navigating. One indexed ``ltree`` subtree query;\nfully-covered clades are omitted. Defaults: Eukaryota, order level,\nassemblies, top 25. ``include_quality`` adds the quality of the data that\n*does* exist per clade (a second, small subtree query over the shown clades).",
         "operationId": "gaps_gaps_get",
         "parameters": [
           {
@@ -1717,6 +1725,18 @@
               "minimum": 1,
               "title": "Limit",
               "type": "integer"
+            }
+          },
+          {
+            "description": "Attach per-clade quality stats (best BUSCO / median coding genes / genome size / N50) for the covered subset. Off for lightweight callers like the landing teaser.",
+            "in": "query",
+            "name": "include_quality",
+            "required": false,
+            "schema": {
+              "default": true,
+              "description": "Attach per-clade quality stats (best BUSCO / median coding genes / genome size / N50) for the covered subset. Off for lightweight callers like the landing teaser.",
+              "title": "Include Quality",
+              "type": "boolean"
             }
           }
         ],

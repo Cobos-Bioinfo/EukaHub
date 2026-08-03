@@ -9,7 +9,7 @@ field order, guarded by a test.
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from enum import Enum
 
 import psycopg
@@ -655,6 +655,54 @@ def fetch_breakdown_quality(
         )
         for row in conn.execute(sql, (rank, root_path)).fetchall():
             entry = result.setdefault(row[0], {k: None for k in all_keys})
+            for k, v in zip(keys, row[1:]):
+                entry[k] = float(v) if v is not None else None
+    return result
+
+
+def fetch_quality_for_taxids(
+    conn: psycopg.Connection, taxids: Sequence[int]
+) -> dict[int, dict[str, float | None]]:
+    """QUALITY_STATS (best BUSCO / median genes / median genome size / N50)
+    computed over each given clade's subtree records, keyed by taxid.
+
+    Used by the gaps leaderboard to show the quality of the data that *does*
+    exist next to the missing-species gap. Same two-phase shape as
+    ``fetch_breakdown_quality`` (resolve each record-bearing taxon to its bucket
+    once, then join records back for the stats), but the buckets are an explicit
+    ``taxid`` set (the gap clades) rather than a whole rank under a root — so the
+    containment scan stays tiny (<=200 buckets). A bucket with no record for a
+    stat gets ``None``. Returns ``{taxid: {stat_key: value|None}}`` for every
+    requested taxid.
+    """
+    all_keys = [q.key for q in QUALITY_STATS]
+    result: dict[int, dict[str, float | None]] = {
+        int(t): {k: None for k in all_keys} for t in taxids
+    }
+    if not taxids:
+        return result
+    ids = list(taxids)
+    for source in ("assembly", "annotation"):
+        keys = [q.key for q in QUALITY_STATS if q.source == source]
+        if not keys:
+            continue
+        agg = _quality_stats_agg(source)
+        # bucket = one of the requested clades; rec = a record's taxon it
+        # contains (`bucket.path @> rec.path`, so exactly one bucket per record
+        # since the gap clades are disjoint); r = the per-record table.
+        sql = (
+            "WITH mp AS ("
+            "  SELECT rec.taxid AS rec_taxid, bucket.taxid AS bucket_taxid"
+            f"  FROM (SELECT DISTINCT taxid FROM {source}) d"
+            "  JOIN taxon rec ON rec.taxid = d.taxid"
+            "  JOIN taxon bucket ON bucket.taxid = ANY(%s) AND bucket.path @> rec.path"
+            ") "
+            f"SELECT mp.bucket_taxid, {agg} "
+            f"FROM {source} r JOIN mp ON mp.rec_taxid = r.taxid "
+            "GROUP BY mp.bucket_taxid"
+        )
+        for row in conn.execute(sql, (ids,)).fetchall():
+            entry = result[row[0]]
             for k, v in zip(keys, row[1:]):
                 entry[k] = float(v) if v is not None else None
     return result

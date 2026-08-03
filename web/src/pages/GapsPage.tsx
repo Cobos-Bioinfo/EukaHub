@@ -1,12 +1,13 @@
 import { Link, useSearchParams } from "react-router";
 
-import { getGaps, getMetricsConfig } from "../api/queries";
-import type { GapItem, MetricFilter, TargetRank } from "../api/types";
+import { getGaps, getMetricsConfig, getQualityConfig } from "../api/queries";
+import type { GapItem, MetricFilter, QualityStatConfig, TargetRank } from "../api/types";
+import GapsScatter from "../components/GapsScatter";
 import RootPicker from "../components/RootPicker";
 import { DashboardIcon, MapIcon, TreeIcon } from "../components/icons";
 import { useAsync } from "../hooks/useAsync";
 import { cladeLabel } from "../lib/clades";
-import { fmt, fmtCompact, fmtPct } from "../lib/format";
+import { fmt, fmtCompact, fmtPct, fmtQuality } from "../lib/format";
 
 const EUKARYOTA_TAXID = 2759;
 
@@ -41,6 +42,7 @@ export default function GapsPage() {
   const rank: TargetRank = RANKS.includes(rawRank) ? rawRank : "order";
   const rawRes = params.get("resource") as MetricFilter;
   const resource: MetricFilter = RESOURCES.includes(rawRes) ? rawRes : "ass";
+  const view: "list" | "scatter" = params.get("view") === "scatter" ? "scatter" : "list";
 
   const patch = (next: Record<string, string>) => {
     const p = new URLSearchParams(params);
@@ -49,6 +51,7 @@ export default function GapsPage() {
   };
 
   const metrics = useAsync(getMetricsConfig, []);
+  const quality = useAsync(getQualityConfig, []);
   const gaps = useAsync(
     () => getGaps({ root, rank, resource, limit: 25 }),
     [root, rank, resource],
@@ -56,6 +59,9 @@ export default function GapsPage() {
 
   const resourceLabel = metrics.data?.find((m) => m.key === resource)?.card_title ?? "data";
   const resourceLower = resourceLabel.toLowerCase();
+  // The surfaced quality figures (best BUSCO, median coding genes) shown next to
+  // each gap: the quality of the data that *does* exist.
+  const headlineQ = (quality.data ?? []).filter((q) => q.headline);
   const items = gaps.data?.items ?? [];
   const rootName = gaps.data ? (cladeLabel(gaps.data.root.taxid) ?? gaps.data.root.name) : "…";
   const maxGap = items.length ? items[0].gap : 1; // items are sorted gap-desc
@@ -136,23 +142,49 @@ export default function GapsPage() {
 
       {items.length > 0 && (
         <>
-          <p className="gaps__summary">
-            The {items.length} {PLURAL[rank]} with the most species missing {resourceLower}, of{" "}
-            {fmt(gaps.data!.total_matches)} with a gap.
-          </p>
-          <ol className="gaps-lead">
-            {items.map((it, i) => (
-              <GapRow
-                key={it.taxid}
-                item={it}
-                idx={i}
-                maxGap={maxGap}
-                resourceLower={resourceLower}
-                canLookInside={rank !== "genus"}
-                onLookInside={() => patch({ root: String(it.taxid), rank: FINER[rank] })}
-              />
-            ))}
-          </ol>
+          <div className="gaps__toolbar">
+            <p className="gaps__summary">
+              The {items.length} {PLURAL[rank]} with the most species missing {resourceLower}, of{" "}
+              {fmt(gaps.data!.total_matches)} with a gap.
+            </p>
+            <div className="tree-controls__seg gaps__view" role="group" aria-label="View">
+              <button
+                type="button"
+                className={`seg-btn${view === "list" ? " seg-btn--on" : ""}`}
+                aria-pressed={view === "list"}
+                onClick={() => patch({ view: "list" })}
+              >
+                List
+              </button>
+              <button
+                type="button"
+                className={`seg-btn${view === "scatter" ? " seg-btn--on" : ""}`}
+                aria-pressed={view === "scatter"}
+                onClick={() => patch({ view: "scatter" })}
+              >
+                Scatter
+              </button>
+            </div>
+          </div>
+
+          {view === "scatter" ? (
+            <GapsScatter items={items} resourceLower={resourceLower} qstats={quality.data ?? []} />
+          ) : (
+            <ol className="gaps-lead">
+              {items.map((it, i) => (
+                <GapRow
+                  key={it.taxid}
+                  item={it}
+                  idx={i}
+                  maxGap={maxGap}
+                  resourceLower={resourceLower}
+                  headlineQ={headlineQ}
+                  canLookInside={rank !== "genus"}
+                  onLookInside={() => patch({ root: String(it.taxid), rank: FINER[rank] })}
+                />
+              ))}
+            </ol>
+          )}
         </>
       )}
     </section>
@@ -166,6 +198,7 @@ function GapRow({
   idx,
   maxGap,
   resourceLower,
+  headlineQ,
   canLookInside,
   onLookInside,
 }: {
@@ -173,11 +206,18 @@ function GapRow({
   idx: number;
   maxGap: number;
   resourceLower: string;
+  headlineQ: QualityStatConfig[];
   canLookInside: boolean;
   onLookInside: () => void;
 }) {
   const label = cladeLabel(item.taxid) ?? item.name;
   const width = Math.max((item.gap / maxGap) * 100, 2);
+  // The quality of the genomes this clade *does* have (best BUSCO, median coding
+  // genes). Null across the board means the covered species have no functional
+  // annotation yet — itself part of the gap.
+  const present = headlineQ
+    .map((q) => ({ q, value: item.stats.find((s) => s.key === q.key)?.value ?? null }))
+    .filter((s) => s.value !== null);
   return (
     <li className="gaps-row">
       <div className="gaps-row__num" aria-hidden="true">
@@ -199,6 +239,20 @@ function GapRow({
         >
           <div className="gaps-row__bar-fill" style={{ width: `${width}%` }} />
         </div>
+        {headlineQ.length > 0 && (
+          <div className="gaps-row__quality">
+            <span className="gaps-row__qlabel">Where data exists</span>
+            {present.length > 0 ? (
+              present.map(({ q, value }) => (
+                <span key={q.key} className="gaps-row__qstat">
+                  {q.card_title} <strong>{fmtQuality(value, q.fmt)}</strong>
+                </span>
+              ))
+            ) : (
+              <span className="gaps-row__qstat gaps-row__qstat--none">No annotated genomes yet</span>
+            )}
+          </div>
+        )}
         <div className="gaps-row__meta">
           <span className="gaps-row__stat">
             {fmt(item.n_rows)} species · {fmtPct(item.percent)}% covered

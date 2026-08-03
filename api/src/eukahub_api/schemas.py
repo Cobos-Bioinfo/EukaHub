@@ -262,6 +262,15 @@ class Breakdown(BaseModel):
     items: list[CladeSummary]  # sorted, limited
 
 
+class QualityStatValue(BaseModel):
+    """A quality stat computed live over a taxon's subtree records (median or
+    max per QUALITY_STATS). ``value`` is ``null`` when the subtree has no records
+    carrying that field."""
+
+    key: str
+    value: float | None
+
+
 class GapItem(BaseModel):
     """One under-sequenced group in the "Where are the gaps?" leaderboard: its
     species count, its coverage for the chosen resource, and the ``gap`` = species
@@ -275,6 +284,11 @@ class GapItem(BaseModel):
     covered: int  # species with >=1 of the chosen resource (c_<resource>)
     percent: float  # covered / n_rows * 100 — the coverage %
     gap: int  # n_rows - covered — species missing the resource (the "gap")
+    # Quality of the data that *does* exist in this clade (best BUSCO / median
+    # coding genes / median genome size / N50), keyed like QUALITY_STATS. A value
+    # is null when no record in the clade carries that field. Empty when the
+    # quality dimension isn't computed.
+    stats: list[QualityStatValue] = []
 
 
 class Gaps(BaseModel):
@@ -318,15 +332,6 @@ class QualityStatConfig(BaseModel):
             fmt=q.fmt,
             headline=q.headline,
         )
-
-
-class QualityStatValue(BaseModel):
-    """A quality stat computed live over a taxon's subtree records (median or
-    max per QUALITY_STATS). ``value`` is ``null`` when the subtree has no records
-    carrying that field."""
-
-    key: str
-    value: float | None
 
 
 class AssemblyRecord(BaseModel):

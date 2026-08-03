@@ -69,6 +69,9 @@ export interface GapsParams {
   rank?: TargetRank;
   resource?: MetricFilter;
   limit?: number;
+  // Attach per-clade quality stats (BUSCO / genes / genome size / N50). Off for
+  // lightweight callers (the landing teaser) that only show the gap bars.
+  include_quality?: boolean;
 }
 
 export const getGaps = async (params: GapsParams = {}): Promise<Gaps> =>
