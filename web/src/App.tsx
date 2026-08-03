@@ -24,19 +24,23 @@ export default function App() {
   // Nav links highlight for their whole route family (any clade, any tree).
   const navClass = (prefix: string) =>
     "app__nav" + (location.pathname.startsWith(prefix) ? " app__nav--active" : "");
+  // Context-aware nav: on a taxon-scoped page carry the current group between the
+  // views instead of resetting to Eukaryota, so hopping views keeps your place.
+  const ctxMatch = location.pathname.match(/^\/(?:clade|map|tree)\/(\d+)/);
+  const ctxTaxid = ctxMatch ? Number(ctxMatch[1]) : DEFAULT_TAXID;
   return (
     <div className="app">
       <header className="app__bar">
         <Link className="app__brand" to="/">
           Euka<span>Hub</span>
         </Link>
-        <Link className={navClass("/clade/")} to={`/clade/${DEFAULT_TAXID}`}>
+        <Link className={navClass("/clade/")} to={`/clade/${ctxTaxid}`}>
           Dashboard
         </Link>
-        <Link className={navClass("/tree/")} to={`/tree/${DEFAULT_TAXID}`}>
+        <Link className={navClass("/tree/")} to={`/tree/${ctxTaxid}`}>
           Tree of Life
         </Link>
-        <Link className={navClass("/map/")} to={`/map/${DEFAULT_TAXID}`}>
+        <Link className={navClass("/map/")} to={`/map/${ctxTaxid}`}>
           Data map
         </Link>
         <Link className={navClass("/compare")} to="/compare">

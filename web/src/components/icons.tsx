@@ -47,6 +47,71 @@ export function SearchIcon({ size = 16, className }: IconProps) {
   );
 }
 
+/** 2x2 card grid glyph for the Dashboard view. */
+export function DashboardIcon({ size = 16, className }: IconProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden="true"
+    >
+      <rect x="3" y="3" width="7" height="7" rx="1" />
+      <rect x="14" y="3" width="7" height="7" rx="1" />
+      <rect x="3" y="14" width="7" height="7" rx="1" />
+      <rect x="14" y="14" width="7" height="7" rx="1" />
+    </svg>
+  );
+}
+
+/** Subdivided-rectangle (treemap) glyph for the Data map view. */
+export function MapIcon({ size = 16, className }: IconProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden="true"
+    >
+      <rect x="3" y="3" width="18" height="18" rx="1.5" />
+      <path d="M13 3v18M3 12h10M13 10h8" />
+    </svg>
+  );
+}
+
+/** Two side-by-side bars glyph for the Compare action. */
+export function CompareIcon({ size = 16, className }: IconProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden="true"
+    >
+      <rect x="4" y="8" width="6" height="12" rx="1" />
+      <rect x="14" y="4" width="6" height="16" rx="1" />
+    </svg>
+  );
+}
+
 /** Branching hierarchy glyph for the Tree of Life actions. */
 export function TreeIcon({ size = 16, className }: IconProps) {
   return (

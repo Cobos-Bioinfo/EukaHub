@@ -493,6 +493,39 @@ readable-measure standard — WCAG 1.4.8 caps line length at 80ch, so the Tree's
 unconstrained line was the outlier) applied to `.tree-page__sub` /
 `.bmap-block__sub` / `.cmp__lede`. Web build+typecheck clean.
 
+**Contextual cross-navigation + in-tree search highlight + CI bump — done**
+(2026-08-03, on `dev`). Both "NEXT" candidates plus the tracked CI-hygiene item.
+(1) **Context-aware top nav** (`App.tsx`): the Dashboard/Tree/Map links derive the
+current taxid from a `/clade|/map|/tree/:id` route and carry it, so hopping views
+keeps your group instead of resetting to Eukaryota (Compare stays multi-taxon).
+(2) **Clade cross-nav CTA buttons** (`ViewSwitcher.tsx`, new): filled pills to a
+clade's *other* views (canonical order **Dashboard - Tree of Life - Data map**,
+current omitted) + an "Add to compare" link, rendered in the dashboard's **sticky
+rail under the About card** (Tree of Life keeps its green `--cta-tree` identity,
+Data map blue); shown only for real clades (`showBreakdown`). New
+`DashboardIcon`/`MapIcon`/`CompareIcon`. The user first saw a horizontal segmented
+switcher on all three pages, then asked to bring back the sticky-rail CTA-button
+style (the old "Explore in the Tree of Life" button) for every link in top-nav
+order — so the switcher was **removed from the Tree + Map pages** (no rail there;
+the tree wants max space) and those rely on the context-aware top nav. (3)
+**In-tree search-to-locate** (`#3`): a "Find a group in this tree" box in the Tree
+header (reuses `RootPicker`'s `onPick`); on pick, `useTree.reveal(path)` expands +
+pages each ancestor (limit 100, `REVEAL_MAX_PAGES` cap) until the target loads,
+then `RadialTree` selects it, pans it to centre, and plays a one-shot pulse ring
+(`tree__focus-ring`; `prefers-reduced-motion` respected). Fallbacks: "X is not
+inside this group" with an "Open its own tree" link, and a "buried" message past
+the page cap. Tree page also got its **description restored to full width** under
+the title (dropped the `--measure` 70ch cap for `.tree-page__sub` only —
+intentionally overriding the prior standardization for this full-bleed page; the
+search moved onto the title row via `.tree-page__topline`). (4) **CI**
+(`.github/workflows/ci.yml`): `actions/checkout@v4 → @v7` + `gitleaks-action@v2 →
+@v3`, off deprecated Node 20 (drop-in per release notes — our `push`/`pull_request`
++ `fetch-depth: 0` usage is unaffected; matches what Dependabot's weekly
+github-actions scan would propose). Verified: web build + typecheck clean; **95
+tests pass** (frontend-only change); light + dark headless screenshots (via
+`web/node_modules/puppeteer-core`) of the rail buttons, the tree search highlight
+(Felidae located under Carnivora), and the not-found fallback.
+
 ## Read before doing anything
 
 - `docs/data-model.md` — **the core doc.** DB design + taxonomy-tree storage.
@@ -559,30 +592,25 @@ status entry above). The ~42 DB-backed API tests now run in CI against a
 (`test_summary.py:34` → adaptive species-count invariant). Verified green on the
 slice **and** prod.
 
-**NEXT — two candidates the user raised (pick order next session):**
-- **Contextual cross-navigation (user-requested 2026-08-03).** The top nav
-  (Dashboard / Tree of Life / Data map / Compare) always targets the DEFAULT taxid
-  (Eukaryota 2759), so hopping between views loses the group you're on; the only
-  context-preserving hop today is the dashboard's "Explore this group in the Tree
-  of Life" link. The user wants that pattern generalised. Two complementary pieces:
-  (a) **context-aware top nav** — in `App.tsx`, derive the current taxid from a
-  `/clade|/map|/tree/:id` route and point those nav links at it (small, App.tsx
-  only); (b) **an in-page `ViewSwitcher`** on taxon-scoped pages — a segmented
-  "View {group} as: Dashboard · Data map · Tree of Life" carrying the taxid, active
-  view highlighted (Compare is multi-taxon, so a separate "Add to compare" entry).
-  Higher UX value + cheaper than #3; likely do this first.
-- **#3 in-tree search highlight** — on the radial Tree of Life, let the user search
-  a taxon and highlight/pan to it. Reuses the multi-taxon picker groundwork from
-  the Compare view (`RootPicker`'s `onPick`).
+**NEXT — both candidates + the CI-hygiene item are now DONE** (2026-08-03, on
+`dev`; see the "Contextual cross-navigation + in-tree search highlight + CI bump"
+status entry above). Contextual cross-navigation shipped as the **context-aware
+top nav** + the **sticky-rail clade CTA buttons** (the user preferred the
+CTA-button style over a segmented switcher, so the in-page switcher is dashboard
+sidebar-only; Tree/Map use the top nav). **#3 in-tree search highlight** shipped
+(`useTree.reveal` + `RadialTree` focus/pan/pulse). The `checkout@v7`/
+`gitleaks-action@v3` bump landed too.
+
+**Then (pick next):** (a) more functional polish toward the deploy gate (landing
+viewport centring; deeper featured-group storytelling); (b) the remaining
+enrichment tail; (c) Phase-5 deploy items (still gated on CRG); (d) the smaller
+non-functional follow-ups below. One open sub-decision the user may raise: whether
+the clade CTA buttons should **also** appear on the Tree/Map pages (as a
+horizontal row near the title) — deferred, top nav covers those pages today.
 
 **UI-polish backlog (user-reported 2026-08-03) — ALL SIX DONE** (2026-08-03, on
 `dev`; see the "UI-polish alignment batch" status entry above for the per-item
 fixes + the description-measure standardization follow-up).
-Then: (a) more functional polish toward the deploy gate (landing viewport centring;
-deeper featured-group storytelling); (b) the remaining enrichment tail; (c) Phase-5
-deploy items (still gated on CRG); (d) the smaller non-functional follow-ups below.
-Also a tiny CI-hygiene item: bump `actions/checkout@v4` + `gitleaks-action@v2` off
-deprecated Node 20.
 
 Tracked non-functional follow-ups (do when relevant): frontend deps on latest
 majors — **npm audit now shows 2 highs** (react-router runtime, low practical
