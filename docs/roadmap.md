@@ -359,19 +359,30 @@ under Phase 7 above). Each major one wants a design/scope decision before coding
 Smaller follow-ups from this session:
 - Verify the **API docs behind the proxy** (`/api/docs`) render with
   `root_path="/api"` once the full stack runs (couldn't test headless here).
-- The header isn't wrap-friendly on very narrow viewports (desktop-first today).
-- **react-router audit highs (deferred 2026-08-03, user chose "document & defer").**
-  `npm audit` flags 2 highs on react-router: an **RSC-mode CSRF bypass**
-  (GHSA-qwww-vcr4-c8h2), **not reachable** in our client-only declarative SPA
-  (`BrowserRouter` + `Routes`/hooks, no server/RSC routing). The first patched
-  version is **react-router 8.3.0**, which requires **React >= 19.2.7 + Node >=
-  22.22** and drops the `react-router-dom` package (DOM bindings merged into
-  `react-router`) — so there is no in-place patch on our React 18 / react-router-dom
-  7.18.2 stack. Staying on 7.18.2; the CI `npm audit` step is already
-  `continue-on-error` (informational). **Fix it as part of a future React 18 -> 19
-  upgrade** (bump React + react-dom + @types + plugin, swap `react-router-dom`
-  imports to `react-router@^8`, drop `react-router-dom`); that upgrade is the
-  natural home for this and clears the advisory with the actual patched version.
+- **[done 2026-08-03] Header wrap on narrow viewports.** The app bar now stacks
+  into rows below **920px** (brand + action icons / primary nav / full-width
+  search) via `flex-wrap` + `order`, staying one clean row above it (nav
+  `white-space: nowrap` + `flex-shrink: 0` so the search yields, not the nav). Part
+  of the responsive / mobile pass — see below.
+- **[done 2026-08-03] Responsive / mobile pass.** Header wrap (above) plus a
+  headless overflow audit (scrollWidth vs viewport at 320/390/480/600/768) that
+  fixed two real overflows — the breakdown map's `.bmap-actions` (`flex: none`, so
+  its buttons couldn't wrap; a 10px dashboard overflow) and the compare add-group
+  search (`.cmp__add`, fixed 340px, overflowed at 320px) — and made the Tree
+  "Colour by" segmented control `overflow-x: auto` below 560px so its clipped
+  last lens ("Long-Read RNA-Seq") stays reachable. Wide data tables already sit in
+  `overflow-x:auto` wrappers. Deferred polish: a scroll affordance / card layout
+  for those wide tables, and landing viewport centring.
+- **[done 2026-08-03] react-router audit highs — RESOLVED via the React 18 -> 19
+  upgrade.** Bumped `react`/`react-dom` to `^19.2.8`, `@types` to `^19`, and
+  replaced `react-router-dom@7` with `react-router@^8.3.0` (v8 merged the DOM
+  bindings into `react-router`; the 16 import sites swapped
+  `"react-router-dom"` -> `"react-router"`, `BrowserRouter` + all hooks still on the
+  main entry). Node 24 satisfies react-router 8's `engines >= 22.22`. `npm audit`
+  now reports **0 vulnerabilities**; the RSC-mode CSRF advisory
+  (GHSA-qwww-vcr4-c8h2) — never reachable in our declarative SPA — is cleared with
+  the actual patched version. No app-code changes beyond the import swaps (pre-scan
+  found no React-19 type breakage).
 
 ## Reuse vs rebuild vs delete
 

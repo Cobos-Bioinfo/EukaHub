@@ -532,6 +532,41 @@ appear on the **Tree + Map** pages as a compact horizontal **row** in the header
 upgrade (not exploitable here; patched only in react-router 8.3.0 which needs
 React 19 — see `docs/roadmap.md`).
 
+**React 18 -> 19 + react-router 7 -> 8 upgrade + responsive / mobile pass — done**
+(2026-08-03, on `dev`). The two deferred items from the resume list. (1) **React
+19 upgrade:** `react`/`react-dom` -> `^19.2.8`, `@types/react`/`@types/react-dom`
+-> `^19`, and `react-router-dom@7` **dropped** for `react-router@^8.3.0` (v8 merged
+the DOM bindings into `react-router`; all 16 import sites swapped
+`"react-router-dom"` -> `"react-router"` — `BrowserRouter` and every hook still
+export from the main entry). Node 24 already satisfies react-router 8's engines
+(`>=22.22`). This **clears the 2 react-router `npm audit` highs** (`npm audit` now
+0 vulnerabilities) that were deferred on 2026-08-03. Pre-scanned for React-19 type
+breakage (no `useRef()` without an arg, no `defaultProps`/`propTypes`/`forwardRef`/
+legacy render) — clean, no code changes beyond the import swaps. (2) **Responsive
+pass:** the header was the one broken piece — on narrow viewports "Tree of Life"
+wrapped to 3 lines and the whole actions cluster (search + theme + GitHub + menu)
+overflowed off-screen on the Tree/Map pages. Restructured (`App.tsx`): the 4 nav
+links are now a `.app__nav-group`, and the search sits as its own bar child (not
+inside `.app__actions`). CSS: the bar is `nowrap` on desktop but `flex-wrap: wrap`
+below **920px**, stacking into rows (brand + icons / nav / full-width search) via
+`order`; nav gets `white-space: nowrap` + `flex-shrink: 0` so the **search** yields
+first (not the nav wrapping to two lines) — the desktop `margin-left:auto` +
+wrap interaction that pushed icons to a 2nd row is avoided by only wrapping at the
+breakpoint. Fixed two real overflow bugs found with a headless
+scrollWidth-vs-viewport audit (320/390/480/600/768): the breakdown map's
+`.bmap-actions` had `flex: none` so its buttons couldn't wrap (10px page overflow
+on the dashboard) — now `flex: 0 1 auto; min-width: 0`; the compare add-group
+search (`.cmp__add`, fixed 340px) overflowed at 320px — now a shrinkable
+`flex: 0 1 340px`. Also the Tree "Colour by" segmented control had `overflow:
+hidden` and shrank below its content, **clipping "Long-Read RNA-Seq" out of reach**
+on phones — now `overflow-x: auto` (scrollable) below 560px so every colour lens
+stays selectable. Wide data tables (record browser, compare) were already inside
+`overflow-x:auto` wrappers, so they scroll within their region (no page overflow).
+Verified: **0 page overflow at 320/390/480/600/768** on every route; web
+build+typecheck clean; **95 tests pass** (frontend-only change); light + dark
+headless screenshots across landing/dashboard/tree/map/compare at mobile + desktop
+widths; desktop header unchanged. House style kept (no em dashes / emojis).
+
 ## Read before doing anything
 
 - `docs/data-model.md` — **the core doc.** DB design + taxonomy-tree storage.
@@ -617,23 +652,23 @@ needs **React 19 + Node 22.22** and drops `react-router-dom`, so it's folded int
 a future React 18 -> 19 upgrade (see `docs/roadmap.md`). CI `npm audit` stays
 non-blocking with a comment explaining the finding.
 
-**Then (pick next):** (a) more functional polish toward the deploy gate (landing
-viewport centring; deeper featured-group storytelling); (b) a **React 18 -> 19
-upgrade** (also clears the react-router audit highs via react-router 8); (c) a
-**responsive / mobile pass** (header wrap + wide views are desktop-first today);
-(d) Phase-5 deploy items (still gated on CRG).
+**NEXT — (b) React 18 -> 19 and (c) responsive / mobile pass are now DONE**
+(2026-08-03; see the "React 18 -> 19 + react-router 7 -> 8 upgrade + responsive /
+mobile pass" status entry above). **Then (pick next):** (a) more functional polish
+toward the deploy gate (landing viewport centring; deeper featured-group
+storytelling); (d) Phase-5 deploy items (still gated on CRG); or deeper mobile
+polish (a scroll affordance on the wide record/compare tables; card-style layouts
+for those tables instead of horizontal scroll).
 
 **UI-polish backlog (user-reported 2026-08-03) — ALL SIX DONE** (2026-08-03, on
 `dev`; see the "UI-polish alignment batch" status entry above for the per-item
 fixes + the description-measure standardization follow-up).
 
-Tracked non-functional follow-ups (do when relevant): frontend deps on latest
-majors — the **2 npm-audit highs are react-router's RSC-mode CSRF advisory**
-(GHSA-qwww-vcr4-c8h2), **not exploitable** in our declarative SPA; patched only in
-react-router 8.3.0 (needs React 19 + Node 22.22, drops `react-router-dom`), so
-**deferred into a React 18 -> 19 upgrade** (assessed 2026-08-03; see
-`docs/roadmap.md`). Also caching layers (nginx `proxy_cache`/CDN, ETag/304). **A headless browser IS available** in the
-dev env via
+Tracked non-functional follow-ups (do when relevant): the **2 npm-audit highs on
+react-router are now RESOLVED** — the React 18 -> 19 + react-router 8 upgrade
+(2026-08-03) landed the patched version, and `npm audit` reports 0 vulnerabilities.
+Remaining: caching layers (nginx `proxy_cache`/CDN, ETag/304). **A headless browser
+IS available** in the dev env via
 `google-chrome-stable` — use it to screenshot/verify UI changes (this note
 supersedes earlier "no headless browser" remarks).
 
