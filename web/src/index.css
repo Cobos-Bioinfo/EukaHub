@@ -368,13 +368,6 @@ a:hover {
   width: 100%;
   height: 160px;
 }
-/* Tree CTA fills the rail. */
-.dashboard__side .dashboard__tree-link {
-  display: flex;
-  justify-content: center;
-  width: 100%;
-  margin-top: 0;
-}
 
 /* ---- About card (Wikipedia) ----------------------------------------- */
 .about-card {
@@ -1285,40 +1278,78 @@ a:hover {
 .app__nav--active {
   color: var(--link);
 }
-.dashboard__tree-link {
-  display: inline-flex;
+/* ---- Clade cross-navigation (CTA buttons in the sticky rail) --------- */
+.viewsw {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.viewsw__label {
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+.viewsw__label em {
+  font-style: normal;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--ink-2);
+}
+.viewsw__btn {
+  display: flex;
   align-items: center;
-  gap: 0.4rem;
-  margin-top: 0.85rem;
-  padding: 0.5rem 0.9rem;
-  font-size: 0.92rem;
+  gap: 0.55rem;
+  padding: 0.6rem 0.9rem;
+  font-size: 0.95rem;
   font-weight: 600;
   color: #fff;
   background: var(--cta);
   border-radius: 999px;
   box-shadow: var(--shadow);
 }
-.dashboard__tree-link em {
-  font-style: italic;
-  opacity: 0.92;
-}
-.dashboard__tree-link:hover {
+.viewsw__btn:hover {
   text-decoration: none;
   filter: brightness(1.06);
+}
+/* Tree of Life keeps its green identity (matches the landing CTA + app-wide
+   green for the branching hierarchy); the others use the accent blue. */
+.viewsw__btn--tree {
+  background: var(--cta-tree);
+}
+.viewsw__arrow {
+  margin-left: auto;
+  font-weight: 400;
+  opacity: 0.9;
+}
+.viewsw__compare {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-top: 0.15rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--link);
+}
+.viewsw__compare:hover {
+  text-decoration: none;
+  filter: brightness(1.05);
 }
 
 /* ---- Tree page ------------------------------------------------------- */
 .tree-page__head {
+  margin-bottom: 1rem;
+}
+/* Title on the left, search on the right; the description drops to its own row
+   below and spans the full (full-bleed) width, since the tree page trades a
+   narrow reading measure for room to explore. */
+.tree-page__topline {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 1rem;
   flex-wrap: wrap;
-  margin-bottom: 1rem;
-}
-.tree-page__intro {
-  flex: 1 1 auto; /* grow to fill the head row so the intro copy uses the width */
-  min-width: 0;
 }
 .tree-page__title {
   margin: 0;
@@ -1330,26 +1361,42 @@ a:hover {
   color: var(--ink-2);
 }
 .tree-page__sub {
-  margin: 0.35rem 0 0;
-  max-width: var(--measure); /* shared readable measure (see --measure) */
+  margin: 0.5rem 0 0;
+  max-width: none; /* full width on the full-bleed tree page */
   color: var(--muted);
   font-size: 0.9rem;
   text-wrap: pretty;
 }
-.tree-page__back {
+/* Search-to-locate box in the tree header: find a group and pan/highlight it. */
+.tree-search {
   flex: none;
-  padding: 0.35rem 0.8rem;
-  font-size: 0.9rem;
-  font-weight: 600;
-  color: var(--ink-2);
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: 999px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.4rem;
+  width: min(360px, 48vw);
 }
-.tree-page__back:hover {
-  text-decoration: none;
-  border-color: var(--link);
+.tree-search__status {
+  font-size: 0.82rem;
+  color: var(--muted);
+  text-align: right;
+  max-width: 44ch;
+}
+.tree-search__status--warn {
+  color: var(--ink-2);
+}
+.tree-search__jump {
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
   color: var(--link);
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+.tree-search__jump:hover {
+  text-decoration: underline;
 }
 
 /* ---- Radial tree ----------------------------------------------------- */
@@ -1650,6 +1697,36 @@ button.tree-outline__name:hover {
 .tree__dot--selected {
   stroke: var(--link);
   stroke-width: 2.5;
+}
+
+/* Attention pulse over a node located via search. Two quick rings that expand
+   and fade; the located node stays `--selected` afterwards. Invisible at rest
+   (stroke-opacity 0), so once the animation ends the ring leaves no mark. */
+.tree__focus-ring {
+  fill: none;
+  stroke: var(--link);
+  stroke-width: 3;
+  stroke-opacity: 0;
+  pointer-events: none;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: focus-pulse 1.3s ease-out 2 forwards;
+}
+@keyframes focus-pulse {
+  0% {
+    transform: scale(0.65);
+    stroke-opacity: 0.9;
+  }
+  70%,
+  100% {
+    transform: scale(1.6);
+    stroke-opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tree__focus-ring {
+    animation: none;
+  }
 }
 
 /* Details panel for the clicked node. */

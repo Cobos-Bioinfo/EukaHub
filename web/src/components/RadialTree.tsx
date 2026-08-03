@@ -126,15 +126,22 @@ export default function RadialTree({
   tree,
   metrics,
   onOpen,
+  focus,
 }: {
   tree: Tree;
   metrics: MetricConfig[];
   onOpen: (taxid: number) => void;
+  // A search-to-locate request: select + pan to this taxon (once it's loaded).
+  // The nonce lets the same taxon be re-located, replaying the highlight.
+  focus?: { taxid: number; nonce: number } | null;
 }) {
   const { nodes, rootId } = tree;
   const [hover, setHover] = useState<HoverState | null>(null);
   const [view, setView] = useState({ k: 1, tx: 0, ty: 0 });
   const [selected, setSelected] = useState<number | null>(null);
+  // A short-lived pulse ring drawn over a just-located node (keyed by nonce so
+  // each search replays it); the node also stays `selected` after it fades.
+  const [focusMark, setFocusMark] = useState<{ x: number; y: number; r: number; nonce: number } | null>(null);
   const [colorKey, setColorKey] = useState(metrics[0]?.key ?? "ass");
   const activeMetric = metrics.find((m) => m.key === colorKey);
   const dark = useTheme() === "dark";
@@ -186,6 +193,33 @@ export default function RadialTree({
     });
     return { root, maxN };
   }, [nodes, rootId, size.w, size.h]);
+
+  // Search-to-locate: when a focus request lands, find the target in the current
+  // layout, select it, and pan it to centre with a pulse. If it isn't laid out
+  // yet (the reveal is still paging it in), do nothing — this re-runs as `laid`
+  // updates until the node appears, then marks the nonce handled so later layout
+  // changes don't yank the user's view back.
+  const handledFocus = useRef(0);
+  useEffect(() => {
+    if (!focus || !laid || focus.nonce === handledFocus.current) return;
+    const d = laid.root
+      .descendants()
+      .find((n) => n.data.kind === "node" && n.data.taxid === focus.taxid);
+    if (!d || d.data.kind !== "node") return;
+    handledFocus.current = focus.nonce;
+    setSelected(focus.taxid);
+    const nr = nodeRadius(d.data.tn.node.n_rows, laid.maxN);
+    if (d.depth === 0) {
+      setView({ k: 1, tx: 0, ty: 0 });
+      setFocusMark({ x: 0, y: 0, r: nr + 7, nonce: focus.nonce });
+      return;
+    }
+    const k = 1.5;
+    const px = d.y * Math.sin(d.x);
+    const py = -d.y * Math.cos(d.x);
+    setView({ k, tx: -k * px, ty: -k * py });
+    setFocusMark({ x: px, y: py, r: nr + 7, nonce: focus.nonce });
+  }, [focus, laid]);
 
   if (rootId == null || !laid) return <p className="notice">Loading tree…</p>;
   const { root, maxN } = laid;
@@ -295,6 +329,16 @@ export default function RadialTree({
                 />
               );
             })}
+
+            {focusMark && (
+              <circle
+                key={focusMark.nonce}
+                className="tree__focus-ring"
+                cx={focusMark.x}
+                cy={focusMark.y}
+                r={focusMark.r}
+              />
+            )}
           </g>
         </svg>
 

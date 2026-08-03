@@ -204,11 +204,18 @@ in this phase:
   hover tooltip, click-to-expand, "load more", pan/zoom, and a keyboard/
   screen-reader **text-outline fallback** (`TreeOutline`). Cross-linked with the
   dashboard both ways. See `../DECISIONS.md` (radial form + `d3-hierarchy` dep).
+- **[done 2026-08-03] In-tree search highlighting.** A "Find a group in this tree"
+  box in the Tree header (`RootPicker` `onPick`): on pick, `useTree.reveal(path)`
+  expands + pages each ancestor (limit 100, `REVEAL_MAX_PAGES` cap) until the
+  target loads, then `RadialTree` selects it, pans it to centre, and plays a
+  one-shot pulse ring (`prefers-reduced-motion` respected). Fallbacks: "not inside
+  this group" (with an "Open its own tree" link) and a "buried" message past the
+  cap. No API change.
 - **Scale-up path (future):** a Canvas/WebGL renderer if we ever want thousands
   of nodes on screen at once — the SVG MVP is bounded by lazy-expand + a
   visible-node guardrail, so it isn't needed yet. Also future: a `child_count`
-  rollup column (drop the per-row `EXISTS` probe), in-tree search highlighting,
-  animated expand/collapse transitions.
+  rollup column (drop the per-row `EXISTS` probe) and animated expand/collapse
+  transitions.
 
 ## Phase 7 — Layout & space-usage overhaul (done 2026-08-01)
 
@@ -334,6 +341,17 @@ under Phase 7 above). Each major one wants a design/scope decision before coding
   group palette is the **dataviz** skill's validated categorical default,
   re-validated against the app surfaces. `RootPicker` gained an `onPick` callback.
   6 slice-safe API tests; suite 95 pass; light + dark + empty-state screenshotted.
+- **[done 2026-08-03] Contextual cross-navigation.** The top nav
+  (Dashboard/Tree/Map) is now **context-aware** (`App.tsx` derives the taxid from
+  a `/clade|/map|/tree/:id` route and carries it; Compare stays multi-taxon), and
+  a clade's other views are reachable from the dashboard's **sticky rail** as
+  filled **CTA buttons** (`ViewSwitcher.tsx`) under the About card — canonical
+  order Dashboard - Tree of Life - Data map, current omitted, Tree of Life green +
+  Data map blue, plus an "Add to compare" link. The user preferred the CTA-button
+  style over a segmented switcher, so the in-page control is dashboard-only; the
+  Tree + Map pages rely on the top nav (and the Tree page got its intro description
+  restored to full width). Open sub-decision: whether to also surface the CTA
+  buttons on the Tree/Map pages as a horizontal row.
 
 Smaller follow-ups from this session:
 - Verify the **API docs behind the proxy** (`/api/docs`) render with

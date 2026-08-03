@@ -8,6 +8,19 @@ const PAGE_SIZE = 10;
 // Soft guardrail: stop auto-growing the loaded tree past this many nodes so the
 // SVG stays responsive. The user can still collapse branches to free room.
 const MAX_NODES = 600;
+// Reveal (search-to-locate): page each level in bigger chunks than a manual
+// expand to cut round-trips, but cap the pages per level so locating a node
+// buried deep in a huge, species-sorted sibling list can't page forever.
+const REVEAL_LIMIT = 100;
+const REVEAL_MAX_PAGES = 4;
+
+/** Outcome of {@link Tree.reveal}: the path fully opened to the target, the
+ *  target sits too deep in a wide sibling list to reach within the page cap, or
+ *  a newer reveal replaced this one. */
+export type RevealResult =
+  | { status: "ok"; taxid: number }
+  | { status: "buried"; reached: number }
+  | { status: "superseded" };
 
 /** One loaded node in the tree: its taxon data plus expand/paging bookkeeping. */
 export interface TreeNode {
@@ -115,6 +128,10 @@ export interface Tree extends TreeState {
   toggle: (taxid: number) => void;
   /** Load the next page of a node's children (for nodes with more than shown). */
   loadMore: (taxid: number) => void;
+  /** Open the tree down to a descendant so it can be highlighted. `pathTaxids`
+   *  is the chain of taxids from the root's direct child down to the target;
+   *  each level is expanded and paged until the next node on the path appears. */
+  reveal: (pathTaxids: number[]) => Promise<RevealResult>;
 }
 
 /**
@@ -182,5 +199,37 @@ export function useTree(rootTaxid: number): Tree {
     [fetchPage],
   );
 
-  return { ...state, toggle, loadMore };
+  // Guards against a stale reveal (a second search started before the first
+  // finished paging): each call bumps the token and bails if it's superseded.
+  const revealSeq = useRef(0);
+  const reveal = useCallback(async (pathTaxids: number[]): Promise<RevealResult> => {
+    const seq = ++revealSeq.current;
+    const startId = stateRef.current.rootId;
+    if (startId == null) return { status: "buried", reached: -1 };
+    let parentId: number = startId;
+    for (const step of pathTaxids) {
+      const parent: TreeNode | undefined = stateRef.current.nodes[parentId];
+      // `loaded` mirrors the reducer's contiguous append, so `offset = loaded
+      // length` stays correct across pages. `total` is unknown (Infinity) until
+      // a node has been loaded at least once — a freshly-linked child reports 0.
+      const loaded: number[] = parent ? [...parent.childIds] : [];
+      const everLoaded = parent ? parent.expanded || parent.childIds.length > 0 : false;
+      let total = everLoaded && parent ? parent.totalChildren : Infinity;
+      let pages = 0;
+      while (!loaded.includes(step) && loaded.length < total && pages < REVEAL_MAX_PAGES) {
+        if (revealSeq.current !== seq) return { status: "superseded" };
+        const page = await getChildren(parentId, { limit: REVEAL_LIMIT, offset: loaded.length });
+        if (revealSeq.current !== seq) return { status: "superseded" };
+        dispatch({ type: "childrenLoaded", taxid: parentId, page });
+        total = page.total;
+        for (const c of page.items) if (!loaded.includes(c.taxid)) loaded.push(c.taxid);
+        pages++;
+      }
+      if (!loaded.includes(step)) return { status: "buried", reached: parentId };
+      parentId = step;
+    }
+    return { status: "ok", taxid: parentId };
+  }, []);
+
+  return { ...state, toggle, loadMore, reveal };
 }

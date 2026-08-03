@@ -15,7 +15,7 @@ import QualitySection from "../components/QualitySection";
 import RecordBrowser from "../components/RecordBrowser";
 import SpeciesLinks from "../components/SpeciesLinks";
 import SubspeciesSection from "../components/SubspeciesSection";
-import { TreeIcon } from "../components/icons";
+import ViewSwitcher from "../components/ViewSwitcher";
 import { useAsync } from "../hooks/useAsync";
 import { fmt } from "../lib/format";
 
@@ -77,12 +77,7 @@ export default function Dashboard() {
             )}
           </header>
           {about.data && <AboutCard about={about.data} />}
-          {!isLeaf && (
-            <Link className="dashboard__tree-link" to={`/tree/${taxid}`}>
-              <TreeIcon size={17} />
-              Explore <em>this group</em> in the Tree of Life →
-            </Link>
-          )}
+          {showBreakdown && <ViewSwitcher taxid={taxid} name={s.name} current="dashboard" />}
           {showLinks && <SpeciesLinks metrics={metrics.data} taxid={taxid} />}
         </aside>
 
