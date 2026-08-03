@@ -1,6 +1,6 @@
 import { hierarchy, treemap, treemapResquarify } from "d3-hierarchy";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router";
 
 import { exportTsvUrl, getBreakdown, getBreakdownQuality, getLineage } from "../api/queries";
 import type { CladeSummary, TargetRank, TaxonRef } from "../api/types";

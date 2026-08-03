@@ -1,4 +1,4 @@
-import { useParams } from "react-router-dom";
+import { useParams } from "react-router";
 
 import { getLineage } from "../api/queries";
 import BreakdownMap from "../components/BreakdownMap";

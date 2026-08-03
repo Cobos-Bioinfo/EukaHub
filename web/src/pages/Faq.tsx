@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { useLocation } from "react-router-dom";
+import { useLocation } from "react-router";
 
 /** A short FAQ. Plain language, honest that the numbers are a periodic snapshot. */
 export default function Faq() {

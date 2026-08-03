@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link } from "react-router";
 
 // Feedback path: a Google Form that files a labeled GitHub issue via an Apps
 // Script server-side, so no GitHub account is needed. Users who have an account
