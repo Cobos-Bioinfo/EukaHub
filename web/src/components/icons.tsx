@@ -26,6 +26,27 @@ export function RandomIcon({ size = 16, className }: IconProps) {
   );
 }
 
+/** Magnifying-glass glyph for search / explore actions. */
+export function SearchIcon({ size = 16, className }: IconProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden="true"
+    >
+      <circle cx="11" cy="11" r="7" />
+      <path d="m21 21-4.3-4.3" />
+    </svg>
+  );
+}
+
 /** Branching hierarchy glyph for the Tree of Life actions. */
 export function TreeIcon({ size = 16, className }: IconProps) {
   return (

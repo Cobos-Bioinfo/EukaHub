@@ -120,19 +120,22 @@ export default function RecordBrowser({ taxid }: { taxid: number }) {
       </header>
 
       <div className="rec__controls">
-        <div className="rec__tabs" role="tablist" aria-label="Record type">
-          {(["assemblies", "annotations"] as Tab[]).map((t) => (
-            <button
-              key={t}
-              type="button"
-              role="tab"
-              aria-selected={tab === t}
-              className={`seg-btn${tab === t ? " seg-btn--on" : ""}`}
-              onClick={() => setTab(t)}
-            >
-              {t === "assemblies" ? "Assemblies" : "Annotations"}
-            </button>
-          ))}
+        <div className="rec__tabgroup">
+          <span className="control__label">Show</span>
+          <div className="rec__tabs" role="tablist" aria-label="Record type">
+            {(["assemblies", "annotations"] as Tab[]).map((t) => (
+              <button
+                key={t}
+                type="button"
+                role="tab"
+                aria-selected={tab === t}
+                className={`seg-btn${tab === t ? " seg-btn--on" : ""}`}
+                onClick={() => setTab(t)}
+              >
+                {t === "assemblies" ? "Assemblies" : "Annotations"}
+              </button>
+            ))}
+          </div>
         </div>
         <label className="control control--inline">
           <span className="control__label">Sort by</span>
