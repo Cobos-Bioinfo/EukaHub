@@ -609,6 +609,33 @@ build+typecheck clean; light + dark + mobile + drilled screenshotted. No em
 dashes / emojis. Deferred: a scatter (species vs coverage) secondary view +
 quality columns in the leaderboard. See `docs/roadmap.md` Backlog.
 
+**Automated dataset rebuild + "Data updated" stamp — done** (2026-08-03, on `dev`).
+The first Phase-5 productionization item taken after the functional gate was met
+(deployment itself stays deferred until CRG, but the *data pipeline automation* is
+independent). Two halves. (1) **Provenance stamp:** a single-row `dataset_meta`
+table (`built_at` UTC + taxon/assembly/annotation/clade counts) that `build.py`
+writes as its **last** step via `load_dataset_meta`, so the timestamp marks a
+fully-loaded, validated dataset and rides a `pg_dump`/restore. `GET /meta`
+(`DatasetMeta` schema, `built_at` nullable pre-first-build) feeds an app-wide
+**"Data updated <date>"** footer stamp (`App.tsx` `DataUpdated`, non-blocking,
+`fmtDate`). (2) **Scheduled rebuild** (`.github/workflows/rebuild.yml`, monthly
+cron + `workflow_dispatch`): `postgres:17` service, installs the NCBI `datasets`
+CLI + uv, runs the pipeline with `--refresh-sources`, **gates on hard invariant
+checks**, then publishes a validated `pg_dump` snapshot (90-day artifact) + a run
+summary; a scheduled failure files a tracked issue. Robustness changes that make
+this work unattended: `validate()` now **runs `check_invariants` (raises on
+failure) and skips the Euka-Survey SQLite parity when absent** (it used to *crash*
+without the sibling file); `build.py` **applies its own schema** (`--schema-dir`,
+idempotent) so it runs against a fresh empty Postgres; `scripts/load_ci_db.py` also
+stamps `dataset_meta` so CI exercises the populated `/meta` path. Verified: schema
+apply on a fresh DB (idempotent) + invariant gate + stamp all proven locally on
+prod **and** the CI slice; 2 slice-safe `/meta` tests; whole suite **104 passed**,
+zero skips; ruff clean; workflow YAML valid; footer light+dark screenshotted.
+**The atomic swap (restore the snapshot into a live serving DB) + staging/prod DB
+stay deploy-gated** (CRG). The Actions run itself is unverified end-to-end here (no
+way to trigger Actions from this env; the fetch is heavy) — first real run happens
+on GitHub via the schedule or a manual dispatch.
+
 ## Read before doing anything
 
 - `docs/data-model.md` — **the core doc.** DB design + taxonomy-tree storage.
@@ -703,10 +730,19 @@ entries above).
 `dev`; see the "Where are the gaps?" status entry above). Shipped as `GET /gaps` +
 the `/gaps` ranked leaderboard (nav "Gaps") + a landing teaser; the user's chosen
 missing-species scoring / dedicated-page+teaser / leaderboard directions.
-**Then (pick next):** (a) more functional polish toward the deploy gate (landing
-viewport centring; deeper featured-group storytelling; a gaps **scatter** secondary
-view or quality columns in the leaderboard); (d) Phase-5 deploy items (still gated
-on CRG).
+
+**NEXT — the automated dataset rebuild + "Data updated" stamp is now DONE**
+(2026-08-03, on `dev`; see the "Automated dataset rebuild" status entry above).
+The user is **happy with frontend/functionality** and chose to **defer the
+deployment / CRG conversation until everything else is finished** (also: summer =
+bad time to reach the CRG team), then work the pipeline automation. Delivered:
+`.github/workflows/rebuild.yml` (monthly, invariant-gated, publishes a validated
+`pg_dump` artifact) + the `dataset_meta` stamp surfaced as the "Data updated"
+footer. **Then (pick next):** (a) small functional polish (landing viewport
+centring; deeper featured-group storytelling; a gaps **scatter** secondary view or
+quality columns in the leaderboard); (b) trigger a first real `rebuild.yml` run on
+GitHub (manual `workflow_dispatch`) to confirm the heavy fetch end-to-end;
+(d) deployment / CRG (deferred by the user until the rest is done).
 
 **UI-polish backlog (user-reported 2026-08-03) — ALL SIX DONE** (2026-08-03, on
 `dev`; see the "UI-polish alignment batch" status entry above for the per-item

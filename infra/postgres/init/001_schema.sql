@@ -97,3 +97,17 @@ CREATE TABLE IF NOT EXISTS annotation (
 );
 CREATE INDEX IF NOT EXISTS annotation_taxid_idx    ON annotation (taxid);
 CREATE INDEX IF NOT EXISTS annotation_assembly_idx ON annotation (assembly_accession);
+
+-- Dataset provenance: a single row stamped by the build at the very end, so the
+-- app can show "Data updated <date>" and the record counts travel with the data
+-- (a dump/restore carries the stamp). The one-row invariant is enforced by a
+-- fixed primary key (the build TRUNCATEs + inserts id = TRUE). Absent/empty is a
+-- valid state the API tolerates (serves built_at = null before the first build).
+CREATE TABLE IF NOT EXISTS dataset_meta (
+    id               BOOLEAN     PRIMARY KEY DEFAULT TRUE CHECK (id),  -- single row
+    built_at         TIMESTAMPTZ NOT NULL,   -- when this dataset finished building (UTC)
+    taxon_count      INTEGER     NOT NULL DEFAULT 0,
+    assembly_count   INTEGER     NOT NULL DEFAULT 0,
+    annotation_count INTEGER     NOT NULL DEFAULT 0,
+    clade_count      INTEGER     NOT NULL DEFAULT 0
+);

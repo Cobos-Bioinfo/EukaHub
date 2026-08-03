@@ -68,6 +68,32 @@ def _copy_frame(
     return frame.height
 
 
+def load_dataset_meta(
+    conn: psycopg.Connection,
+    *,
+    taxon_count: int,
+    assembly_count: int,
+    annotation_count: int,
+    clade_count: int,
+) -> None:
+    """Stamp the single ``dataset_meta`` row with ``built_at = now()`` (UTC) and
+    the loaded record counts.
+
+    Called last, so the timestamp marks a fully-loaded dataset; a dump/restore
+    then carries the stamp with the data. TRUNCATE + INSERT keeps the one-row
+    invariant (the fixed ``id = TRUE`` primary key also guards it).
+    """
+    with conn.cursor() as cur:
+        cur.execute("TRUNCATE dataset_meta")
+        cur.execute(
+            "INSERT INTO dataset_meta "
+            "(built_at, taxon_count, assembly_count, annotation_count, clade_count) "
+            "VALUES (now(), %s, %s, %s, %s)",
+            (taxon_count, assembly_count, annotation_count, clade_count),
+        )
+    conn.commit()
+
+
 def load_assembly(conn: psycopg.Connection, df: pl.DataFrame) -> int:
     """COPY per-assembly rows (``fetch_assemblies``) into ``assembly``."""
     return _copy_frame(conn, "assembly", ASSEMBLY_COLUMNS, df)

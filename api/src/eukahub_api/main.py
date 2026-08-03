@@ -15,9 +15,10 @@ Phase 2 read endpoints:
 - ``GET /taxon/{taxid}/about``         — Wikipedia "About" summary (decorative).
 - ``GET /search``                      — name search for the root picker.
 
-``/health`` (liveness) + ``/health/ready`` (DB readiness), ``/metrics-config`` and
-``/quality-config`` round out the service. Every request is logged as one
-structured JSON line (see ``logging_config``).
+``/health`` (liveness) + ``/health/ready`` (DB readiness), ``/metrics-config``,
+``/quality-config``, and ``/meta`` (dataset provenance: the "Data updated" stamp)
+round out the service. Every request is logged as one structured JSON line (see
+``logging_config``).
 """
 
 import logging
@@ -49,6 +50,7 @@ from eukahub_api.queries import (
     fetch_breakdown_quality,
     fetch_children,
     fetch_compare,
+    fetch_dataset_meta,
     fetch_gaps,
     fetch_lineage,
     fetch_overview,
@@ -67,6 +69,7 @@ from eukahub_api.schemas import (
     CladeSummary,
     Compare,
     CompareGroup,
+    DatasetMeta,
     FeaturedClade,
     GapItem,
     Gaps,
@@ -216,6 +219,26 @@ def quality_config() -> list[QualityStatConfig]:
     keyed by the stat keys the per-taxon quality values use (BUSCO, gene count,
     genome size, N50). The analogue of ``/metrics-config`` for the new dimension."""
     return [QualityStatConfig.from_stat(q) for q in QUALITY_STATS]
+
+
+@app.get("/meta", response_model=DatasetMeta)
+def meta(conn: Conn) -> DatasetMeta:
+    """Dataset provenance for the "Data updated" stamp: when the served dataset was
+    built (UTC) and its record counts. One tiny indexed lookup on ``dataset_meta``;
+    ``built_at`` is ``null`` before the first build has stamped the DB."""
+    row = fetch_dataset_meta(conn)
+    if row is None:
+        return DatasetMeta(
+            built_at=None, taxon_count=0, assembly_count=0, annotation_count=0, clade_count=0
+        )
+    built_at, taxon_count, assembly_count, annotation_count, clade_count = row
+    return DatasetMeta(
+        built_at=built_at,
+        taxon_count=taxon_count,
+        assembly_count=assembly_count,
+        annotation_count=annotation_count,
+        clade_count=clade_count,
+    )
 
 
 @app.get("/overview", response_model=Overview)

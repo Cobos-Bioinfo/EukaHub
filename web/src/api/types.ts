@@ -11,6 +11,7 @@ export type Compare = components["schemas"]["Compare"];
 export type CompareGroup = components["schemas"]["CompareGroup"];
 export type ResourceSummary = components["schemas"]["ResourceSummary"];
 export type Breakdown = components["schemas"]["Breakdown"];
+export type DatasetMeta = components["schemas"]["DatasetMeta"];
 export type Gaps = components["schemas"]["Gaps"];
 export type GapItem = components["schemas"]["GapItem"];
 export type TaxonRef = components["schemas"]["TaxonRef"];

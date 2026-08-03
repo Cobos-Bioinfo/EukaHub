@@ -11,6 +11,7 @@ import type {
   BucketQuality,
   CladeSummary,
   Compare,
+  DatasetMeta,
   FilterLogic,
   Gaps,
   MetricConfig,
@@ -51,6 +52,10 @@ export const getMetricsConfig = async (): Promise<MetricConfig[]> =>
 
 // Landing-page "at a glance": global totals + a few featured groups, one request.
 export const getOverview = async (): Promise<Overview> => unwrap(await api.GET("/overview"));
+
+// Dataset provenance for the app-wide "Data updated" footer stamp. built_at is
+// null before the first build has stamped the DB.
+export const getMeta = async (): Promise<DatasetMeta> => unwrap(await api.GET("/meta"));
 
 // Compare several groups side by side (2-6). Unknown taxids are dropped server-side.
 export const getCompare = async (taxids: number[]): Promise<Compare> =>

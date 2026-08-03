@@ -147,10 +147,21 @@ links); ENA → reads (aggregated, run counts only — no `base_count`).
   rollup so every aggregate is exact; the suite runs 85 tests with zero skips.
   Only one assertion changed (`test_summary.py` `n_rows` → adaptive species-count
   invariant, exact on both prod and the slice).
-- Scheduled offline **dataset** rebuild (GitHub Actions cron or Nextflow) keeping
-  the resumable-snapshot + atomic-swap discipline; staging vs prod DB; basic
-  metrics.
-  resumable-snapshot + atomic-swap discipline; staging vs prod DB; basic metrics.
+- **[done 2026-08-03] Scheduled offline dataset rebuild** — `.github/workflows/
+  rebuild.yml` (monthly cron `0 4 1 * *` + `workflow_dispatch`). Spins up a
+  `postgres:17` service, installs the NCBI `datasets` CLI + uv, runs the pipeline
+  with `--refresh-sources` (fresh NCBI/Annotrieve/ENA fetch), and **gates on the
+  pipeline's invariant checks** (`validate.check_invariants`: non-empty tables,
+  Eukaryota `n_rows` == species count, coverage <= n_rows, composition reconciles)
+  so a broken build never publishes. On success it publishes a **validated
+  `pg_dump` snapshot** (custom format) as a 90-day artifact and writes a run
+  summary; a *scheduled* failure files a tracked issue. The build now **applies its
+  own schema** (`build.py --schema-dir`, idempotent) so it runs against a fresh
+  empty Postgres, and **stamps `dataset_meta`** (`built_at` + counts) as its last
+  step — surfaced as the app's **"Data updated <date>"** footer (`GET /meta`). The
+  artifact is the deployable snapshot; restoring it into the live DB (the **atomic
+  swap**) happens at deploy time (CRG, gated). **Still deploy-gated:** staging vs
+  prod DB, and pushing the snapshot to a live serving DB.
 - **[done]** Response caching: `Cache-Control: public, max-age=$CACHE_MAX_AGE`
   on cacheable GETs (health = `no-store`), so browsers / a CDN / a reverse proxy
   cache between rebuilds. Follow-ups: nginx `proxy_cache` or a CDN in front,

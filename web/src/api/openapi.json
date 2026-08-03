@@ -607,6 +607,48 @@
         "title": "CompareGroup",
         "type": "object"
       },
+      "DatasetMeta": {
+        "description": "Dataset provenance for the \"Data updated\" stamp \u2014 when the served dataset\nwas built and how many records it holds. ``built_at`` is ``null`` before the\nfirst build has stamped the DB, in which case the frontend omits the stamp.",
+        "properties": {
+          "annotation_count": {
+            "title": "Annotation Count",
+            "type": "integer"
+          },
+          "assembly_count": {
+            "title": "Assembly Count",
+            "type": "integer"
+          },
+          "built_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Built At"
+          },
+          "clade_count": {
+            "title": "Clade Count",
+            "type": "integer"
+          },
+          "taxon_count": {
+            "title": "Taxon Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "built_at",
+          "taxon_count",
+          "assembly_count",
+          "annotation_count",
+          "clade_count"
+        ],
+        "title": "DatasetMeta",
+        "type": "object"
+      },
       "FeaturedClade": {
         "description": "One featured group on the landing page: its species count and how much of\nit is assembled/annotated. The frontend supplies the friendly display label\n(by taxid); ``name`` is the scientific name as a fallback.",
         "properties": {
@@ -1747,6 +1789,25 @@
           }
         },
         "summary": "Readiness"
+      }
+    },
+    "/meta": {
+      "get": {
+        "description": "Dataset provenance for the \"Data updated\" stamp: when the served dataset was\nbuilt (UTC) and its record counts. One tiny indexed lookup on ``dataset_meta``;\n``built_at`` is ``null`` before the first build has stamped the DB.",
+        "operationId": "meta_meta_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DatasetMeta"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Meta"
       }
     },
     "/metrics-config": {

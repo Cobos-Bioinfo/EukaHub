@@ -166,6 +166,18 @@ def fetch_overview(
     return totals, featured
 
 
+def fetch_dataset_meta(
+    conn: psycopg.Connection,
+) -> tuple[object, int, int, int, int] | None:
+    """The dataset provenance stamp: ``(built_at, taxon_count, assembly_count,
+    annotation_count, clade_count)`` from the single ``dataset_meta`` row, or
+    ``None`` before the first build has stamped one (a valid empty state)."""
+    return conn.execute(
+        "SELECT built_at, taxon_count, assembly_count, annotation_count, clade_count "
+        "FROM dataset_meta LIMIT 1"
+    ).fetchone()
+
+
 def fetch_compare(
     conn: psycopg.Connection, taxids: list[int]
 ) -> list[tuple[int, str, str, CladeMetadata, dict[str, float | None]]]:

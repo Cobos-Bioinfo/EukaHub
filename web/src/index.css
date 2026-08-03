@@ -216,11 +216,24 @@ a:hover {
 }
 
 .app__foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.4rem 1.5rem;
   max-width: var(--maxw);
   margin: 0 auto;
   padding: 1.5rem clamp(1rem, 4vw, 2rem) 2.5rem;
   color: var(--muted);
   font-size: 0.85rem;
+}
+.app__foot > span:first-child {
+  flex: 1 1 20rem;
+}
+.app__updated {
+  flex: none;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 
 /* ---- Root picker (search) ------------------------------------------- */

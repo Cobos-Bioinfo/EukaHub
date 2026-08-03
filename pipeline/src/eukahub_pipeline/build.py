@@ -35,6 +35,7 @@ from eukahub_pipeline.load import (
     load_annotation,
     load_assembly,
     load_clade_features,
+    load_dataset_meta,
     load_taxon,
 )
 from eukahub_pipeline.rollup import assemble_leaf_features, rollup_from_frames
@@ -49,6 +50,11 @@ DEFAULT_DB_URL = "postgresql://eukahub:eukahub@localhost:5432/eukahub"
 DEFAULT_LEAF_DB = "../Euka-Survey/eukaryotes.db"
 DEFAULT_TAXDUMP_DIR = "data/taxdump"
 DEFAULT_SOURCES_DIR = "data/sources"
+# The schema DDL applied before loading, so the build works against a fresh,
+# empty Postgres (e.g. the scheduled-rebuild CI service) with no separate init
+# step. Every statement is idempotent (CREATE ... IF NOT EXISTS), so re-applying
+# on the already-initialized dev DB is a no-op.
+DEFAULT_SCHEMA_DIR = "infra/postgres/init"
 
 # Parquet snapshot dtypes — key order mirrors each fetch module's *_COLUMNS.
 _ASSEMBLY_SCHEMA: dict[str, pl.DataType] = {
@@ -102,6 +108,21 @@ def _taxon_copy_rows(
         yield (taxid, names.get(taxid, str(taxid)), rank, parent, paths[taxid])
 
 
+def _apply_schema(conn: psycopg.Connection, schema_dir: str) -> None:
+    """Apply every ``*.sql`` in ``schema_dir`` (idempotent DDL) so the build can
+    run against a fresh, empty Postgres. Skipped with a warning if the directory
+    is absent (e.g. run from an unexpected CWD)."""
+    d = Path(schema_dir)
+    files = sorted(d.glob("*.sql"))
+    if not files:
+        log.warning("no schema SQL found in %s; skipping schema apply", d)
+        return
+    for f in files:
+        conn.execute(f.read_text())
+        log.info("applied schema %s", f.name)
+    conn.commit()
+
+
 def _taxon_frame(nodes: dict[int, tuple[int, str]], paths: dict[int, str]) -> pl.DataFrame:
     """Build the (taxid, rank, path) frame the rollup joins against."""
     taxids = list(nodes.keys())
@@ -132,6 +153,16 @@ def main(argv: list[str] | None = None) -> int:
         "--refresh-sources",
         action="store_true",
         help="re-fetch the live sources, ignoring any parquet snapshots",
+    )
+    p.add_argument(
+        "--schema-dir",
+        default=os.environ.get("EUKAHUB_SCHEMA_DIR", DEFAULT_SCHEMA_DIR),
+        help="directory of idempotent schema SQL applied before loading",
+    )
+    p.add_argument(
+        "--skip-schema",
+        action="store_true",
+        help="assume the schema already exists (skip applying schema-dir)",
     )
     args = p.parse_args(argv)
 
@@ -183,6 +214,8 @@ def main(argv: list[str] | None = None) -> int:
     log.info("Rolled up into %d clade rows", clade.height)
 
     with psycopg.connect(args.database_url) as conn:
+        if not args.skip_schema:
+            _apply_schema(conn, args.schema_dir)
         n_taxon = load_taxon(conn, _taxon_copy_rows(nodes, names, paths))
         log.info("Loaded %d taxon rows", n_taxon)
         n_ass = load_assembly(conn, assemblies)
@@ -191,7 +224,18 @@ def main(argv: list[str] | None = None) -> int:
         n_clade = load_clade_features(conn, clade)
         log.info("Loaded %d clade_features rows", n_clade)
 
+        # Gate on the invariants BEFORE stamping — a broken build raises here and
+        # never records a (misleading) "updated" timestamp.
         validate(conn, args.leaf_db)
+
+        load_dataset_meta(
+            conn,
+            taxon_count=n_taxon,
+            assembly_count=n_ass,
+            annotation_count=n_ann,
+            clade_count=n_clade,
+        )
+        log.info("Stamped dataset_meta (built_at = now)")
 
     log.info("Build finished in %.1fs", time.time() - t0)
     return 0

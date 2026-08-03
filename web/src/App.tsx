@@ -1,10 +1,13 @@
 import { Link, Route, Routes, useLocation } from "react-router";
 
+import { getMeta } from "./api/queries";
 import HeaderMenu from "./components/HeaderMenu";
 import RandomCladeButton from "./components/RandomCladeButton";
 import RootPicker from "./components/RootPicker";
 import ThemeToggle from "./components/ThemeToggle";
 import { RandomIcon } from "./components/icons";
+import { useAsync } from "./hooks/useAsync";
+import { fmtDate } from "./lib/format";
 import BreakdownPage from "./pages/BreakdownPage";
 import ComparePage from "./pages/ComparePage";
 import Dashboard from "./pages/Dashboard";
@@ -92,9 +95,22 @@ export default function App() {
       </main>
 
       <footer className="app__foot">
-        Public genomic resources across the eukaryotic tree of life. Data comes from NCBI,
-        Annotrieve, and ENA, and is refreshed on a schedule.
+        <span>
+          Public genomic resources across the eukaryotic tree of life. Data comes from NCBI,
+          Annotrieve, and ENA, and is refreshed on a schedule.
+        </span>
+        <DataUpdated />
       </footer>
     </div>
   );
+}
+
+/** The app-wide "Data updated {date}" provenance stamp in the footer. Fetched
+ *  non-blocking and omitted while loading, on error, or before the first build
+ *  has stamped the DB (built_at null) — never load-bearing. */
+function DataUpdated() {
+  const { data } = useAsync(getMeta, []);
+  const date = fmtDate(data?.built_at);
+  if (!date) return null;
+  return <span className="app__updated">Data updated {date}</span>;
 }

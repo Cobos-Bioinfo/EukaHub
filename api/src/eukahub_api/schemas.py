@@ -9,7 +9,7 @@ render one card per resource.
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 
 from eukahub_core.metrics import (
     METRIC_KEYS,
@@ -168,6 +168,18 @@ class Overview(BaseModel):
 
     totals: OverviewTotals
     featured: list[FeaturedClade]
+
+
+class DatasetMeta(BaseModel):
+    """Dataset provenance for the "Data updated" stamp — when the served dataset
+    was built and how many records it holds. ``built_at`` is ``null`` before the
+    first build has stamped the DB, in which case the frontend omits the stamp."""
+
+    built_at: datetime | None  # UTC build timestamp, or null before the first build
+    taxon_count: int
+    assembly_count: int
+    annotation_count: int
+    clade_count: int
 
 
 class TaxonRef(BaseModel):

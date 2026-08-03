@@ -10,6 +10,15 @@ export const fmtCompact = (n: number): string =>
 /** A coverage percentage: 2 decimals under 1%, else 1 (keeps tiny values visible). */
 export const fmtPct = (p: number): string => p.toFixed(p < 1 ? 2 : 1);
 
+/** An ISO timestamp as a readable date, e.g. "3 August 2026". Returns "" on a
+ *  missing/unparseable value so callers can omit the stamp. */
+export function fmtDate(iso: string | null | undefined): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
+}
+
 /** Substitute the taxid into a metric's external URL template. */
 export const externalUrl = (template: string, taxid: number): string =>
   template.replace("{taxid}", String(taxid));

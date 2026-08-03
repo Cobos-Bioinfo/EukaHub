@@ -189,6 +189,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/meta": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Meta
+         * @description Dataset provenance for the "Data updated" stamp: when the served dataset was
+         *     built (UTC) and its record counts. One tiny indexed lookup on ``dataset_meta``;
+         *     ``built_at`` is ``null`` before the first build has stamped the DB.
+         */
+        get: operations["meta_meta_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/metrics-config": {
         parameters: {
             query?: never;
@@ -610,6 +632,24 @@ export interface components {
             };
             /** Taxid */
             taxid: number;
+        };
+        /**
+         * DatasetMeta
+         * @description Dataset provenance for the "Data updated" stamp — when the served dataset
+         *     was built and how many records it holds. ``built_at`` is ``null`` before the
+         *     first build has stamped the DB, in which case the frontend omits the stamp.
+         */
+        DatasetMeta: {
+            /** Annotation Count */
+            annotation_count: number;
+            /** Assembly Count */
+            assembly_count: number;
+            /** Built At */
+            built_at: string | null;
+            /** Clade Count */
+            clade_count: number;
+            /** Taxon Count */
+            taxon_count: number;
         };
         /**
          * FeaturedClade
@@ -1177,6 +1217,26 @@ export interface operations {
                     "application/json": {
                         [key: string]: string;
                     };
+                };
+            };
+        };
+    };
+    meta_meta_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DatasetMeta"];
                 };
             };
         };

@@ -246,6 +246,29 @@ bacterial/viral clades would be emitted. Verified after the rebuild:
 `clade_features.n_rows` equals a direct `taxon` species count for every clade
 checked.
 
+### Dataset provenance (`dataset_meta`) — the "Data updated" stamp
+
+A single-row table the build stamps as its **last** step, so the timestamp marks a
+fully-loaded, invariant-validated dataset and travels with the data through a
+`pg_dump`/restore:
+
+```sql
+CREATE TABLE dataset_meta (
+    id               BOOLEAN     PRIMARY KEY DEFAULT TRUE CHECK (id),  -- single row
+    built_at         TIMESTAMPTZ NOT NULL,   -- when this dataset finished building (UTC)
+    taxon_count      INTEGER     NOT NULL DEFAULT 0,
+    assembly_count   INTEGER     NOT NULL DEFAULT 0,
+    annotation_count INTEGER     NOT NULL DEFAULT 0,
+    clade_count      INTEGER     NOT NULL DEFAULT 0
+);
+```
+
+`GET /meta` serves it (`built_at` is `null` before the first build — a valid
+empty state the API and the frontend footer both tolerate). The scheduled rebuild
+(`.github/workflows/rebuild.yml`) writes it via `load_dataset_meta`, only after
+`validate.check_invariants` passes, so a broken build never records a misleading
+"updated" date.
+
 ## Reuse from Euka-Survey
 
 - The **offline rollup** (`precomputed_clade_features` → `clade_features`).
