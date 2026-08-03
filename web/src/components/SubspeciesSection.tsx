@@ -1,4 +1,4 @@
-import { Link } from "react-router-dom";
+import { Link } from "react-router";
 
 import { getChildren } from "../api/queries";
 import type { MetricConfig } from "../api/types";

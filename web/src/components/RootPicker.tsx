@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router";
 
 import { getLineage, searchTaxa } from "../api/queries";
 import type { TaxonRef } from "../api/types";

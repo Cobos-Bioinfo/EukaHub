@@ -1,4 +1,4 @@
-import { Link, Route, Routes, useLocation } from "react-router-dom";
+import { Link, Route, Routes, useLocation } from "react-router";
 
 import HeaderMenu from "./components/HeaderMenu";
 import RandomCladeButton from "./components/RandomCladeButton";
@@ -34,20 +34,22 @@ export default function App() {
         <Link className="app__brand" to="/">
           Euka<span>Hub</span>
         </Link>
-        <Link className={navClass("/clade/")} to={`/clade/${ctxTaxid}`}>
-          Dashboard
-        </Link>
-        <Link className={navClass("/tree/")} to={`/tree/${ctxTaxid}`}>
-          Tree of Life
-        </Link>
-        <Link className={navClass("/map/")} to={`/map/${ctxTaxid}`}>
-          Data map
-        </Link>
-        <Link className={navClass("/compare")} to="/compare">
-          Compare
-        </Link>
+        <nav className="app__nav-group" aria-label="Primary">
+          <Link className={navClass("/clade/")} to={`/clade/${ctxTaxid}`}>
+            Dashboard
+          </Link>
+          <Link className={navClass("/tree/")} to={`/tree/${ctxTaxid}`}>
+            Tree of Life
+          </Link>
+          <Link className={navClass("/map/")} to={`/map/${ctxTaxid}`}>
+            Data map
+          </Link>
+          <Link className={navClass("/compare")} to="/compare">
+            Compare
+          </Link>
+        </nav>
+        <RootPicker />
         <div className="app__actions">
-          <RootPicker />
           <RandomCladeButton className="app__icon-btn" title="Surprise me, jump to a random group">
             <RandomIcon size={18} />
             <span className="sr-only">Surprise me, jump to a random group</span>

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router";
 
 import { getCompare, getMetricsConfig, getQualityConfig } from "../api/queries";
 import type { CompareGroup, MetricConfig, QualityStatConfig, TaxonRef } from "../api/types";
