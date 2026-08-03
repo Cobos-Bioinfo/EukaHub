@@ -471,6 +471,28 @@ drop; dedupe/cap; 422s); full suite **95 passed**; web typecheck+build clean; li
 + dark + empty-state screenshotted. **Next: #3 in-tree search highlight on the
 radial Tree of Life** (reuses this multi-taxon picker groundwork).
 
+**UI-polish alignment batch + description-measure standardization — done**
+(2026-08-03, on `dev`). Cleared the six user-reported UI-polish items plus a
+follow-up, all verified via headless screenshots in light **and** dark (no API
+change). (1) Landing "Explore Eukaryota" leads with a left `SearchIcon` (new in
+`icons.tsx`), matching the Tree/Surprise buttons. (2) Metric cards: `.card__title`
+reserves two lines (centred, `min-height`) so the wrapping "Long-Read RNA-Seq"
+title no longer drops its count/bar below the other three. (3+6) Breakdown "level"
+bar: dropped the `→` arrow and replaced the two rank **pills** with inline
+uppercase baseline-aligned text (`.bmap-level__rank`, `--now` in the accent
+colour) — a bordered badge floats optically high against mixed-case text; the
+dashboard-header + tree-panel `.rank-badge` pills are untouched (reverted to
+original). (4) Breakdown Colour/Size rows: fixed-width label column
+(`.bmap-ctl > .tree-controls__label`) so the toggle groups align when stacked.
+(5) Record browser controls: added a "Show" label over the tabs (`.rec__tabgroup`)
++ a shared `min-height` on the pill/select with `align-items: flex-start`, so both
+columns' labels sit level and the controls align on both edges. **Follow-up:** the
+three page descriptions (Tree / Data map / Compare) had inconsistent widths
+(full-width / 80ch / 64ch); standardized on one **`--measure: 70ch`** token (the
+readable-measure standard — WCAG 1.4.8 caps line length at 80ch, so the Tree's
+unconstrained line was the outlier) applied to `.tree-page__sub` /
+`.bmap-block__sub` / `.cmp__lede`. Web build+typecheck clean.
+
 ## Read before doing anything
 
 - `docs/data-model.md` — **the core doc.** DB design + taxonomy-tree storage.
@@ -553,32 +575,9 @@ slice **and** prod.
   a taxon and highlight/pan to it. Reuses the multi-taxon picker groundwork from
   the Compare view (`RootPicker`'s `onPick`).
 
-**UI-polish backlog (user-reported 2026-08-03, do next session):** small
-alignment/consistency fixes, all verified via headless screenshots.
-1. **Landing — "Explore Eukaryota" button:** swap the right-side `→` for a *search*
-   icon on the **left** (matching the other two hero buttons, which have their icon
-   on the left). `web/src/pages/Landing.tsx` + `components/icons.tsx` (add a search
-   icon if none fits).
-2. **Dashboard metric cards:** since the 2×2 grid narrowed the cards, the 4th card
-   ("Long-Read RNA-Seq") has a longer title that wraps to two lines, so its
-   count/bar sit lower than the other three. Align card content regardless of title
-   wrapping (reserve a consistent title height, or align the stat rows). `MetricCard.tsx` /
-   `.card__*` in `index.css`.
-3. **Dashboard Breakdown level bar** (`BreakdownMap` "Viewing {focus} [RANK] →
-   broken down by [TILE RANK]"): the two rank **pills** sit slightly higher than the
-   surrounding text (vertical-align), and the user dislikes the arrow. Baseline/center
-   the pills with the text and rethink or drop the `→`. `.bmap-level` in `index.css`.
-4. **Dashboard Breakdown "Colour by" / "Size by" rows:** the two control rows don't
-   left-align because "Size by" is shorter than "Colour by", so its toggle group
-   shifts left. Give the labels a fixed-width column (or a 2-col grid) so the toggles
-   line up vertically.
-5. **Dashboard "Browse the data" (`RecordBrowser`):** the right control has a "Sort
-   by" label above it while the left control (tabs) has none, leaving uneven top
-   whitespace. Align their tops (add a matching label to the left, or drop/reposition
-   the "Sort by" label).
-6. **Data map (standalone `/map/:taxid`):** same level-bar pill/arrow alignment issue
-   as #3 (same `BreakdownMap` component, so #3's fix covers both — just verify on the
-   standalone page too).
+**UI-polish backlog (user-reported 2026-08-03) — ALL SIX DONE** (2026-08-03, on
+`dev`; see the "UI-polish alignment batch" status entry above for the per-item
+fixes + the description-measure standardization follow-up).
 Then: (a) more functional polish toward the deploy gate (landing viewport centring;
 deeper featured-group storytelling); (b) the remaining enrichment tail; (c) Phase-5
 deploy items (still gated on CRG); (d) the smaller non-functional follow-ups below.

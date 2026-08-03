@@ -4,7 +4,7 @@ import { getOverview } from "../api/queries";
 import type { FeaturedClade } from "../api/types";
 import RandomCladeButton from "../components/RandomCladeButton";
 import RootPicker from "../components/RootPicker";
-import { RandomIcon, TreeIcon } from "../components/icons";
+import { RandomIcon, SearchIcon, TreeIcon } from "../components/icons";
 import { useAsync } from "../hooks/useAsync";
 import { cladeLabel } from "../lib/clades";
 import { fmt, fmtCompact, fmtPct } from "../lib/format";
@@ -35,7 +35,8 @@ export default function Landing() {
 
       <div className="hero__cta">
         <Link to={`/clade/${EUKARYOTA_TAXID}`} className="hero__btn hero__btn--primary">
-          Explore Eukaryota →
+          <SearchIcon size={17} />
+          Explore Eukaryota
         </Link>
         <Link to={`/tree/${EUKARYOTA_TAXID}`} className="hero__btn hero__btn--tree">
           <TreeIcon size={17} />

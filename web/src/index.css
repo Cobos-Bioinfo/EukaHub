@@ -45,6 +45,7 @@
   --radius: 12px;
   --shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 1px 3px rgba(16, 24, 40, 0.06);
   --maxw: 1360px; /* content cap — wide enough for the dashboard two-column body */
+  --measure: 70ch; /* readable line length for descriptive copy (WCAG 1.4.8 ≤ 80ch) */
 
   color-scheme: light;
   color: var(--ink);
@@ -493,9 +494,16 @@ a:hover {
 .card__title {
   margin: 0;
   font-size: 0.9rem;
+  line-height: 1.3;
   font-weight: 600;
   color: var(--ink-2);
   flex: 1;
+  /* Reserve two lines so a title that wraps (e.g. "Long-Read RNA-Seq") does not
+     push its card's count/bar lower than the single-line cards beside it. The
+     text sits centred in the reserved space, keeping the stat rows aligned. */
+  display: flex;
+  align-items: center;
+  min-height: calc(0.9rem * 1.3 * 2);
 }
 .card__source {
   font-size: 0.75rem;
@@ -734,10 +742,24 @@ a:hover {
 }
 .rec__controls {
   display: flex;
-  align-items: flex-end;
+  align-items: flex-start;
   flex-wrap: wrap;
   gap: 0.85rem 1.25rem;
   margin: 1rem 0 0.85rem;
+}
+/* Shared control height so the tab pill and the sort select line up on both
+   edges; flex-start above then keeps their "Show" / "Sort by" labels level (no
+   empty gap above the shorter control). */
+.rec__tabs,
+.rec__controls .control__select {
+  min-height: 2.35rem;
+}
+/* Label + tab pill, stacked like the sibling "Sort by" control so both columns
+   carry a top label and their controls align on one row (no uneven whitespace). */
+.rec__tabgroup {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
 }
 .rec__tabs {
   display: inline-flex;
@@ -1309,8 +1331,10 @@ a:hover {
 }
 .tree-page__sub {
   margin: 0.35rem 0 0;
+  max-width: var(--measure); /* shared readable measure (see --measure) */
   color: var(--muted);
   font-size: 0.9rem;
+  text-wrap: pretty;
 }
 .tree-page__back {
   flex: none;
@@ -2094,7 +2118,7 @@ button.tree-outline__name:hover {
 }
 .cmp__lede {
   margin: 0.4rem 0 0;
-  max-width: 64ch;
+  max-width: var(--measure); /* shared readable measure (see --measure) */
   color: var(--ink-2);
   text-wrap: pretty; /* avoid ragged/orphaned line breaks */
 }
@@ -2374,9 +2398,10 @@ button.tree-outline__name:hover {
 }
 .bmap-block__sub {
   margin: 0.4rem 0 0;
-  max-width: 80ch;
+  max-width: var(--measure); /* shared readable measure (see --measure) */
   color: var(--ink-2);
   font-size: 0.9rem;
+  text-wrap: pretty;
 }
 .bmap-actions {
   display: flex;
@@ -2446,8 +2471,22 @@ button.tree-outline__name:hover {
 }
 .bmap-level__part {
   display: inline-flex;
-  align-items: center;
+  align-items: baseline;
   gap: 0.4rem;
+}
+/* The rank in the level bar reads as inline uppercase text (not a pill), so it
+   sits on the same baseline as the surrounding words — a bordered badge floats
+   optically high against mixed-case text next to it. The "now" rank (what the
+   tiles are) takes the accent colour to stand out. */
+.bmap-level__rank {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--ink-2);
+}
+.bmap-level__rank--now {
+  color: var(--link);
 }
 .bmap-level__cap {
   color: var(--muted);
@@ -2455,18 +2494,9 @@ button.tree-outline__name:hover {
 .bmap-level__name {
   color: var(--ink);
 }
-.bmap-level__arrow {
-  color: var(--muted);
-  font-weight: 700;
-}
 .bmap-level__count {
   color: var(--ink-2);
   font-variant-numeric: tabular-nums;
-}
-.rank-badge--now {
-  color: var(--link);
-  border-color: var(--link);
-  background: transparent;
 }
 
 .bmap-controls {
@@ -2480,6 +2510,12 @@ button.tree-outline__name:hover {
   align-items: center;
   flex-wrap: wrap;
   gap: 0.5rem 0.6rem;
+}
+/* Fixed-width label column so the shorter "Size by" toggle group lines up under
+   the wider "Colour by" one when the two control rows stack. */
+.bmap-ctl > .tree-controls__label {
+  flex: none;
+  width: 4.75rem;
 }
 
 .bmap {

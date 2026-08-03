@@ -379,14 +379,11 @@ export default function BreakdownMap({
           <span className="bmap-level__part">
             <span className="bmap-level__cap">Viewing</span>
             <strong className="bmap-level__name">{focus.name}</strong>
-            <span className="rank-badge">{focus.rank}</span>
-          </span>
-          <span className="bmap-level__arrow" aria-hidden="true">
-            →
+            <span className="bmap-level__rank">{focus.rank}</span>
           </span>
           <span className="bmap-level__part">
             <span className="bmap-level__cap">broken down by</span>
-            <span className="rank-badge rank-badge--now">{rankNoun}</span>
+            <span className="bmap-level__rank bmap-level__rank--now">{rankNoun}</span>
             {bd.data && (
               <span className="bmap-level__count">
                 {fmt(bd.data.total_matches)} {bd.data.total_matches === 1 ? "group" : "groups"}
