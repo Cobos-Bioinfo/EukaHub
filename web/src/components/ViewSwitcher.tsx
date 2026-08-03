@@ -18,20 +18,26 @@ const VIEWS: {
 
 /** Cross-navigation for one clade: CTA buttons to its other views (every view
  *  but the current one), in the same order as the top nav, plus an "Add to
- *  compare" shortcut. Rendered in the dashboard's sticky rail so it stays
- *  reachable while the page scrolls. */
+ *  compare" shortcut. `layout` is a vertical `stack` for the dashboard's sticky
+ *  rail (default) or a horizontal `row` for the header of the full-bleed Tree /
+ *  Data map pages, which have no rail. */
 export default function ViewSwitcher({
   taxid,
   name,
   current,
+  layout = "stack",
 }: {
   taxid: number;
   name?: string;
   current: CladeView;
+  layout?: "stack" | "row";
 }) {
   const others = VIEWS.filter((v) => v.key !== current);
   return (
-    <nav className="viewsw" aria-label={`Explore ${name ?? "this clade"} in other views`}>
+    <nav
+      className={"viewsw" + (layout === "row" ? " viewsw--row" : "")}
+      aria-label={`Explore ${name ?? "this clade"} in other views`}
+    >
       <span className="viewsw__label">
         Explore {name ? <em>{name}</em> : "this clade"}
       </span>
@@ -39,9 +45,6 @@ export default function ViewSwitcher({
         <Link key={key} className={`viewsw__btn viewsw__btn--${key}`} to={to(taxid)}>
           <Icon size={17} />
           <span>{label}</span>
-          <span className="viewsw__arrow" aria-hidden="true">
-            →
-          </span>
         </Link>
       ))}
       <Link className="viewsw__compare" to={`/compare?taxids=${taxid}`}>

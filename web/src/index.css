@@ -17,9 +17,11 @@
   --link: #1f6feb; /* interactive text/icons */
   --cta: #1f6feb; /* filled-button surface (white text sits on it — keep it dark enough) */
   /* Secondary filled-button surfaces — distinct hues, each dark enough for white
-     text (contrast on par with --cta). Tree = green, Surprise = violet. */
+     text (contrast on par with --cta). Tree = green, Surprise = violet, Data map =
+     purple (ties to the map's quality-lens hue #6a3d9a). */
   --cta-tree: #237a35;
   --cta-surprise: #6741d9;
+  --cta-map: #6a3d9a;
   --cov-annotated: #2f9e44; /* the "annotated" coverage meter (green); assembled reuses --link */
   /* Categorical series palette for the compare view (up to 6 groups). Validated
      with the dataviz skill: adjacent CVD dE >= 8 both modes; the light-mode
@@ -77,6 +79,7 @@
   --cta: #2563eb;
   --cta-tree: #2b8a3e;
   --cta-surprise: #7048e8;
+  --cta-map: #7c46b0;
   --cov-annotated: #37b24d;
   --series-1: #3987e5;
   --series-2: #d95926;
@@ -1313,15 +1316,14 @@ a:hover {
   text-decoration: none;
   filter: brightness(1.06);
 }
-/* Tree of Life keeps its green identity (matches the landing CTA + app-wide
-   green for the branching hierarchy); the others use the accent blue. */
+/* Each view keeps a distinct identity hue: Tree of Life green (matches the
+   landing CTA + app-wide green), Data map purple (its quality-lens hue); Dashboard
+   uses the accent blue. */
 .viewsw__btn--tree {
   background: var(--cta-tree);
 }
-.viewsw__arrow {
-  margin-left: auto;
-  font-weight: 400;
-  opacity: 0.9;
+.viewsw__btn--map {
+  background: var(--cta-map);
 }
 .viewsw__compare {
   display: inline-flex;
@@ -1335,6 +1337,27 @@ a:hover {
 .viewsw__compare:hover {
   text-decoration: none;
   filter: brightness(1.05);
+}
+
+/* Horizontal variant for the full-bleed Tree / Data map headers (no rail):
+   a compact inline row instead of a full-width stack. */
+.viewsw--row {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.65rem;
+  margin-bottom: 1rem;
+}
+.viewsw--row .viewsw__label {
+  margin-right: 0.15rem;
+}
+.viewsw--row .viewsw__btn {
+  padding: 0.45rem 0.85rem;
+  font-size: 0.88rem;
+}
+.viewsw--row .viewsw__compare {
+  margin-top: 0;
+  margin-left: 0.1rem;
 }
 
 /* ---- Tree page ------------------------------------------------------- */

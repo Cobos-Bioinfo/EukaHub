@@ -7,6 +7,7 @@ import Breadcrumb from "../components/Breadcrumb";
 import RadialTree from "../components/RadialTree";
 import RootPicker from "../components/RootPicker";
 import TreeOutline from "../components/TreeOutline";
+import ViewSwitcher from "../components/ViewSwitcher";
 import { useAsync } from "../hooks/useAsync";
 import { useTree } from "../hooks/useTree";
 
@@ -75,6 +76,7 @@ export default function TreePage() {
   return (
     <section className="tree-page">
       {lineage.data && <Breadcrumb lineage={lineage.data.lineage} currentTaxid={taxid} />}
+      {node && <ViewSwitcher taxid={taxid} name={node.name} current="tree" layout="row" />}
 
       <header className="tree-page__head">
         <div className="tree-page__topline">
