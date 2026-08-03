@@ -2527,6 +2527,91 @@ button.tree-outline__name:hover {
   font-variant-numeric: tabular-nums;
 }
 
+/* Wide data tables -> per-row cards on phones. The record browser, compare, and
+   subspecies tables are wider than a phone; rather than scroll them sideways,
+   below 640px each row becomes a labelled card (labels come from each cell's
+   data-label). The name/group cell is the card title. */
+@media (max-width: 640px) {
+  .bd__table-wrap,
+  .cmp-table-wrap {
+    overflow-x: visible;
+  }
+  /* The card borders replace the wrapper frame. */
+  .bd__table-wrap {
+    border: none;
+    background: none;
+    box-shadow: none;
+  }
+  .bd-table,
+  .cmp-table {
+    min-width: 0;
+    font-size: 0.9rem;
+  }
+  /* Column headers are redundant once each cell carries its own label. */
+  .bd-table thead,
+  .cmp-table thead {
+    display: none;
+  }
+  .bd-table tbody,
+  .bd-table tbody tr,
+  .cmp-table tbody,
+  .cmp-table tbody tr {
+    display: block;
+  }
+  .bd-table tbody tr,
+  .cmp-table tbody tr {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--card);
+    box-shadow: var(--shadow);
+    padding: 0.5rem 0.85rem 0.6rem;
+    margin-bottom: 0.75rem;
+  }
+  /* Value rows: uppercase label from data-label on the left, value at the right. */
+  .bd-table tbody td,
+  .cmp-table tbody td {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 0.5rem 1rem;
+    padding: 0.28rem 0;
+    border: none;
+    white-space: normal;
+    text-align: right;
+  }
+  .bd-table tbody td:last-child,
+  .cmp-table tbody td:last-child {
+    padding-bottom: 0;
+  }
+  .bd-table tbody td::before,
+  .cmp-table tbody td::before {
+    content: attr(data-label);
+    margin-right: auto; /* push the value to the right edge */
+    font-size: 0.68rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: var(--muted);
+    text-align: left;
+  }
+  /* Card title: the organism / taxon / group name, full width, no label. */
+  .bd-table tbody td.bd-name,
+  .cmp-table tbody th {
+    padding: 0 0 0.45rem;
+    margin-bottom: 0.4rem;
+    border-bottom: 1px solid var(--border);
+    font-size: 1rem;
+    white-space: normal;
+  }
+  .bd-table tbody td.bd-name {
+    display: block;
+    text-align: left;
+  }
+  .bd-table tbody td.bd-name::before {
+    content: none;
+  }
+}
+
 /* ---- Breakdown "data map" -------------------------------------------- */
 .bmap-block {
   margin-top: 2.75rem;

@@ -221,17 +221,17 @@ function AssemblyTable({ items }: { items: AssemblyRecord[] }) {
             <td className="bd-name">
               <Organism taxid={a.taxid} name={a.organism} />
             </td>
-            <td>
+            <td data-label="Assembly">
               <span className="rec-acc">{a.assembly_accession}</span>
               {a.source_database && <span className="rec-tag">{a.source_database}</span>}
             </td>
-            <td>
+            <td data-label="Level">
               {a.assembly_level ? <LevelBadge level={a.assembly_level} /> : <Dash />}
             </td>
-            <td className="bd-num">{a.total_sequence_length ? fmtBp(a.total_sequence_length) : <Dash />}</td>
-            <td className="bd-num">{a.contig_n50 ? fmtBp(a.contig_n50) : <Dash />}</td>
-            <td className="rec-date">{a.release_date ?? <Dash />}</td>
-            <td>
+            <td className="bd-num" data-label="Genome size">{a.total_sequence_length ? fmtBp(a.total_sequence_length) : <Dash />}</td>
+            <td className="bd-num" data-label="Contig N50">{a.contig_n50 ? fmtBp(a.contig_n50) : <Dash />}</td>
+            <td className="rec-date" data-label="Released">{a.release_date ?? <Dash />}</td>
+            <td data-label="Download">
               {a.download_url ? (
                 <a className="rec-dl" href={a.download_url} target="_blank" rel="noreferrer">
                   NCBI ↗
@@ -271,26 +271,26 @@ function AnnotationTable({ items }: { items: AnnotationRecord[] }) {
             <td className="bd-name">
               <Organism taxid={a.taxid} name={a.organism} />
             </td>
-            <td>
+            <td data-label="Source">
               <span className="rec-src" title={a.provider ?? undefined}>
                 {a.source_database ?? "—"}
               </span>
             </td>
-            <td className="bd-num">
+            <td className="bd-num" data-label="BUSCO">
               {a.busco_complete !== null ? (
                 <span title={a.busco_lineage ?? undefined}>{fmtPct(a.busco_complete)}%</span>
               ) : (
                 <Dash />
               )}
             </td>
-            <td className="bd-num">
+            <td className="bd-num" data-label="Genes">
               {a.protein_coding_count !== null ? fmt(a.protein_coding_count) : <Dash />}
             </td>
-            <td>
+            <td data-label="Assembly">
               <span className="rec-acc">{a.assembly_accession ?? "—"}</span>
             </td>
-            <td className="rec-date">{a.release_date ?? <Dash />}</td>
-            <td>
+            <td className="rec-date" data-label="Released">{a.release_date ?? <Dash />}</td>
+            <td data-label="Download">
               {a.gff_url ? (
                 <a className="rec-dl" href={a.gff_url} target="_blank" rel="noreferrer">
                   GFF ↗

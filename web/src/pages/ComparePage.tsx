@@ -334,7 +334,7 @@ function CompareTable({
               {columns.map((c) => {
                 const v = c.get(g);
                 return (
-                  <td key={c.key} className="cmp-table__num">
+                  <td key={c.key} className="cmp-table__num" data-label={c.label}>
                     {v === null ? "—" : c.fmt(v)}
                   </td>
                 );

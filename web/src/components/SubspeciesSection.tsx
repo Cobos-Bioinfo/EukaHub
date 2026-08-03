@@ -62,9 +62,11 @@ export default function SubspeciesSection({
                 <td className="bd-name">
                   <Link to={`/clade/${it.taxid}`}>{it.name}</Link>
                 </td>
-                <td className="tree-outline__rank">{it.rank}</td>
+                <td className="tree-outline__rank" data-label="Rank">
+                  {it.rank}
+                </td>
                 {metrics.map((m) => (
-                  <td key={m.key} className="bd-num">
+                  <td key={m.key} className="bd-num" data-label={m.card_title}>
                     {fmt(it.resources[m.key].total)}
                   </td>
                 ))}
