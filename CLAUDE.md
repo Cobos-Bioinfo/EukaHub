@@ -567,6 +567,24 @@ build+typecheck clean; **95 tests pass** (frontend-only change); light + dark
 headless screenshots across landing/dashboard/tree/map/compare at mobile + desktop
 widths; desktop header unchanged. House style kept (no em dashes / emojis).
 
+**Mobile card layouts for the wide data tables — done** (2026-08-03, on `dev`).
+Follow-on to the responsive pass (the remaining weak mobile spot). The record
+browser (assemblies + annotations), the compare numbers table (~9 columns), and the
+subspecies list all used to horizontally-scroll within an `overflow-x:auto` wrapper
+on phones — only ~3 columns visible at a time, weak affordance. Below **640px** each
+table row now **reflows into a labelled card**: `display:block` rows, `thead` hidden,
+each `td` a flex "LABEL ....... value" line whose label comes from a `data-label`
+attribute, and the organism / taxon / group cell is the card title (left-aligned,
+underlined). Pure CSS + `data-label` attrs added to the three components' cells
+(`RecordBrowser.tsx`, `ComparePage.tsx`, `SubspeciesSection.tsx`) — the reflow keys
+on `.bd-table` / `.cmp-table`, so it is column-count-agnostic (the compare table's
+dynamic metric/quality columns just become more card rows). **Desktop (>640px) is
+untouched** — the `data-label` attrs are inert there and the tables render as before.
+Verified: 0 page overflow at 390; build+typecheck clean; **95 tests pass**
+(frontend-only); light + dark screenshots of the assembly / compare / subspecies
+cards + the unchanged desktop table. Also logged the **"where are the gaps?"
+discovery feature** to the roadmap Backlog (the user's chosen next-session work).
+
 ## Read before doing anything
 
 - `docs/data-model.md` — **the core doc.** DB design + taxonomy-tree storage.
@@ -652,13 +670,14 @@ needs **React 19 + Node 22.22** and drops `react-router-dom`, so it's folded int
 a future React 18 -> 19 upgrade (see `docs/roadmap.md`). CI `npm audit` stays
 non-blocking with a comment explaining the finding.
 
-**NEXT — (b) React 18 -> 19 and (c) responsive / mobile pass are now DONE**
-(2026-08-03; see the "React 18 -> 19 + react-router 7 -> 8 upgrade + responsive /
-mobile pass" status entry above). **Then (pick next):** (a) more functional polish
+**NEXT — (b) React 18 -> 19, (c) responsive / mobile pass, and the mobile
+card-layout follow-on are now DONE** (2026-08-03; see the "React 18 -> 19 ...
+responsive / mobile pass" and "Mobile card layouts for the wide data tables" status
+entries above). **Then (pick next):** the **"where are the gaps?" discovery
+feature** is queued in the roadmap Backlog as the user's chosen next-session work
+(design-first — bring 2-3 directions first). Also open: (a) more functional polish
 toward the deploy gate (landing viewport centring; deeper featured-group
-storytelling); (d) Phase-5 deploy items (still gated on CRG); or deeper mobile
-polish (a scroll affordance on the wide record/compare tables; card-style layouts
-for those tables instead of horizontal scroll).
+storytelling); (d) Phase-5 deploy items (still gated on CRG).
 
 **UI-polish backlog (user-reported 2026-08-03) — ALL SIX DONE** (2026-08-03, on
 `dev`; see the "UI-polish alignment batch" status entry above for the per-item
