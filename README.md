@@ -1,6 +1,19 @@
+<div align="center">
+
 # EukaHub
 
-**How much of the eukaryotic tree of life has been sequenced — and where are the gaps?**
+**How much of the eukaryotic tree of life has been sequenced, and where are the gaps?**
+
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+&nbsp;![Python](https://img.shields.io/badge/Python-3776AB?logo=python&logoColor=white)
+&nbsp;![FastAPI](https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white)
+&nbsp;![React](https://img.shields.io/badge/React-20232A?logo=react&logoColor=61DAFB)
+&nbsp;![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white)
+&nbsp;![PostgreSQL](https://img.shields.io/badge/PostgreSQL-4169E1?logo=postgresql&logoColor=white)
+
+</div>
+
+---
 
 EukaHub is a web app for exploring how much public genomic data exists across the
 eukaryotic tree of life. Pick any taxon and it answers two questions:
@@ -10,8 +23,8 @@ eukaryotic tree of life. Pick any taxon and it answers two questions:
    annotation-quality statistics (BUSCO completeness, contig N50, genome size,
    gene counts). This is the "Genomic Resource Summary" dashboard.
 2. **How is it distributed below that taxon?** Break any clade down at a lower
-   rank and compare its subgroups — as an interactive "data map", a radial Tree
-   of Life, or a side-by-side comparison — so the under-sequenced groups stand
+   rank and compare its subgroups: as an interactive "data map", a radial Tree
+   of Life, or a side-by-side comparison, so the under-sequenced groups stand
    out at a glance.
 
 The dataset is rebuilt offline on a schedule and served **read-only**, which
@@ -21,42 +34,25 @@ rollup, and the whole thing runs comfortably on a single modest host.
 EukaHub is the successor to **Euka-Survey**, a Streamlit prototype, rebuilt on a
 production-grade stack (PostgreSQL + FastAPI + a React/TypeScript SPA).
 
-## Screenshots
-
-<!--
-  Drop screenshots into the assets/ folder and uncomment the matching line
-  below (light or dark theme, your choice). Suggested captures:
-    - assets/dashboard.png   The Genomic Resource Summary for a clade
-    - assets/tree.png        The interactive radial Tree of Life
-    - assets/data-map.png    The click-to-drill data-map breakdown
-    - assets/gaps.png        The "Where are the gaps?" leaderboard
-    - assets/compare.png     The compare-groups view
--->
-
-<!-- ![Genomic Resource Summary dashboard](assets/dashboard.png) -->
-<!-- ![Interactive radial Tree of Life](assets/tree.png) -->
-<!-- ![Click-to-drill data map](assets/data-map.png) -->
-<!-- ![Where are the gaps? leaderboard](assets/gaps.png) -->
-
 ## Features
 
-- **Genomic Resource Summary** — assemblies, annotations, and short/long-read
+- **Genomic Resource Summary**: assemblies, annotations, and short/long-read
   RNA-Seq for any clade, with coverage meters over the full species count.
-- **Quality dimension** — live BUSCO completeness, contig N50, genome size, and
+- **Quality dimension**: live BUSCO completeness, contig N50, genome size, and
   protein-coding gene counts, computed on demand from per-record tables.
-- **Interactive radial Tree of Life** — a lazily-expanded dendrogram where node
+- **Interactive radial Tree of Life**: a lazily-expanded dendrogram where node
   size scales with species count and colour encodes coverage for a chosen
   resource, with search-to-locate and a keyboard/screen-reader outline fallback.
-- **Data map** — a click-to-drill treemap of a clade's subgroups: area encodes
-  magnitude, colour encodes a chosen coverage or quality "lens", so a big pale
-  tile immediately reads as a large but under-studied group.
-- **Compare groups** — put 2–6 clades side by side across coverage and quality.
-- **Where are the gaps?** — a ranked leaderboard of the clades with the most
+- **Data map**: a click-to-drill treemap of a clade's subgroups. Area encodes
+  magnitude and colour encodes a chosen coverage or quality "lens", so a big
+  pale tile immediately reads as a large but under-studied group.
+- **Compare groups**: put 2 to 6 clades side by side across coverage and quality.
+- **Where are the gaps?** A ranked leaderboard of the clades with the most
   species and the least data, surfacing the project's core question directly.
-- **Per-record drill-down** — browse the actual assemblies and annotations
-  behind the numbers, with deep links out to NCBI and the source GFF files.
-- **Wikipedia "About" cards**, a name/TaxID search scoped to Eukaryota,
-  full **light and dark themes**, and a responsive layout down to mobile.
+- **Per-record drill-down**: browse the actual assemblies and annotations behind
+  the numbers, with deep links out to NCBI and the source GFF files.
+- **Wikipedia "About" cards**, a name/TaxID search scoped to Eukaryota, full
+  **light and dark themes**, and a responsive layout down to mobile.
 
 ## Data sources
 
@@ -71,28 +67,28 @@ so a rebuild is reproducible and re-runnable.
 
 ## Tech stack
 
-- **Database** — PostgreSQL 17. The NCBI taxonomy is stored as an adjacency list
+- **Database**: PostgreSQL 17. The NCBI taxonomy is stored as an adjacency list
   (`parent_id`) plus an `ltree` lineage path, so a whole-subtree breakdown for
   any root is one indexed query. Feature counts are pre-rolled into a
   `clade_features` table; per-record `assembly`/`annotation` tables back the
   live quality statistics.
-- **Backend** — FastAPI (Python), a read-only REST API with auto-generated
+- **Backend**: FastAPI (Python), a read-only REST API with auto-generated
   OpenAPI. Pooled `psycopg`, SQL kept in one module, Pydantic response models
   derived from a single metric/quality config.
-- **Frontend** — React + TypeScript (Vite + React Router SPA). The API's OpenAPI
+- **Frontend**: React + TypeScript (Vite + React Router SPA). The API's OpenAPI
   schema is compiled into typed TypeScript, so the client can't drift from the
   server.
-- **Pipeline** — Python; taxonomy from the NCBI taxdump, assemblies via the NCBI
+- **Pipeline**: Python; taxonomy from the NCBI taxdump, assemblies via the NCBI
   `datasets` CLI, aggregation with Polars.
-- **Packaging** — Docker + docker-compose; Python dependencies managed with
+- **Packaging**: Docker + docker-compose; Python dependencies managed with
   [uv](https://docs.astral.sh/uv/) as a workspace (`core` / `api` / `pipeline`).
 
 ## Repository layout
 
 ```
-core/       shared domain model — the metric + quality config (single source of truth)
-api/        FastAPI service — the read-only REST API (auto-OpenAPI, typed to the SPA)
-pipeline/   offline build — NCBI / Annotrieve / ENA fetch, Postgres load, clade rollup
+core/       shared domain model: the metric + quality config (single source of truth)
+api/        FastAPI service: the read-only REST API (auto-OpenAPI, typed to the SPA)
+pipeline/   offline build: NCBI / Annotrieve / ENA fetch, Postgres load, clade rollup
 web/        React + TypeScript SPA (Vite + React Router)
 infra/      docker-compose (dev + prod) + the Postgres init schema
 scripts/    dataset summary + CI seed generation / loading
@@ -116,7 +112,7 @@ docker compose -f infra/docker-compose.yml up -d db
 #    First run downloads the NCBI taxdump; add --skip-download to reuse it.
 uv run --package eukahub-pipeline python -m eukahub_pipeline.build
 
-# 4. Run the API (http://localhost:8000 — /docs for the OpenAPI UI)
+# 4. Run the API (http://localhost:8000, with /docs for the OpenAPI UI)
 uv run --package eukahub-api uvicorn eukahub_api.main:app --reload
 
 # 5. Run the web app in another terminal (proxies /api to the API)
