@@ -174,5 +174,4 @@ semantics. Genomic and taxonomic data come from NCBI, Annotrieve, and ENA.
 
 ## License
 
-<!-- TODO: choose and add a license (e.g. MIT or Apache-2.0) before making the repo public. -->
-_No license has been chosen yet._
+Released under the [MIT License](LICENSE).
