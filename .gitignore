@@ -34,3 +34,9 @@ data/
 
 # Personal notes — local only, never committed (see PROJECT_GUIDE.local.md)
 *.local.md
+
+# Internal docs — kept on disk for development, not published to the public repo.
+# The public-facing documentation is README.md (self-contained by design).
+CLAUDE.md
+DECISIONS.md
+docs/
