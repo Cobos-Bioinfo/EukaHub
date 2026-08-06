@@ -40,7 +40,13 @@ from eukahub_pipeline.load import (
 )
 from eukahub_pipeline.rollup import assemble_leaf_features, rollup_from_frames
 from eukahub_pipeline.snapshot import cached_frame
-from eukahub_pipeline.taxdump import build_paths, parse_names, parse_nodes
+from eukahub_pipeline.taxdump import (
+    ancestors,
+    build_paths,
+    descendants,
+    parse_names,
+    parse_nodes,
+)
 from eukahub_pipeline.validate import validate
 
 log = logging.getLogger("eukahub.build")
@@ -179,6 +185,19 @@ def main(argv: list[str] | None = None) -> int:
     parents = {t: parent for t, (parent, _) in nodes.items()}
     paths = build_paths(parents)
     log.info("Built %d lineage paths", len(paths))
+
+    # Scope the serving DB to Eukaryota. `taxon` would otherwise carry ~950k
+    # Bacteria/Archaea/Viruses/unclassified nodes (a third of the tree) that the
+    # Eukaryota-only app never surfaces, bloating the table and every dump. Keep
+    # Eukaryota's whole subtree plus its ancestor spine (root + cellular
+    # organisms) so lineage/breadcrumb queries resolve and the rollup's ancestor
+    # rows (taxid 1 / 131567) still have a `taxon` row for their FK. Paths are
+    # built from the full tree first, so kept nodes retain their real lineage
+    # string. See docs/data-model.md.
+    keep = descendants(parents, EUKARYOTE_TXID) | ancestors(parents, EUKARYOTE_TXID)
+    nodes = {t: v for t, v in nodes.items() if t in keep}
+    paths = {t: p for t, p in paths.items() if t in keep}
+    log.info("Scoped taxonomy to Eukaryota: kept %d of %d nodes", len(nodes), len(parents))
 
     # Fetch (or reuse) the three sources — no DB connection needed for this.
     assemblies = cached_frame(

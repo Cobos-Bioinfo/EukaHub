@@ -18,6 +18,7 @@ dmp format: fields are separated by ``\\t|\\t`` and each row ends with
 
 from __future__ import annotations
 
+from collections import defaultdict, deque
 from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
@@ -109,6 +110,50 @@ def build_paths(parents: dict[int, int]) -> dict[int, str]:
     for taxid in parents:
         path_for(taxid)
     return path_cache
+
+
+def descendants(parents: dict[int, int], root: int) -> set[int]:
+    """Return ``root`` plus every taxid whose lineage passes through it.
+
+    Inverts ``parents`` into a children adjacency and walks down from ``root``.
+    Used to scope the serving DB to a single domain (Eukaryota) so the read-only
+    Eukaryota-only app never carries the ~950k Bacteria/Archaea/Viruses/
+    unclassified taxonomy nodes it can't reach (see docs/data-model.md).
+    """
+    children: dict[int, list[int]] = defaultdict(list)
+    for taxid, parent in parents.items():
+        if parent != taxid:  # the NCBI root (taxid 1) is its own parent
+            children[parent].append(taxid)
+
+    keep: set[int] = set()
+    queue = deque([root])
+    while queue:
+        node = queue.popleft()
+        if node in keep:
+            continue
+        keep.add(node)
+        queue.extend(children.get(node, ()))
+    return keep
+
+
+def ancestors(parents: dict[int, int], taxid: int) -> set[int]:
+    """Return the strict ancestors of ``taxid`` (root-inclusive, excludes
+    ``taxid`` itself). Walks up ``parents`` until a self-parent/missing root.
+
+    Kept alongside :func:`descendants` when scoping the tree: Eukaryota's spine
+    (root + cellular organisms) must stay so lineage/breadcrumb queries resolve
+    and the rollup's ancestor rows (taxid 1 / 131567, which ``clade_features``
+    references) have their ``taxon`` row.
+    """
+    out: set[int] = set()
+    node = taxid
+    while True:
+        parent = parents.get(node)
+        if parent is None or parent == node or parent in out:
+            break
+        out.add(parent)
+        node = parent
+    return out
 
 
 def iter_taxon_rows(taxdump_dir: str | Path) -> Iterator[TaxonRow]:

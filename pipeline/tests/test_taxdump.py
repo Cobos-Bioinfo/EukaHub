@@ -7,7 +7,9 @@ the ~400 MB download or a running database.
 from pathlib import Path
 
 from eukahub_pipeline.taxdump import (
+    ancestors,
     build_paths,
+    descendants,
     iter_taxon_rows,
     parse_names,
     parse_nodes,
@@ -58,6 +60,31 @@ def test_build_paths() -> None:
     assert paths[2759] == "1.131567.2759"
     assert paths[9606] == "1.131567.2759.9606"
     assert paths[10239] == "1.10239"
+
+
+def test_descendants() -> None:
+    parents = {1: 1, 131567: 1, 2759: 131567, 9606: 2759, 10239: 1}
+    # Eukaryota's subtree = itself + everything beneath it (not the Viruses sibling).
+    assert descendants(parents, 2759) == {2759, 9606}
+    assert descendants(parents, 1) == {1, 131567, 2759, 9606, 10239}
+    assert descendants(parents, 9606) == {9606}  # a leaf
+
+
+def test_ancestors() -> None:
+    parents = {1: 1, 131567: 1, 2759: 131567, 9606: 2759, 10239: 1}
+    # Eukaryota's spine (the two nodes kept so lineage/FK rows resolve).
+    assert ancestors(parents, 2759) == {1, 131567}
+    assert ancestors(parents, 9606) == {1, 131567, 2759}
+    assert ancestors(parents, 1) == set()  # root has no ancestors
+
+
+def test_eukaryota_scope_drops_other_domains() -> None:
+    # The build's keep-set: Eukaryota's subtree plus its ancestor spine. The
+    # Viruses branch (10239) is dropped; root + cellular organisms are kept.
+    parents = {1: 1, 131567: 1, 2759: 131567, 9606: 2759, 10239: 1}
+    keep = descendants(parents, 2759) | ancestors(parents, 2759)
+    assert keep == {1, 131567, 2759, 9606}
+    assert 10239 not in keep
 
 
 def test_iter_taxon_rows(tmp_path: Path) -> None:
