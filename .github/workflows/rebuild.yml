@@ -96,7 +96,7 @@ jobs:
         # watched. Keeps "nobody has to worry about it" true: a silent failure
         # surfaces as a tracked issue. The previous snapshot still stands.
         if: failure() && github.event_name == 'schedule'
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           script: |
             const run = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
