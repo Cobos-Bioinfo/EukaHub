@@ -14,6 +14,7 @@ import Dashboard from "./pages/Dashboard";
 import Faq from "./pages/Faq";
 import GapsPage from "./pages/GapsPage";
 import Landing from "./pages/Landing";
+import Privacy from "./pages/Privacy";
 import TreePage from "./pages/TreePage";
 
 // Default landing clade: Eukaryota (the whole surveyed tree).
@@ -90,6 +91,7 @@ export default function App() {
           <Route path="/gaps" element={<GapsPage />} />
           <Route path="/compare" element={<ComparePage />} />
           <Route path="/faq" element={<Faq />} />
+          <Route path="/privacy" element={<Privacy />} />
           <Route path="*" element={<p className="notice notice--error">Page not found.</p>} />
         </Routes>
       </main>
@@ -99,7 +101,12 @@ export default function App() {
           Public genomic resources across the eukaryotic tree of life. Data comes from NCBI,
           Annotrieve, and ENA, and is refreshed on a schedule.
         </span>
-        <DataUpdated />
+        <span className="app__foot-links">
+          <Link className="app__foot-link" to="/privacy">
+            Privacy
+          </Link>
+          <DataUpdated />
+        </span>
       </footer>
     </div>
   );

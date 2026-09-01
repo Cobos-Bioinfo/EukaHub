@@ -230,6 +230,21 @@ a:hover {
 .app__foot > span:first-child {
   flex: 1 1 20rem;
 }
+.app__foot-links {
+  display: flex;
+  flex: none;
+  align-items: baseline;
+  gap: 1rem 1.5rem;
+  flex-wrap: wrap;
+}
+.app__foot-link {
+  color: var(--link);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.app__foot-link:hover {
+  text-decoration: underline;
+}
 .app__updated {
   flex: none;
   white-space: nowrap;
@@ -3043,6 +3058,55 @@ button.tree-outline__name:hover {
   margin: 0;
   color: var(--ink-2);
   line-height: 1.55;
+}
+
+/* ---- Legal / privacy page ------------------------------------------- */
+.legal {
+  max-width: 70ch;
+  margin: 0 auto;
+  color: var(--ink-2);
+  line-height: 1.6;
+}
+.legal__title {
+  margin: 0 0 0.25rem;
+  color: var(--ink);
+  font-size: clamp(1.6rem, 4vw, 2.1rem);
+  letter-spacing: -0.02em;
+}
+.legal__updated {
+  margin: 0 0 1.5rem;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+.legal__lede {
+  margin: 0 0 0.5rem;
+  color: var(--ink);
+  font-size: 1.05rem;
+}
+.legal__section {
+  padding: 1.25rem 0;
+  border-top: 1px solid var(--border);
+}
+.legal__section:last-child {
+  border-bottom: 1px solid var(--border);
+}
+.legal__h {
+  margin: 0 0 0.5rem;
+  color: var(--ink);
+  font-size: 1.15rem;
+}
+.legal__section p {
+  margin: 0 0 0.6rem;
+}
+.legal__section p:last-child {
+  margin-bottom: 0;
+}
+.legal__list {
+  margin: 0 0 0.6rem;
+  padding-left: 1.2rem;
+}
+.legal__list li {
+  margin: 0.15rem 0;
 }
 
 /* --- "Where are the gaps?" leaderboard (/gaps) ---------------------------- */

@@ -64,6 +64,16 @@ export default function HeaderMenu() {
               FAQ
             </Link>
           </li>
+          <li role="none">
+            <Link
+              className="menu__item"
+              role="menuitem"
+              to="/privacy"
+              onClick={() => setOpen(false)}
+            >
+              Privacy
+            </Link>
+          </li>
         </ul>
       )}
     </div>
