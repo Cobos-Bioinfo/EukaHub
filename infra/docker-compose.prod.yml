@@ -10,13 +10,17 @@ name: eukahub-prod
 #   - The api is NOT published — it's reached only through the web/nginx proxy.
 #   - Only the web port (8080) is exposed.
 # Credentials come from the environment via ${VAR:-default}, exactly like the
-# dev compose (see infra/.env.example). The DB starts EMPTY: this validates the
-# deploy wiring (build, health, proxy). To demo with the real dataset, see the
-# commented volume-reuse note at the bottom, or load it with the pipeline.
+# dev compose (see infra/.env.example).
+#
+# The database starts empty and stays that way for about a minute: the refresher
+# service installs the current published dataset on first start, then picks up
+# each monthly Release on its own. So bringing this stack up IS the install,
+# and keeping it up IS the maintenance. Nothing else has to be run by hand.
 
 services:
   db:
     image: postgres:17
+    restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-eukahub}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-eukahub}
@@ -36,6 +40,7 @@ services:
     build:
       context: ..
       dockerfile: api/Dockerfile
+    restart: unless-stopped
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-eukahub}:${POSTGRES_PASSWORD:-eukahub}@db:5432/${POSTGRES_DB:-eukahub}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
@@ -63,6 +68,7 @@ services:
     build:
       context: ../web
       dockerfile: Dockerfile.prod
+    restart: unless-stopped
     depends_on:
       api:
         condition: service_healthy
@@ -74,6 +80,25 @@ services:
       timeout: 3s
       retries: 5
       start_period: 5s
+
+  # Installs the dataset on first start and keeps it current afterwards, by
+  # polling this repo's public Releases (see scripts/auto_refresh.py). It stages
+  # and verifies every snapshot before swapping it in, so a bad or unreachable
+  # release leaves the running dataset untouched. No credentials: the Release is
+  # public, and nothing needs to reach in to this host.
+  refresher:
+    build:
+      context: ..
+      dockerfile: infra/refresher.Dockerfile
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-eukahub}:${POSTGRES_PASSWORD:-eukahub}@db:5432/${POSTGRES_DB:-eukahub}
+      # Point at a fork by setting these; defaults target the upstream repo.
+      EUKAHUB_REPO: ${EUKAHUB_REPO:-Cobos-Bioinfo/EukaHub}
+      REFRESH_INTERVAL: ${REFRESH_INTERVAL:-86400}
+    depends_on:
+      db:
+        condition: service_healthy
 
 volumes:
   pgdata:

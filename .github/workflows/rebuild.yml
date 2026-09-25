@@ -13,7 +13,7 @@ on:
   workflow_dispatch: {} # manual "rebuild now" from the Actions tab
 
 permissions:
-  contents: read
+  contents: write # publishes the dataset Release the deployed stack pulls from
   issues: write # only used to file an issue if a *scheduled* run fails
 
 concurrency:
@@ -77,11 +77,15 @@ jobs:
         # postgres:17 image (--network host reaches the service on localhost:5432).
         run: |
           STAMP="$(date -u +%Y%m%d)"
-          OUT="eukahub-dataset-${STAMP}.dump"
+          # The asset name must stay constant: deployed stacks pull
+          # releases/latest/download/eukahub-dataset.dump. The date lives in the
+          # release tag instead, which is what auto_refresh.py compares against.
+          OUT="eukahub-dataset.dump"
           docker run --rm --network host postgres:17 \
             pg_dump "$DATABASE_URL" --format=custom --compress=6 > "$OUT"
           ls -lh "$OUT"
           echo "ARTIFACT=$OUT" >> "$GITHUB_ENV"
+          echo "STAMP=$STAMP" >> "$GITHUB_ENV"
 
       - name: Upload dataset snapshot
         uses: actions/upload-artifact@v7
@@ -90,6 +94,26 @@ jobs:
           path: ${{ env.ARTIFACT }}
           retention-days: 90
           if-no-files-found: error
+
+      - name: Publish dataset Release
+        # The Release, not the artifact, is what deployed stacks download.
+        # Artifacts are deleted after 90 days, so a server that sat idle or a run
+        # of failed rebuilds would find nothing left to pull; Releases persist.
+        # Re-runnable: a second run on the same day replaces the day's asset
+        # rather than failing on the existing tag.
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          uv run --package eukahub-api python scripts/dataset_summary.py > notes.md
+          if gh release view "dataset-${STAMP}" >/dev/null 2>&1; then
+            gh release upload "dataset-${STAMP}" "$ARTIFACT" --clobber
+            gh release edit "dataset-${STAMP}" --notes-file notes.md --latest
+          else
+            gh release create "dataset-${STAMP}" "$ARTIFACT" \
+              --title "Dataset ${STAMP}" \
+              --notes-file notes.md \
+              --latest
+          fi
 
       - name: File an issue if a scheduled rebuild failed
         # Only for unattended (scheduled) runs — a manual dispatch is already being
