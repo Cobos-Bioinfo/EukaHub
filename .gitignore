@@ -39,4 +39,5 @@ data/
 # The public-facing documentation is README.md (self-contained by design).
 CLAUDE.md
 DECISIONS.md
+CHEAT_SHEET.md
 docs/
