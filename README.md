@@ -91,12 +91,51 @@ api/        FastAPI service: the read-only REST API (auto-OpenAPI, typed to the 
 pipeline/   offline build: NCBI / Annotrieve / ENA fetch, Postgres load, clade rollup
 web/        React + TypeScript SPA (Vite + React Router)
 infra/      docker-compose (dev + prod) + the Postgres init schema
-scripts/    dataset summary + CI seed generation / loading
+scripts/    dataset restore + auto-refresh, CI seed generation / loading, dataset summary
 ```
 
 Python is a **uv workspace**; the frontend is a Vite SPA.
 
-## Quick start (local development)
+## Run it
+
+You only need [Docker](https://docs.docker.com/) + Docker Compose. You do
+**not** need to run the data pipeline: the dataset is built monthly on GitHub
+Actions and published as a Release, and the stack installs it by itself.
+
+```bash
+git clone https://github.com/Cobos-Bioinfo/EukaHub.git
+cd EukaHub
+docker compose -f infra/docker-compose.prod.yml up --build -d   # web on http://localhost:8080
+```
+
+On first start the database is empty. The `refresher` service downloads the
+latest published dataset (~50 MB), verifies it, and installs it, which takes a
+few minutes; the site answers with "not found" until then. Afterwards it checks
+for a newer Release once a day and swaps it in without downtime. Follow the
+install with `docker compose -f infra/docker-compose.prod.yml logs -f refresher`,
+and tear everything down with `docker compose -f infra/docker-compose.prod.yml down -v`.
+
+Only the web port is published; Postgres and the API stay on the internal
+network. The API docs are at http://localhost:8080/api/docs and the OpenAPI
+schema at http://localhost:8080/api/openapi.json.
+
+**Footprint.** The stack is sized for a small shared host: it has been tested
+with **1 GB of RAM in total and a single CPU core** shared by all containers,
+with no process killed. Postgres cancels any API query that runs longer than 15 s
+(the client gets a clear 504), so one expensive request can't monopolize the
+CPU. The database takes about 2.2 GB on disk, and an update briefly holds three
+copies of it (the live one, the incoming one, and the previous one kept for
+rollback).
+
+Configuration is supplied via environment variables (never committed): database
+credentials, the query time limit, the connection pool size, and caching. Copy
+the template and set real values for a real deployment:
+
+```bash
+cp infra/.env.example infra/.env      # then edit; infra/.env is gitignored
+```
+
+## Development setup
 
 Prerequisites: [Docker](https://docs.docker.com/) + Docker Compose,
 [uv](https://docs.astral.sh/uv/), and Node.js 22+.
@@ -108,8 +147,15 @@ uv sync
 # 2. Bring up Postgres (ships with the ltree + pg_trgm extensions)
 docker compose -f infra/docker-compose.yml up -d db
 
-# 3. Build the dataset (fetches sources, rolls up, loads Postgres).
-#    First run downloads the NCBI taxdump; add --skip-download to reuse it.
+# 3a. Load the published dataset (a few minutes; needs pg_restore 17, from the
+#     postgresql-client-17 package)
+uv run --package eukahub-pipeline python scripts/restore_snapshot.py \
+  --url https://github.com/Cobos-Bioinfo/EukaHub/releases/latest/download/eukahub-dataset.dump
+
+# 3b. ...or build it from the sources yourself. Only needed when working on the
+#     pipeline: it downloads the NCBI taxdump and fetches every assembly,
+#     annotation and RNA-Seq run from NCBI, Annotrieve and ENA, so it is slow.
+#     Add --skip-download to reuse an unpacked taxdump.
 uv run --package eukahub-pipeline python -m eukahub_pipeline.build
 
 # 4. Run the API (http://localhost:8000, with /docs for the OpenAPI UI)
@@ -136,32 +182,18 @@ Continuous integration runs ruff, the full pytest suite against a seeded
 throwaway Postgres, the web typecheck/build, a gitleaks secret scan, and
 dependency audits on every push. See `.github/workflows/`.
 
-## Production build
-
-A production-style full stack (Postgres + API + an nginx-served SPA that proxies
-`/api`) is defined in `infra/docker-compose.prod.yml`. Only the web port is
-published; Postgres and the API stay on the internal network.
-
-```bash
-docker compose -f infra/docker-compose.prod.yml up --build -d   # web on :8080
-docker compose -f infra/docker-compose.prod.yml down -v
-```
-
-Configuration is supplied via environment variables (never committed). Copy the
-template and set real values for a real deployment:
-
-```bash
-cp infra/.env.example infra/.env      # then edit; infra/.env is gitignored
-```
-
 ## Data refresh
 
 The serving dataset is rebuilt offline, never edited in place. A scheduled
 GitHub Actions workflow (`.github/workflows/rebuild.yml`) re-fetches all sources
 monthly, rebuilds the database, gates on the pipeline's invariant checks, and
-publishes a validated `pg_dump` snapshot as an artifact. A deployment restores
-the latest snapshot into the live serving database. You can also trigger a
-rebuild on demand from the Actions tab.
+publishes a validated `pg_dump` snapshot as a public GitHub Release. A running
+stack's `refresher` service picks it up within a day: it restores the snapshot
+into a staging database, verifies it, and only then swaps it in, keeping the
+previous dataset for a one-command rollback
+(`scripts/restore_snapshot.py --rollback`). If a download or verification fails,
+the live dataset is left untouched. You can also trigger a rebuild on demand
+from the Actions tab.
 
 ## Acknowledgements
 
