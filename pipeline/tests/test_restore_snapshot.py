@@ -10,6 +10,7 @@ bug there would point the restore at the wrong server or the wrong database.
 from __future__ import annotations
 
 import importlib.util
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -57,3 +58,18 @@ def test_staging_and_previous_names_do_not_collide_with_the_live_name():
     assert len({live, staging, previous}) == 3
     # Postgres truncates identifiers past 63 bytes, which would alias them.
     assert all(len(name.encode()) <= 63 for name in (live, staging, previous))
+
+
+def test_restore_runs_as_a_single_job(monkeypatch, tmp_path):
+    # The target host has one CPU core; parallel restore jobs would compete
+    # with the site that keeps serving during the restore.
+    seen = {}
+
+    def _run(cmd, **kwargs):
+        seen["cmd"] = cmd
+        return subprocess.CompletedProcess(cmd, 0, "", "")
+
+    monkeypatch.setattr(restore_snapshot.shutil, "which", lambda _: "/usr/bin/pg_restore")
+    monkeypatch.setattr(restore_snapshot.subprocess, "run", _run)
+    restore_snapshot._pg_restore(LIVE, "eukahub_next", tmp_path / "snapshot.dump")
+    assert "--jobs" not in seen["cmd"] and "-j" not in seen["cmd"]

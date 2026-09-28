@@ -21,6 +21,19 @@ services:
   db:
     image: postgres:17
     restart: unless-stopped
+    # Sized for a small shared host (one CPU core, ~1 GB RAM for the whole
+    # stack). On one core, parallel query/index workers only compete with the
+    # process they're helping, and JIT spends CPU + memory compiling queries
+    # that finish faster without it. Memory settings stay at Postgres' small
+    # defaults (shared_buffers 128MB, work_mem 4MB).
+    command:
+      - postgres
+      - -c
+      - max_parallel_workers_per_gather=0
+      - -c
+      - max_parallel_maintenance_workers=0
+      - -c
+      - jit=off
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-eukahub}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-eukahub}
@@ -50,6 +63,12 @@ services:
       # How long GET responses may be cached downstream (seconds); tune to the
       # offline-rebuild cadence.
       CACHE_MAX_AGE: ${CACHE_MAX_AGE:-3600}
+      # Postgres cancels any API query slower than this (ms), so one expensive
+      # request can't hold the CPU; must stay below nginx's proxy_read_timeout.
+      DB_STATEMENT_TIMEOUT_MS: ${DB_STATEMENT_TIMEOUT_MS:-15000}
+      # Most DB connections the API uses at once; small, since on one core
+      # concurrent heavy queries just slow each other down.
+      DB_POOL_MAX: ${DB_POOL_MAX:-4}
     depends_on:
       db:
         condition: service_healthy

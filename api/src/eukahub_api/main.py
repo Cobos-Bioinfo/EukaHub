@@ -22,6 +22,7 @@ round out the service. Every request is logged as one structured JSON line (see
 """
 
 import hashlib
+import itertools
 import logging
 import os
 import time
@@ -31,7 +32,9 @@ from typing import Annotated
 from eukahub_core.metrics import METRICS, QUALITY_STATS
 from fastapi import FastAPI, HTTPException, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
+from psycopg.errors import QueryCanceled
+from psycopg_pool import PoolTimeout
 
 from eukahub_api.db import Conn
 from eukahub_api.db import lifespan as db_lifespan
@@ -220,6 +223,32 @@ async def log_requests(request: Request, call_next):
         },
     )
     return response
+
+
+@app.exception_handler(QueryCanceled)
+async def query_timed_out(request: Request, exc: QueryCanceled) -> JSONResponse:
+    """A query hit the statement timeout (see ``db.statement_timeout_ms``) and
+    Postgres cancelled it. Retrying won't help, so say what will."""
+    log.warning("query cancelled", extra={"path": request.url.path, "error": str(exc)})
+    return JSONResponse(
+        status_code=504,
+        content={
+            "detail": "This request needs more work than the server allows per query. "
+            "Try a smaller group or a coarser rank."
+        },
+    )
+
+
+@app.exception_handler(PoolTimeout)
+async def pool_exhausted(request: Request, exc: PoolTimeout) -> JSONResponse:
+    """Every pooled connection stayed busy for the pool's whole wait: the
+    server is saturated. Transient, so ask the client to retry."""
+    log.warning("connection pool exhausted", extra={"path": request.url.path})
+    return JSONResponse(
+        status_code=503,
+        headers={"Retry-After": "10"},
+        content={"detail": "The server is busy. Please retry shortly."},
+    )
 
 
 @app.get("/health")
@@ -657,9 +686,13 @@ def clade_export(
         logic=logic,
         exclude_empty=exclude_empty,
     )
+    # Pull the header and first data row now: that runs the query (its sort is
+    # the expensive part) before any byte is sent, so a statement timeout on a
+    # huge export is a clean 504 instead of a 200 that stops mid-download.
+    head = list(itertools.islice(rows, 2))
     filename = f"{root_name.replace(' ', '_')}_{rank.value}_data.tsv"
     return StreamingResponse(
-        rows,
+        itertools.chain(head, rows),
         media_type="text/tab-separated-values",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )

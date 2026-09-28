@@ -145,7 +145,9 @@ def _pg_restore(url: str, dbname: str, dump: Path) -> None:
     """Load the custom-format dump into an existing empty database.
 
     ``--no-owner``/``--no-privileges`` keep the restore working when the
-    serving role differs from whichever role produced the dump in CI.
+    serving role differs from whichever role produced the dump in CI. Runs as a
+    single job on purpose: the target host has one CPU core, where parallel
+    jobs only compete with the site that is still serving meanwhile.
     """
     if shutil.which("pg_restore") is None:
         raise SystemExit(
@@ -159,8 +161,6 @@ def _pg_restore(url: str, dbname: str, dump: Path) -> None:
         "--no-owner",
         "--no-privileges",
         "--exit-on-error",
-        "--jobs",
-        "4",
         str(dump),
     ]
     log.info("restoring into %s", dbname)
