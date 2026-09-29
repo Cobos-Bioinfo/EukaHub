@@ -43,10 +43,12 @@ API and cached for 24 hours.
    that fails the checks publishes nothing; a failed scheduled build also opens an
    issue in the repository.
 2. The refresher on each server polls the repository's latest Release once a day.
-   When it is newer than the loaded dataset (or nothing is loaded), it restores the
-   dump into `<db>_next`, runs the same invariant checks there, and swaps databases
-   by renaming: `<db>` becomes `<db>_prev`, `<db>_next` becomes `<db>`. Open
-   database sessions are closed during the swap, which takes about a second.
+   When it is newer than the loaded dataset (or nothing is loaded), it downloads the
+   dump, checks it against the size and SHA-256 digest GitHub publishes for the
+   asset, restores it into `<db>_next`, runs the same invariant checks there, and
+   swaps databases by renaming: `<db>` becomes `<db>_prev`, `<db>_next` becomes
+   `<db>`. Open database sessions are closed during the swap, which takes about a
+   second.
 3. If anything fails before the swap, the live database is untouched. A Release
    that fails three times is skipped until a newer one appears.
 

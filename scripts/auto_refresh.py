@@ -13,6 +13,7 @@ failed cycle, and a Release that keeps failing is skipped until a newer one appe
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import logging
 import os
@@ -45,6 +46,8 @@ class Release(NamedTuple):
     tag: str
     released: date
     download_url: str
+    size: int | None = None
+    sha256: str | None = None
 
 
 def _latest_release(repo: str) -> Release:
@@ -62,8 +65,34 @@ def _latest_release(repo: str) -> Release:
 
     for asset in payload.get("assets", []):
         if asset.get("name") == ASSET_NAME:
-            return Release(tag, released, asset["browser_download_url"])
+            digest = asset.get("digest") or ""
+            return Release(
+                tag,
+                released,
+                asset["browser_download_url"],
+                asset.get("size"),
+                digest.removeprefix("sha256:") if digest.startswith("sha256:") else None,
+            )
     raise RuntimeError(f"release {tag} has no {ASSET_NAME} asset")
+
+
+def _verify_download(path: Path, release: Release) -> None:
+    """Check a downloaded snapshot against the size and SHA-256 GitHub reports for it.
+
+    Catches truncated or corrupted downloads before they reach pg_restore. A Release
+    without a published digest is checked by size alone.
+    """
+    if release.size is not None and (size := path.stat().st_size) != release.size:
+        raise RuntimeError(f"{release.tag}: downloaded {size} bytes, expected {release.size}")
+    if release.sha256 is None:
+        log.warning("%s has no published digest; skipping the checksum", release.tag)
+        return
+    sha256 = hashlib.sha256()
+    with path.open("rb") as dump:
+        while chunk := dump.read(1 << 20):
+            sha256.update(chunk)
+    if sha256.hexdigest() != release.sha256:
+        raise RuntimeError(f"{release.tag}: checksum does not match the published digest")
 
 
 def _loaded_dataset_date(url: str) -> date | None:
@@ -118,6 +147,7 @@ def refresh_once(database_url: str, repo: str, failures: Counter[str] | None = N
     with tempfile.TemporaryDirectory() as tmp:
         dump = restore_snapshot.download(release.download_url, Path(tmp) / ASSET_NAME)
         try:
+            _verify_download(dump, release)
             restore_snapshot.restore(database_url, dump)
         except Exception:
             failures[release.tag] += 1
