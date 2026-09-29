@@ -53,7 +53,11 @@ async def lifespan(app: FastAPI):
         database_url(),
         min_size=1,
         max_size=pool_max_size(),
-        kwargs={"options": f"-c statement_timeout={statement_timeout_ms()}"},
+        kwargs={
+            "options": f"-c statement_timeout={statement_timeout_ms()}"
+            # Generic plans lose the literal root path and scan the whole ltree index.
+            " -c plan_cache_mode=force_custom_plan"
+        },
         open=False,
     ) as pool:
         app.state.pool = pool

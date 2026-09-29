@@ -21,24 +21,20 @@ def test_search_prefix_matches_rank_first(client):
 
 
 def test_search_respects_limit(client):
-    body = client.get("/search", params={"q": "a", "limit": 5}).json()
-    assert len(body) <= 5
+    body = client.get("/search", params={"q": "homo", "limit": 2}).json()
+    assert len(body) == 2
 
 
 def test_search_escapes_wildcards(client):
-    # '%' is escaped to match literally. Search is scoped to Eukaryota, where no
-    # name contains a literal '%'. Unescaped, '%' would be the match-all wildcard
-    # and return a full page of names; escaped, it matches nothing — pinning both
-    # the escaping and the eukaryote scope.
-    body = client.get("/search", params={"q": "%", "limit": 50}).json()
+    # Unescaped, '%%%' would match every name; no taxon name contains a literal '%'.
+    body = client.get("/search", params={"q": "%%%", "limit": 50}).json()
     assert body == []
 
 
-def test_search_excludes_non_eukaryotes(client):
-    # Escherichia coli (Bacteria, taxid 562) lies outside the eukaryotic subtree,
-    # so it must never surface in the root picker.
-    body = client.get("/search", params={"q": "Escherichia coli", "limit": 50}).json()
-    assert all(hit["taxid"] != 562 for hit in body)
+def test_search_hides_the_spine_above_eukaryota(client):
+    for q in ("cellular organisms", "root"):
+        body = client.get("/search", params={"q": q, "limit": 50}).json()
+        assert all(hit["taxid"] not in (1, 131567) for hit in body)
 
 
 def test_search_no_matches_is_empty(client):
@@ -49,3 +45,4 @@ def test_search_no_matches_is_empty(client):
 def test_search_requires_query(client):
     assert client.get("/search").status_code == 422
     assert client.get("/search", params={"q": ""}).status_code == 422
+    assert client.get("/search", params={"q": "ho"}).status_code == 422

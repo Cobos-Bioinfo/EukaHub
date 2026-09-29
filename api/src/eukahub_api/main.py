@@ -701,7 +701,7 @@ def clade_export(
 @app.get("/search", response_model=list[TaxonRef])
 def search(
     conn: Conn,
-    q: Annotated[str, Query(min_length=1, max_length=100, description="Name query.")],
+    q: Annotated[str, Query(min_length=3, max_length=100, description="Name query.")],
     limit: Annotated[int, Query(ge=1, le=50)] = 20,
 ) -> list[TaxonRef]:
     """Case-insensitive taxon-name search for the root picker. Substring match,

@@ -40,7 +40,7 @@ export default function RootPicker({
       }, 250);
       return () => clearTimeout(timer);
     }
-    if (query.length < 2) {
+    if (query.length < 3) {
       setResults([]);
       return;
     }

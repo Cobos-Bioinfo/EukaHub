@@ -13,8 +13,7 @@ What it produces (all public NCBI data, no secrets):
                        breadcrumbs, ``ltree`` subtree/ancestor queries, and
                        ``parent_id`` adjacency are all closed and correct), plus
                        Eukaryota's 21 real direct children (the tree/children
-                       tests) and a minimal Bacteria -> E. coli branch (the
-                       search-scope test asserts E. coli is excluded).
+                       tests).
 - ``assembly`` /       real per-record rows for the anchor species, capped for
   ``annotation``       the data-rich ones so the file stays tiny.
 - ``clade_features``   **recomputed** for exactly this slice via the pipeline's
@@ -50,14 +49,13 @@ DEFAULT_OUT = Path(__file__).resolve().parents[1] / "api" / "tests" / "seed.sql"
 EUKARYOTA_TAXID = 2759
 
 # Record-bearing anchor taxa, chosen so the slice satisfies every test invariant
-# (see the module docstring). Real NCBI taxids; each is validated at run time.
+# (see the module docstring). Real NCBI taxids; select_slice fails if one is missing.
 #   Primates: Homo sapiens (+ its 2 subspecies), Pan troglodytes
 #   Carnivora: Canis lupus (+ subspecies familiaris, the infraspecific-with-data
 #              case), Felis catus
 #   Rodentia: Mus musculus
 #   Arthropoda (a 2nd phylum under Eukaryota, for real breakdown sorting):
 #              Drosophila melanogaster
-#   Bacteria (outside Eukaryota, for the search-scope exclusion test): E. coli
 ANCHOR_TAXIDS: tuple[int, ...] = (
     9606,    # Homo sapiens (species)
     63221,   # Homo sapiens neanderthalensis (subspecies, childless)
@@ -68,7 +66,6 @@ ANCHOR_TAXIDS: tuple[int, ...] = (
     9685,    # Felis catus (species)
     10090,   # Mus musculus (species)
     7227,    # Drosophila melanogaster (species)
-    562,     # Escherichia coli (species, Bacteria — outside Eukaryota)
 )
 
 # Per-taxid record cap for the data-rich anchors, so the file stays small. Human
@@ -89,9 +86,13 @@ def select_slice(conn: psycopg.Connection) -> pl.DataFrame:
     taxids: set[int] = set()
 
     # Ancestor closure: every taxid on each anchor's root->node path.
-    for (path,) in conn.execute(
-        "SELECT path::text FROM taxon WHERE taxid = ANY(%s)", (list(ANCHOR_TAXIDS),)
-    ).fetchall():
+    rows = conn.execute(
+        "SELECT taxid, path::text FROM taxon WHERE taxid = ANY(%s)", (list(ANCHOR_TAXIDS),)
+    ).fetchall()
+    missing = set(ANCHOR_TAXIDS) - {taxid for taxid, _ in rows}
+    if missing:
+        raise SystemExit(f"anchor taxa missing from the source DB: {sorted(missing)}")
+    for _taxid, path in rows:
         taxids.update(int(x) for x in path.split("."))
 
     # Eukaryota's real direct children (their paths add nothing new but the nodes

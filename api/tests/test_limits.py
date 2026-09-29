@@ -11,6 +11,7 @@ from __future__ import annotations
 import psycopg
 from eukahub_api import main
 from eukahub_api.db import statement_timeout_ms
+from eukahub_api.queries import fetch_breakdown
 from psycopg.errors import QueryCanceled
 from psycopg_pool import PoolTimeout
 
@@ -29,6 +30,21 @@ def test_api_connections_carry_the_statement_timeout(client):
             "SELECT setting FROM pg_settings WHERE name = 'statement_timeout'"
         ).fetchone()
     assert int(setting) == statement_timeout_ms()
+
+
+def test_repeated_queries_never_switch_to_generic_plans(client):
+    """A generic plan loses the literal ltree root and scans the whole path index
+    (seconds instead of milliseconds), so pooled connections must stay on custom plans."""
+    with main.app.state.pool.connection() as conn:
+        for _ in range(20):
+            fetch_breakdown(
+                conn, root_taxid=40674, rank="family", sort="n_rows", filter_keys=[],
+                logic="AND", exclude_empty=True, limit=25,
+            )
+        (generic,) = conn.execute(
+            "SELECT coalesce(max(generic_plans), 0) FROM pg_prepared_statements"
+        ).fetchone()
+    assert generic == 0
 
 
 def test_cancelled_query_is_a_clean_504(client, monkeypatch):

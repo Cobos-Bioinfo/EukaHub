@@ -53,9 +53,10 @@ AssemblySort = Enum("AssemblySort", {c: c for c in _ASSEMBLY_SORTS}, type=str)
 _ANNOTATION_SORTS: tuple[str, ...] = ("busco_complete", "protein_coding_count", "release_date")
 AnnotationSort = Enum("AnnotationSort", {c: c for c in _ANNOTATION_SORTS}, type=str)
 
-# Search is scoped to the eukaryotic subtree (the app's domain), so non-eukaryote
-# taxa never surface in the root picker even though `taxon` holds all of life.
 EUKARYOTA_TAXID = 2759
+# `taxon` holds Eukaryota plus its two ancestors (root, cellular organisms);
+# search hides those two.
+SPINE_TAXIDS: tuple[int, ...] = (1, 131567)
 
 # Featured groups for the landing page's "at a glance" section: recognizable,
 # data-rich clades spread across the tree (a vertebrate / bird / fish / insect /
@@ -484,16 +485,15 @@ def search_taxa(
     Substring match (``ILIKE %q%``, served by the ``pg_trgm`` GIN index on
     ``name``), ordered prefix-matches-first, then shortest, then alphabetical —
     the useful order for a root picker. Wildcards in ``query`` are escaped so
-    they match literally. Results are scoped to the eukaryotic subtree.
+    they match literally.
     """
     escaped = query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
     rows = conn.execute(
         "SELECT taxid, name, rank FROM taxon "
-        "WHERE name ILIKE %(sub)s "
-        "AND path <@ (SELECT path FROM taxon WHERE taxid = %(euk)s) "
+        "WHERE name ILIKE %(sub)s AND taxid <> ALL(%(spine)s) "
         "ORDER BY (name ILIKE %(pre)s) DESC, length(name), name "
         "LIMIT %(lim)s",
-        {"sub": f"%{escaped}%", "pre": f"{escaped}%", "lim": limit, "euk": EUKARYOTA_TAXID},
+        {"sub": f"%{escaped}%", "pre": f"{escaped}%", "lim": limit, "spine": list(SPINE_TAXIDS)},
     ).fetchall()
     return rows
 
@@ -612,97 +612,65 @@ def fetch_annotation_records(
     return (taxid, root_name, root_rank), total, stats, records
 
 
-def fetch_breakdown_quality(
-    conn: psycopg.Connection, *, root_taxid: int, rank: str
+def _quality_by_bucket(
+    conn: psycopg.Connection, bucket_filter: str, params: Sequence[object]
 ) -> dict[int, dict[str, float | None]]:
-    """Per-bucket QUALITY_STATS for a rank breakdown, so the "data map" can colour
-    tiles by BUSCO / median genes / median genome size / N50 — distribution stats
-    the additive rollup can't carry.
+    """QUALITY_STATS per bucket, attributing each record to every ancestor taxon
+    ``b`` that matches ``bucket_filter`` (SQL over ``b``, a trusted literal).
 
-    One grouped query per source table: every record under the root is attributed
-    to its rank-``rank`` ancestor (``bucket.path @> rec.path``, exactly one per
-    lineage — a path has one node of a given rank), then aggregated per bucket.
-    Returns ``{bucket_taxid: {stat_key: value|None}}`` for the buckets that carry
-    any records; the frontend merges it into the breakdown by taxid. ``rank`` is
-    interpolated-safe (TargetRank enum). Raises ``TaxonNotFound`` for a bad root.
+    Ancestors are read from the record taxon's own path labels (they are taxids),
+    so buckets are found by primary key instead of an ltree containment scan over
+    the whole GiST index. Returns ``{bucket_taxid: {stat_key: value|None}}`` for
+    buckets that carry records.
     """
-    _root_name, _root_rank, root_path = fetch_root(conn, root_taxid)
     all_keys = [q.key for q in QUALITY_STATS]
     result: dict[int, dict[str, float | None]] = {}
     for source in ("assembly", "annotation"):
         keys = [q.key for q in QUALITY_STATS if q.source == source]
         if not keys:
             continue
-        agg = _quality_stats_agg(source)
-        # Two phases so the ltree ancestor match runs once per *distinct* taxon
-        # with records, not once per record (a taxon often has several): `mp`
-        # resolves each record-bearing taxon to its rank-`rank` ancestor (the tile
-        # it rolls into), then the records join back in for the stats. On the wide
-        # roots (Eukaryota->phylum, ~88k records over ~29k taxa) this ~halves the
-        # nested-loop containment work vs matching every record. r = per-record
-        # table, rec = record's taxon, bucket = its ancestor at the target rank.
         sql = (
-            "WITH mp AS ("
-            "  SELECT rec.taxid AS rec_taxid, bucket.taxid AS bucket_taxid"
+            "WITH mp AS MATERIALIZED ("
+            "  SELECT rec.taxid AS rec_taxid, b.taxid AS bucket_taxid"
             f"  FROM (SELECT DISTINCT taxid FROM {source}) d"
             "  JOIN taxon rec ON rec.taxid = d.taxid"
-            "  JOIN taxon bucket ON bucket.rank = %s AND bucket.path <@ %s::ltree"
-            "  AND bucket.path @> rec.path"
+            "  CROSS JOIN LATERAL"
+            "    unnest(string_to_array(ltree2text(rec.path), '.')::int[]) AS anc(taxid)"
+            "  JOIN taxon b ON b.taxid = anc.taxid"
+            f"  WHERE {bucket_filter}"
             ") "
-            f"SELECT mp.bucket_taxid, {agg} "
+            f"SELECT mp.bucket_taxid, {_quality_stats_agg(source)} "
             f"FROM {source} r JOIN mp ON mp.rec_taxid = r.taxid "
             "GROUP BY mp.bucket_taxid"
         )
-        for row in conn.execute(sql, (rank, root_path)).fetchall():
+        for row in conn.execute(sql, params).fetchall():
             entry = result.setdefault(row[0], {k: None for k in all_keys})
-            for k, v in zip(keys, row[1:]):
+            for k, v in zip(keys, row[1:], strict=True):
                 entry[k] = float(v) if v is not None else None
     return result
+
+
+def fetch_breakdown_quality(
+    conn: psycopg.Connection, *, root_taxid: int, rank: str
+) -> dict[int, dict[str, float | None]]:
+    """Per-bucket QUALITY_STATS for the rank-``rank`` descendants of a root, keyed
+    by bucket taxid (buckets without records are absent). Raises ``TaxonNotFound``
+    for an unknown root."""
+    _root_name, _root_rank, root_path = fetch_root(conn, root_taxid)
+    return _quality_by_bucket(
+        conn, "b.rank = %s AND b.path <@ %s::ltree", (rank, root_path)
+    )
 
 
 def fetch_quality_for_taxids(
     conn: psycopg.Connection, taxids: Sequence[int]
 ) -> dict[int, dict[str, float | None]]:
-    """QUALITY_STATS (best BUSCO / median genes / median genome size / N50)
-    computed over each given clade's subtree records, keyed by taxid.
-
-    Used by the gaps leaderboard to show the quality of the data that *does*
-    exist next to the missing-species gap. Same two-phase shape as
-    ``fetch_breakdown_quality`` (resolve each record-bearing taxon to its bucket
-    once, then join records back for the stats), but the buckets are an explicit
-    ``taxid`` set (the gap clades) rather than a whole rank under a root — so the
-    containment scan stays tiny (<=200 buckets). A bucket with no record for a
-    stat gets ``None``. Returns ``{taxid: {stat_key: value|None}}`` for every
-    requested taxid.
-    """
+    """QUALITY_STATS over each given clade's subtree, keyed by taxid; every
+    requested taxid is present (all-``None`` when it has no records)."""
     all_keys = [q.key for q in QUALITY_STATS]
     result: dict[int, dict[str, float | None]] = {
         int(t): {k: None for k in all_keys} for t in taxids
     }
-    if not taxids:
-        return result
-    ids = list(taxids)
-    for source in ("assembly", "annotation"):
-        keys = [q.key for q in QUALITY_STATS if q.source == source]
-        if not keys:
-            continue
-        agg = _quality_stats_agg(source)
-        # bucket = one of the requested clades; rec = a record's taxon it
-        # contains (`bucket.path @> rec.path`, so exactly one bucket per record
-        # since the gap clades are disjoint); r = the per-record table.
-        sql = (
-            "WITH mp AS ("
-            "  SELECT rec.taxid AS rec_taxid, bucket.taxid AS bucket_taxid"
-            f"  FROM (SELECT DISTINCT taxid FROM {source}) d"
-            "  JOIN taxon rec ON rec.taxid = d.taxid"
-            "  JOIN taxon bucket ON bucket.taxid = ANY(%s) AND bucket.path @> rec.path"
-            ") "
-            f"SELECT mp.bucket_taxid, {agg} "
-            f"FROM {source} r JOIN mp ON mp.rec_taxid = r.taxid "
-            "GROUP BY mp.bucket_taxid"
-        )
-        for row in conn.execute(sql, (ids,)).fetchall():
-            entry = result[row[0]]
-            for k, v in zip(keys, row[1:]):
-                entry[k] = float(v) if v is not None else None
+    if taxids:
+        result.update(_quality_by_bucket(conn, "b.taxid = ANY(%s)", (list(taxids),)))
     return result
