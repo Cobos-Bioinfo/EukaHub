@@ -7,12 +7,14 @@ Annotrieve. The live fetch wrappers are covered by manual smoke runs, not CI.
 
 from __future__ import annotations
 
+import polars as pl
 from eukahub_pipeline.fetch_annotations import (
     ANNOTATION_COLUMNS,
     parse_annotation_record,
 )
 from eukahub_pipeline.fetch_assemblies import (
     ASSEMBLY_COLUMNS,
+    drop_duplicate_assemblies,
     parse_assembly_record,
 )
 
@@ -135,3 +137,20 @@ def test_parse_annotation_missing_busco_and_stats():
 
 def test_parse_annotation_missing_id_is_dropped():
     assert parse_annotation_record({"taxid": "7227"}) is None
+
+
+def test_drop_duplicate_assemblies_keeps_one_row_per_assembly():
+    frame = pl.DataFrame(
+        {
+            "assembly_accession": [
+                "GCA_000001405.29",  # human, GenBank
+                "GCF_000001405.40",  # its RefSeq copy
+                "GCA_000006425.1",  # superseded version
+                "GCA_000006425.2",
+                "GCF_900000001.1",  # RefSeq-only: kept
+            ],
+            "taxid": [9606, 9606, 237895, 353151, 1],
+        }
+    )
+    kept = drop_duplicate_assemblies(frame)["assembly_accession"].to_list()
+    assert sorted(kept) == ["GCA_000001405.29", "GCA_000006425.2", "GCF_900000001.1"]

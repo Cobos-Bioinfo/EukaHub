@@ -18,6 +18,8 @@ import logging
 import subprocess
 from collections.abc import Iterator
 
+import polars as pl
+
 log = logging.getLogger("eukahub.fetch_assemblies")
 
 EUKARYOTE_TXID = 2759
@@ -108,6 +110,25 @@ def parse_assembly_record(record: dict) -> dict | None:
         "bioprojects": _bioprojects(info),
         "download_url": f"https://www.ncbi.nlm.nih.gov/datasets/genome/{accession}/",
     }
+
+
+def drop_duplicate_assemblies(assemblies: pl.DataFrame) -> pl.DataFrame:
+    """Keep one row per assembly: GenBank over its RefSeq copy, then the latest version.
+
+    NCBI numbers a GenBank assembly and its RefSeq copy alike (GCA_000001405.29 /
+    GCF_000001405.40), and ``datasets`` can also return superseded versions.
+    """
+    accession = pl.col("assembly_accession")
+    ranked = assemblies.with_columns(
+        accession.str.slice(4).str.split(".").list.first().alias("_number"),
+        accession.str.starts_with("GCA").alias("_genbank"),
+        accession.str.split(".").list.last().cast(pl.Int64, strict=False).alias("_version"),
+    )
+    return (
+        ranked.sort(["_number", "_genbank", "_version"], descending=[False, True, True])
+        .unique(subset="_number", keep="first", maintain_order=True)
+        .drop("_number", "_genbank", "_version")
+    )
 
 
 def fetch_assemblies(

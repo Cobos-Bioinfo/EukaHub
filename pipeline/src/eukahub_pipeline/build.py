@@ -28,6 +28,7 @@ from eukahub_pipeline.fetch_annotations import ANNOTATION_COLUMNS, fetch_annotat
 from eukahub_pipeline.fetch_assemblies import (
     ASSEMBLY_COLUMNS,
     EUKARYOTE_TXID,
+    drop_duplicate_assemblies,
     fetch_assemblies,
 )
 from eukahub_pipeline.fetch_reads import READS_COLUMNS, fetch_reads
@@ -207,6 +208,9 @@ def main(argv: list[str] | None = None) -> int:
         args.sources_dir,
         refresh=args.refresh_sources,
     )
+    n_fetched = assemblies.height
+    assemblies = drop_duplicate_assemblies(assemblies)
+    log.info("Dropped %d duplicate assembly records", n_fetched - assemblies.height)
     annotations = cached_frame(
         "annotations", fetch_annotations, _ANNOTATION_SCHEMA, args.sources_dir,
         refresh=args.refresh_sources,
