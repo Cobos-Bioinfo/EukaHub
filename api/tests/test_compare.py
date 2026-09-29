@@ -7,6 +7,7 @@ cross-checked against /clade/{taxid}/summary rather than frozen.
 
 from __future__ import annotations
 
+from eukahub_api.main import _COMPARE_MAX_GROUPS, _parse_taxids
 from eukahub_core.metrics import METRIC_KEYS, QUALITY_KEYS
 
 
@@ -52,6 +53,23 @@ def test_compare_no_valid_taxids_422(client):
     assert client.get("/compare", params={"taxids": "abc"}).status_code == 422
     assert client.get("/compare", params={"taxids": ""}).status_code == 422
     assert client.get("/compare").status_code == 422  # param required
+
+
+def test_compare_rejects_crafted_ids_without_crashing(client):
+    """Unicode digits and absurdly long numbers are skipped, never a 500."""
+    body = client.get("/compare", params={"taxids": "9606,\u00b2"}).json()
+    assert [g["taxid"] for g in body["groups"]] == [9606]
+    assert client.get("/compare", params={"taxids": "\u00b2"}).status_code == 422
+    assert client.get("/compare", params={"taxids": "1" * 5000}).status_code == 422
+
+
+def test_parse_taxids_stops_at_the_group_cap():
+    ids = _parse_taxids(",".join(str(i) for i in range(1, 10_000)))
+    assert ids == list(range(1, _COMPARE_MAX_GROUPS + 1))
+
+
+def test_parse_taxids_keeps_order_and_drops_duplicates():
+    assert _parse_taxids(" 9606, 40674 ,9606,x,") == [9606, 40674]
 
 
 def test_compare_is_cacheable(client):

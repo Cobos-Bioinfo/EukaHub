@@ -46,3 +46,7 @@ def test_search_requires_query(client):
     assert client.get("/search").status_code == 422
     assert client.get("/search", params={"q": ""}).status_code == 422
     assert client.get("/search", params={"q": "ho"}).status_code == 422
+
+
+def test_search_rejects_a_nul_character(client):
+    assert client.get("/search", params={"q": "homo\x00"}).status_code == 422

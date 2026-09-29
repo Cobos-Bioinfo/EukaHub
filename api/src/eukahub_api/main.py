@@ -141,6 +141,19 @@ _ROOT_PATH = os.environ.get("API_ROOT_PATH", "/api")
 _COMPARE_MAX_GROUPS = 6
 
 
+def _parse_taxids(raw: str) -> list[int]:
+    """The distinct taxids in a comma-separated list, in order, at most
+    ``_COMPARE_MAX_GROUPS``. Anything but a plain ASCII number is skipped."""
+    ids: list[int] = []
+    for part in raw.split(","):
+        part = part.strip()
+        if part.isascii() and part.isdigit() and len(part) <= 10 and int(part) not in ids:
+            ids.append(int(part))
+            if len(ids) == _COMPARE_MAX_GROUPS:
+                break
+    return ids
+
+
 def cors_allow_origins() -> list[str]:
     raw = os.environ.get("CORS_ALLOW_ORIGINS", _DEFAULT_CORS_ORIGINS)
     return [origin.strip() for origin in raw.split(",") if origin.strip()]
@@ -349,14 +362,9 @@ def compare(
     per-resource coverage, and live quality stats (BUSCO / genes / genome size /
     N50) in one cacheable request. Unknown taxids are dropped; at most
     ``_COMPARE_MAX_GROUPS`` are honoured."""
-    ids: list[int] = []
-    for part in taxids.split(","):
-        part = part.strip()
-        if part.isdigit() and (v := int(part)) not in ids:
-            ids.append(v)
+    ids = _parse_taxids(taxids)
     if not ids:
         raise HTTPException(status_code=422, detail="no valid taxids to compare")
-    ids = ids[:_COMPARE_MAX_GROUPS]
 
     groups = []
     for taxid, name, rank, meta, quality in fetch_compare(conn, ids):
@@ -706,4 +714,6 @@ def search(
 ) -> list[TaxonRef]:
     """Case-insensitive taxon-name search for the root picker. Substring match,
     prefix-matches first (served by the `pg_trgm` GIN index on `taxon.name`)."""
+    if "\x00" in q:
+        raise HTTPException(status_code=422, detail="the query contains a NUL character")
     return [TaxonRef(taxid=t, name=n, rank=r) for t, n, r in search_taxa(conn, q, limit)]

@@ -9,7 +9,7 @@ field order, guarded by a test.
 
 from __future__ import annotations
 
-from collections.abc import Iterator, Sequence
+from collections.abc import Collection, Iterator, Sequence
 from enum import Enum
 
 import psycopg
@@ -52,6 +52,21 @@ _ASSEMBLY_SORTS: tuple[str, ...] = ("release_date", "contig_n50", "total_sequenc
 AssemblySort = Enum("AssemblySort", {c: c for c in _ASSEMBLY_SORTS}, type=str)
 _ANNOTATION_SORTS: tuple[str, ...] = ("busco_complete", "protein_coding_count", "release_date")
 AnnotationSort = Enum("AnnotationSort", {c: c for c in _ANNOTATION_SORTS}, type=str)
+# Per-record tables and the columns each may be sorted by.
+_RECORD_SORTS: dict[str, tuple[str, ...]] = {
+    "assembly": _ASSEMBLY_SORTS,
+    "annotation": _ANNOTATION_SORTS,
+}
+
+
+def _identifier(value: str, allowed: Collection[str]) -> str:
+    """Return ``value`` if it is one of ``allowed``, else raise ``ValueError``.
+
+    Every caller-supplied name interpolated into SQL text passes through here, so
+    the queries stay safe even if an endpoint forgets its enum."""
+    if value not in allowed:
+        raise ValueError(f"not an allowed SQL identifier: {value!r}")
+    return value
 
 EUKARYOTA_TAXID = 2759
 # `taxon` holds Eukaryota plus its two ancestors (root, cellular organisms);
@@ -242,15 +257,15 @@ def fetch_children(
     ``TaxonNotFound`` if ``taxid`` is absent; a present-but-childless taxon
     (e.g. a species leaf) returns an empty list, not an error.
 
-    ``sort`` is interpolated as an identifier, so callers must pass a
-    SortColumn-validated value (the endpoint does). A LEFT JOIN keeps children
-    that lack a rollup row (zero-filled), and each child carries a
-    ``has_children`` flag (one indexed EXISTS probe) so the UI shows an expand
-    affordance without another round-trip, plus an ``is_infraspecific`` flag: a
-    child is below-species iff the parent already has a species in its path
-    (child of a species, or of a subspecies), so one probe on the parent settles
-    it for the whole page.
+    ``sort`` is interpolated as an identifier and must be a SortColumn value.
+    A LEFT JOIN keeps children that lack a rollup row (zero-filled), and each
+    child carries a ``has_children`` flag (one indexed EXISTS probe) so the UI
+    shows an expand affordance without another round-trip, plus an
+    ``is_infraspecific`` flag: a child is below-species iff the parent already
+    has a species in its path (child of a species, or of a subspecies), so one
+    probe on the parent settles it for the whole page.
     """
+    sort = _identifier(sort, _FEATURE_COLS)
     parent_name, parent_rank, parent_path = fetch_root(conn, taxid)
     children_infraspecific: bool = conn.execute(
         f"SELECT {_IS_INFRASPECIFIC.format(path='%s::ltree', self='0')}",
@@ -308,14 +323,15 @@ def _breakdown_where(
 
     ``path <@ root_path`` = the whole subtree; the rank filter picks the level
     (both ride indexes: GiST on path, btree on rank). ``exclude_empty`` and the
-    resource filters push down as ``f.<col> > 0`` predicates. ``rank`` and the
-    filter columns are interpolated, so callers must pass enum-validated values.
+    resource filters push down as ``f.<col> > 0`` predicates; the filter keys
+    are interpolated and must be MetricFilter values.
     """
     where = ["t.path <@ %s::ltree", "t.rank = %s"]
     params: list = [root_path, rank]
     if exclude_empty:
         where.append("(" + " OR ".join(f"f.{c} > 0" for c in COVERAGE_KEYS) + ")")
     if filter_keys:
+        filter_keys = [_identifier(k, METRIC_KEYS) for k in filter_keys]
         joiner = " AND " if logic is FilterLogic.AND else " OR "
         where.append("(" + joiner.join(f"f.c_{k} > 0" for k in filter_keys) + ")")
     return where, params
@@ -340,10 +356,10 @@ def fetch_breakdown(
     where ``total`` is the match count *before* ``limit``. Raises
     ``TaxonNotFound`` if the root taxid is absent.
 
-    ``rank``/``sort``/``filter_keys`` are interpolated into SQL as identifiers,
-    so callers must pass values validated by the TargetRank / SortColumn /
-    MetricFilter enums (the endpoint does).
+    ``sort``/``filter_keys`` are interpolated into SQL as identifiers and must be
+    SortColumn / MetricFilter values.
     """
+    sort = _identifier(sort, _FEATURE_COLS)
     root_name, root_rank, root_path = fetch_root(conn, root_taxid)
     where, params = _breakdown_where(root_path, rank, exclude_empty, filter_keys, logic)
 
@@ -389,10 +405,10 @@ def fetch_gaps(
     Returns ``((taxid, name, rank), [(name, rank, metadata), ...], total)`` where
     ``total`` is the count of clades with any gap (before ``limit``). One indexed
     ``ltree`` subtree query — the same machinery as ``fetch_breakdown``, only the
-    ordering differs. ``rank``/``resource`` are interpolated as identifiers, so
-    callers must pass TargetRank / MetricFilter-validated values (the endpoint
-    does). Raises ``TaxonNotFound`` if the root taxid is absent.
+    ordering differs. ``resource`` is interpolated as an identifier and must be a
+    MetricFilter value. Raises ``TaxonNotFound`` if the root taxid is absent.
     """
+    resource = _identifier(resource, METRIC_KEYS)
     root_name, root_rank, root_path = fetch_root(conn, root_taxid)
     # gap = species in the clade lacking this resource (c_<key> <= n_rows always,
     # so it is >= 0). Ordered by the gap; species count breaks ties so among
@@ -456,9 +472,10 @@ def iter_export_tsv(
 
     The generator owns its pooled connection and a **server-side** cursor for
     the whole stream, so even a huge export (e.g. a big root at species rank,
-    >1M rows) never materializes in memory. Callers validate ``rank``/``sort``/
-    ``filter_keys`` via the enums; ``root_path`` comes from ``fetch_root``.
+    >1M rows) never materializes in memory. ``sort``/``filter_keys`` must be
+    SortColumn / MetricFilter values; ``root_path`` comes from ``fetch_root``.
     """
+    sort = _identifier(sort, _FEATURE_COLS)
     where, params = _breakdown_where(root_path, rank, exclude_empty, filter_keys, logic)
     secondary = _secondary_sort_key(sort)
     sql = (
@@ -542,7 +559,8 @@ def _fetch_quality_stats(
     conn: psycopg.Connection, source: str, root_path: str
 ) -> tuple[int, dict[str, float | None]]:
     """Return ``(record_count, {stat_key: value})`` for a source over the subtree
-    rooted at ``root_path``. ``source`` is the (trusted) table name."""
+    rooted at ``root_path``. ``source`` is a per-record table name."""
+    source = _identifier(source, _RECORD_SORTS)
     keys = [q.key for q in QUALITY_STATS if q.source == source]
     agg = _quality_stats_agg(source)
     row = conn.execute(
@@ -567,9 +585,11 @@ def _fetch_records(
     offset: int,
 ) -> list[dict]:
     """Paginated per-record rows for a source over the subtree, as dicts keyed by
-    the aliased column names. ``sort`` is enum-validated; ``key_col`` is the
-    table's primary key, appended as a unique tiebreaker so limit/offset paging
-    is a stable total order (``sort`` alone ties — many records share a taxid)."""
+    the aliased column names. ``sort`` must be one of the source's sort columns;
+    ``key_col`` is the table's primary key, appended as a unique tiebreaker so
+    limit/offset paging is a stable total order (``sort`` alone ties — many
+    records share a taxid)."""
+    sort = _identifier(sort, _RECORD_SORTS[_identifier(source, _RECORD_SORTS)])
     sql = (
         f"SELECT {select} FROM {source} a JOIN taxon t USING (taxid) "
         "WHERE t.path <@ %s::ltree "
