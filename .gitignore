@@ -32,9 +32,7 @@ data/
 .idea/
 .vscode/
 
-# Agent-only notes (Claude Code): entry point, audit ledger, archived history.
-# Human-facing documentation is README.md, CONTRIBUTING.md and docs/.
-CLAUDE.md
+# Maintainer-local agent notes (CLAUDE.local.md is covered by *.local.md).
 AUDIT.md
 .agent/
 *.local.md
