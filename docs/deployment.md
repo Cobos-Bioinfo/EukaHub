@@ -128,12 +128,15 @@ A fork can serve data in one of two ways:
    in the fork:
    - Enable GitHub Actions in the fork (Actions tab). Scheduled workflows in a fork
      stay disabled until they are enabled explicitly.
-   - The workflow requests `contents: write` (to publish Releases) and
-     `actions: write` (to keep its schedule enabled). If the organization caps
-     workflow permissions, allow these under Settings → Actions → General.
+   - The workflow requests `contents: write` (to publish Releases), `actions: write`
+     (to keep its schedule enabled) and `issues: write` (to report a failed
+     scheduled rebuild), each only in the job that needs it. If the organization
+     caps workflow permissions, allow these under Settings → Actions → General.
    - Run "Dataset rebuild" once by hand (`gh workflow run rebuild.yml`, from the
      default branch) to publish the first Release; it then runs on the 1st of each
-     month. A rebuild takes about 30 minutes on a GitHub-hosted runner.
+     month. A rebuild takes about 30 minutes on a GitHub-hosted runner. Only the
+     default branch publishes: a run on another branch builds and keeps the dump as
+     a workflow artifact, which is useful for testing pipeline changes.
 
 GitHub disables scheduled workflows in public repositories after 60 days without
 activity; `rebuild.yml` re-enables itself on every run to prevent that.
