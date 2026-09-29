@@ -5,9 +5,9 @@ import type { TaxonChildren, TaxonNode } from "../api/types";
 
 // How many children to load per expand / "load more" (matches the API default).
 const PAGE_SIZE = 10;
-// Soft guardrail: stop auto-growing the loaded tree past this many nodes so the
-// SVG stays responsive. The user can still collapse branches to free room.
-const MAX_NODES = 600;
+// Most nodes drawn at once (those under expanded parents), so the SVG stays
+// responsive. Collapsing a branch frees room.
+const MAX_VISIBLE_NODES = 600;
 // Reveal (search-to-locate): page each level in bigger chunks than a manual
 // expand to cut round-trips, but cap the pages per level so locating a node
 // buried deep in a huge, species-sorted sibling list can't page forever.
@@ -37,7 +37,7 @@ export interface TreeNode {
 export interface TreeState {
   rootId: number | null;
   nodes: Record<number, TreeNode>;
-  atCapacity: boolean; // hit MAX_NODES; further expansion is blocked
+  atCapacity: boolean; // MAX_VISIBLE_NODES drawn; expanding is blocked until a collapse
   error?: string; // root-level load failure (bad taxid / network)
 }
 
@@ -60,6 +60,23 @@ function emptyNode(node: TaxonNode, parentId: number | null, depth: number): Tre
     expanded: false,
     loading: false,
   };
+}
+
+function countVisible(nodes: Record<number, TreeNode>, rootId: number | null): number {
+  if (rootId == null) return 0;
+  let count = 0;
+  const stack = [rootId];
+  while (stack.length > 0) {
+    const n = nodes[stack.pop()!];
+    if (!n) continue;
+    count++;
+    if (n.expanded) stack.push(...n.childIds);
+  }
+  return count;
+}
+
+function withCapacity(state: TreeState): TreeState {
+  return { ...state, atCapacity: countVisible(state.nodes, state.rootId) >= MAX_VISIBLE_NODES };
 }
 
 function reducer(state: TreeState, action: Action): TreeState {
@@ -97,19 +114,19 @@ function reducer(state: TreeState, action: Action): TreeState {
         expanded: true,
         loading: false,
       };
-      return { ...state, nodes, atCapacity: Object.keys(nodes).length >= MAX_NODES };
+      return withCapacity({ ...state, nodes });
     }
 
     case "collapse": {
       const n = state.nodes[action.taxid];
       if (!n) return state;
-      return { ...state, nodes: { ...state.nodes, [action.taxid]: { ...n, expanded: false } } };
+      return withCapacity({ ...state, nodes: { ...state.nodes, [action.taxid]: { ...n, expanded: false } } });
     }
 
     case "reexpand": {
       const n = state.nodes[action.taxid];
       if (!n) return state;
-      return { ...state, nodes: { ...state.nodes, [action.taxid]: { ...n, expanded: true } } };
+      return withCapacity({ ...state, nodes: { ...state.nodes, [action.taxid]: { ...n, expanded: true } } });
     }
 
     case "error": {
@@ -181,9 +198,11 @@ export function useTree(rootTaxid: number): Tree {
       if (!n || n.loading || !n.node.has_children) return;
       if (n.expanded) {
         dispatch({ type: "collapse", taxid });
+      } else if (stateRef.current.atCapacity) {
+        return;
       } else if (n.childIds.length > 0) {
-        dispatch({ type: "reexpand", taxid }); // already loaded — just show
-      } else if (!stateRef.current.atCapacity) {
+        dispatch({ type: "reexpand", taxid });
+      } else {
         fetchPage(taxid, 0);
       }
     },

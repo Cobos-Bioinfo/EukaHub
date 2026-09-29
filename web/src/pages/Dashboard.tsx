@@ -101,7 +101,7 @@ export default function Dashboard() {
             <QualitySection taxid={taxid} quality={quality.data} composition={s.composition} />
           )}
 
-          {showBreakdown && (
+          {showBreakdown && !lineage.loading && (
             <BreakdownMap
               key={`bmap-${taxid}`}
               root={{ taxid, name: s.name, rank: s.rank }}

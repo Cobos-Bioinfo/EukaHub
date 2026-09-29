@@ -25,6 +25,16 @@ export default function SubspeciesSection({
   const children = useAsync(() => getChildren(taxid, { sort: "s_ass", limit: MAX }), [taxid]);
 
   const data = children.data;
+  if (children.error) {
+    return (
+      <p className="notice notice--error notice--inline" role="alert">
+        Could not load the finer taxa: {children.error}{" "}
+        <button type="button" className="link-btn" onClick={children.reload}>
+          Retry
+        </button>
+      </p>
+    );
+  }
   if (children.loading || !data || data.total === 0) return null;
 
   const heading = rank === "species" ? "Subspecies & strains" : "Finer subdivisions";

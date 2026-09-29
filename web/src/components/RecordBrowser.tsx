@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
 
 import { getAnnotations, getAssemblies } from "../api/queries";
@@ -26,8 +26,8 @@ const ANNOTATION_SORTS: { value: AnnotationSort; label: string }[] = [
 ];
 
 /** Accumulating pager: fetches page 0 whenever `resetKey` changes (tab / sort /
- *  taxon), and appends further pages on `loadMore` without dropping the rows
- *  already on screen. Stale responses are ignored via the active flag. */
+ *  taxon) and appends further pages on `loadMore`. Responses for an outdated key
+ *  are dropped. */
 function usePagedRecords(
   fetchPage: (offset: number) => Promise<{ items: Record[]; total: number }>,
   resetKey: string,
@@ -38,6 +38,7 @@ function usePagedRecords(
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string>();
   const [curKey, setCurKey] = useState(resetKey);
+  const keyRef = useRef(resetKey);
 
   // When the key changes (tab / sort / taxon) drop the stale rows *synchronously*
   // in render, before the refetch lands — otherwise the render right after a tab
@@ -48,10 +49,12 @@ function usePagedRecords(
     setItems([]);
     setTotal(0);
     setLoading(true);
+    setLoadingMore(false);
     setError(undefined);
   }
 
   useEffect(() => {
+    keyRef.current = resetKey;
     let active = true;
     setLoading(true);
     setError(undefined);
@@ -66,12 +69,22 @@ function usePagedRecords(
   }, [resetKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadMore = useCallback(() => {
+    const key = resetKey;
     setLoadingMore(true);
     fetchPage(items.length).then(
-      (r) => (setItems((cur) => [...cur, ...r.items]), setTotal(r.total), setLoadingMore(false)),
-      (e) => (setError(e instanceof Error ? e.message : String(e)), setLoadingMore(false)),
+      (r) => {
+        if (keyRef.current !== key) return;
+        setItems((cur) => [...cur, ...r.items]);
+        setTotal(r.total);
+        setLoadingMore(false);
+      },
+      (e) => {
+        if (keyRef.current !== key) return;
+        setError(e instanceof Error ? e.message : String(e));
+        setLoadingMore(false);
+      },
     );
-  }, [fetchPage, items.length]);
+  }, [fetchPage, items.length, resetKey]);
 
   return { items, total, loading, loadingMore, error, loadMore };
 }

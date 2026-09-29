@@ -39,14 +39,18 @@ export default function QualitySection({
   const assemblyTotal = assemblies.data?.total ?? 0;
   const annotationTotal = annotations.data?.total ?? 0;
   const bothLoaded = !assemblies.loading && !annotations.loading;
+  const error = assemblies.error ?? annotations.error;
 
   // Nothing to show for a clade with no assemblies and no annotations.
-  if (bothLoaded && assemblyTotal === 0 && annotationTotal === 0) return null;
+  if (bothLoaded && !error && assemblyTotal === 0 && annotationTotal === 0) return null;
 
+  const stateFor = (source: string) => (source === "annotation" ? annotations : assemblies);
   const totalFor = (source: string) =>
     source === "annotation" ? annotationTotal : assemblyTotal;
-  const loadedFor = (source: string) =>
-    source === "annotation" ? !annotations.loading : !assemblies.loading;
+  const retry = () => {
+    if (assemblies.error) assemblies.reload();
+    if (annotations.error) annotations.reload();
+  };
 
   return (
     <section className="quality" aria-labelledby="quality-title">
@@ -59,6 +63,15 @@ export default function QualitySection({
         </p>
       </header>
 
+      {error && (
+        <p className="notice notice--error notice--inline" role="alert">
+          Could not load the quality stats: {error}{" "}
+          <button type="button" className="link-btn" onClick={retry}>
+            Retry
+          </button>
+        </p>
+      )}
+
       <div className="quality__tiles">
         {quality.map((q) => (
           <QualityTile
@@ -66,7 +79,8 @@ export default function QualitySection({
             config={q}
             value={values.get(q.key) ?? null}
             total={totalFor(q.source)}
-            loaded={loadedFor(q.source)}
+            loaded={!stateFor(q.source).loading}
+            failed={Boolean(stateFor(q.source).error)}
           />
         ))}
       </div>
@@ -83,22 +97,23 @@ function QualityTile({
   value,
   total,
   loaded,
+  failed,
 }: {
   config: QualityStatConfig;
   value: number | null;
   total: number;
   loaded: boolean;
+  failed: boolean;
 }) {
   const noun = config.source === "annotation" ? "annotations" : "assemblies";
-  const valueStr = !loaded ? "…" : fmtQuality(value, config.fmt);
-  const has = loaded && value !== null;
+  const valueStr = !loaded ? "…" : failed ? "—" : fmtQuality(value, config.fmt);
+  const has = loaded && !failed && value !== null;
+  const caption = failed ? "unavailable" : total > 0 ? `over ${fmt(total)} ${noun}` : `no ${noun} yet`;
   return (
     <article className="qtile" title={config.help}>
       <span className="qtile__label">{config.card_title}</span>
       <span className={`qtile__value${has ? "" : " qtile__value--empty"}`}>{valueStr}</span>
-      <span className="qtile__cap">
-        {total > 0 ? `over ${fmt(total)} ${noun}` : `no ${noun} yet`}
-      </span>
+      <span className="qtile__cap">{caption}</span>
     </article>
   );
 }

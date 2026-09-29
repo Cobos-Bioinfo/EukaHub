@@ -356,10 +356,18 @@ export default function RadialTree({
 
         <Legend label={activeMetric?.card_title} ramp={ramp} noData={noData} />
 
+        {tree.atCapacity && (
+          <p className="tree-notice" role="status">
+            The tree is full. Collapse a branch, or open a group as its own tree, to keep exploring.
+          </p>
+        )}
+
         {selectedNode && (
           <DetailsPanel
             node={selectedNode.node}
             expanded={selectedNode.expanded}
+            error={selectedNode.error}
+            blocked={tree.atCapacity && !selectedNode.expanded}
             metrics={metrics}
             onOpen={() => onOpen(selectedNode.node.taxid)}
             onToggle={() => tree.toggle(selectedNode.node.taxid)}
@@ -481,6 +489,8 @@ function MoreNode({
 function DetailsPanel({
   node,
   expanded,
+  error,
+  blocked,
   metrics,
   onOpen,
   onToggle,
@@ -488,6 +498,8 @@ function DetailsPanel({
 }: {
   node: TaxonNode;
   expanded: boolean;
+  error?: string;
+  blocked: boolean;
   metrics: MetricConfig[];
   onOpen: () => void;
   onToggle: () => void;
@@ -522,10 +534,18 @@ function DetailsPanel({
           );
         })}
       </div>
+      {error && (
+        <p className="tree-panel__error" role="alert">
+          Could not load its subgroups: {error}
+        </p>
+      )}
+      {blocked && node.has_children && (
+        <p className="tree-panel__hint">The tree is full: collapse a branch first.</p>
+      )}
       <div className="tree-panel__actions">
         {node.has_children && (
-          <button type="button" className="tree-panel__btn" onClick={onToggle}>
-            {expanded ? "Collapse" : "Expand"}
+          <button type="button" className="tree-panel__btn" onClick={onToggle} disabled={blocked}>
+            {expanded ? "Collapse" : error ? "Retry" : "Expand"}
           </button>
         )}
         <button type="button" className="tree-panel__btn tree-panel__btn--primary" onClick={onOpen}>

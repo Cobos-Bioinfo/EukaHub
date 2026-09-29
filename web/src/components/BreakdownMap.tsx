@@ -263,6 +263,7 @@ export default function BreakdownMap({
   const ramp = useMemo(() => buildRamp(lens.hue, dark), [lens.hue, dark]);
   const noData = dark ? NO_DATA_DARK : NO_DATA_LIGHT;
   const qWaiting = NEEDS_QUALITY.has(lens.key) && quality.loading;
+  const qFailed = NEEDS_QUALITY.has(lens.key) && Boolean(quality.error);
 
   const boxRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ w: 960, h: 480 });
@@ -476,6 +477,14 @@ export default function BreakdownMap({
             <span className="bmap-legend__title">
               {lens.legendLabel ?? lens.label}
               {qWaiting && <span className="bmap-legend__loading"> · computing…</span>}
+              {qFailed && (
+                <span className="bmap-legend__error" role="alert">
+                  {" "}· could not load.{" "}
+                  <button type="button" className="link-btn" onClick={quality.reload}>
+                    Retry
+                  </button>
+                </span>
+              )}
             </span>
             <span className="bmap-legend__ramp">
               <span className="bmap-legend__cap">0</span>
