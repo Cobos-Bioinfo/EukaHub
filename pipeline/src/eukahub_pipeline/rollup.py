@@ -4,7 +4,7 @@ The taxonomy comes from the taxdump (rank + materialized ltree ``path``), so a
 species' lineage is just its ``path`` split on dots — no ETE3. Polars does the
 fan-out: each species is exploded into its ancestors, then grouped by ancestor
 and summed. This is the ~30-45M-row columnar group-by the redesign is built
-around (DECISIONS.md: Polars for this step; Pandas ruled out).
+around (docs/decisions.md: Polars for this step).
 
 Leaf features come from Euka-Survey's ``taxid_features`` table — a Phase 1
 bridge; later phases repopulate it from fresh NCBI/Annotrieve/ENA fetches.

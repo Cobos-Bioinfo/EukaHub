@@ -3,7 +3,7 @@
 Fetching all of Eukaryota is slow (datasets ~68k assemblies; ENA ~8M runs), so
 each fetched source is cached to parquet and reused on the next build unless the
 snapshot is missing or a refresh is forced. This is the resumable-snapshot half
-of the resumable-snapshot + atomic-swap discipline (roadmap / DECISIONS.md): the
+of the resumable-snapshot + atomic-swap discipline (docs/architecture.md): the
 DB is still rebuilt and swapped wholesale, but re-fetching every source on every
 run is avoided.
 """

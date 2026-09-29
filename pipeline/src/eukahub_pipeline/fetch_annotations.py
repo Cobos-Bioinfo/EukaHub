@@ -9,7 +9,7 @@ and keep it per-record for the ``annotation`` table. The per-taxon annotation
 
 Annotrieve is the *annotated subset* (~17k assemblies), so these rows light up
 the reference-quality core of the tree; the authoritative assembly count still
-comes from ``fetch_assemblies`` (NCBI datasets). See DECISIONS.md (2026-08-02).
+comes from ``fetch_assemblies`` (NCBI datasets). See docs/decisions.md.
 """
 
 from __future__ import annotations

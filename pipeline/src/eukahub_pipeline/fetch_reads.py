@@ -3,7 +3,7 @@
 Ports Euka-Survey's ``get_reads``: one ENA portal query for eukaryote RNA-Seq
 runs, counting runs per taxon and splitting long-read (Oxford Nanopore / PacBio
 SMRT) from the rest. Reads stay **aggregated** per taxon — ENA has ~8M runs, too
-many to serve per-record (DECISIONS.md 2026-08-02) — and are **run counts only**,
+many to serve per-record (docs/decisions.md) — and are **run counts only**,
 no ``base_count`` (same decision), so they stay parallel to the other three
 resources.
 

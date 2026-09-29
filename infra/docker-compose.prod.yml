@@ -1,21 +1,9 @@
 name: eukahub-prod
 
-# Production-style full stack: Postgres + api + nginx-served web, all
-# containerized. Designed to run ALONGSIDE the dev stack for a deploy smoke
-# test — its own project name, its own volume, and no clashing published
-# ports, so the dev db (host 5432) and native api/web keep running untouched.
-#
-# Security posture (roadmap Phase 5):
-#   - Postgres is NOT published — it stays on the internal network.
-#   - The api is NOT published — it's reached only through the web/nginx proxy.
-#   - Only the web port (8080) is exposed.
-# Credentials come from the environment via ${VAR:-default}, exactly like the
-# dev compose (see infra/.env.example).
-#
-# The database starts empty and stays that way for about a minute: the refresher
-# service installs the current published dataset on first start, then picks up
-# each monthly Release on its own. So bringing this stack up IS the install,
-# and keeping it up IS the maintenance. Nothing else has to be run by hand.
+# Production stack: Postgres, the API, nginx serving the web app, and the refresher
+# that installs and updates the dataset. Only the web port (8080) is published.
+# Configuration comes from infra/.env (see infra/.env.example); operating notes are
+# in docs/deployment.md.
 
 # Every service rotates its logs so years of uptime can't fill the disk.
 x-logging: &logging
@@ -132,13 +120,3 @@ services:
 
 volumes:
   pgdata:
-
-# --- Demo with the dev-loaded data instead of an empty DB --------------------
-# The dataset is expensive to rebuild, so reuse the dev volume:
-#   1. Free it (the dev db locks it):  docker compose -f infra/docker-compose.yml stop db
-#   2. Replace the `volumes:` block above with:
-#        volumes:
-#          pgdata:
-#            external: true
-#            name: eukahub_pgdata
-#   3. Bring this stack up. Restore dev afterwards with `up -d db`.

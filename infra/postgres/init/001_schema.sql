@@ -1,4 +1,5 @@
--- EukaHub schema — mirrors docs/data-model.md. Applied on first DB init.
+-- EukaHub serving schema, explained in docs/data-model.md. Applied when the database
+-- is first created and again (idempotently) by the pipeline build.
 -- Read-only at serve time; the whole dataset is rebuilt offline and swapped in.
 
 CREATE EXTENSION IF NOT EXISTS ltree;
@@ -72,7 +73,7 @@ CREATE TABLE IF NOT EXISTS assembly (
     submitter             TEXT,
     source_database       TEXT,     -- GenBank | RefSeq
     bioprojects           TEXT[],   -- deep-link
-    download_url          TEXT      -- deep-link to the actual FASTA
+    download_url          TEXT      -- NCBI Datasets page for the assembly
 );
 CREATE INDEX IF NOT EXISTS assembly_taxid_idx ON assembly (taxid);
 

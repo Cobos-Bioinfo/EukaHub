@@ -1,5 +1,5 @@
 """Generate ``api/tests/seed.sql`` — a compact, self-consistent slice of the
-serving DB so the DB-backed API tests can run in CI (see docs/roadmap.md).
+serving DB so the DB-backed API tests can run in CI (see CONTRIBUTING.md).
 
 Why a slice and not the real dataset: the production DB is ~2.5 GB and the
 pipeline that builds it needs the network + a 500 MB taxdump. CI only needs to

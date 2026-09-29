@@ -32,12 +32,9 @@ data/
 .idea/
 .vscode/
 
-# Personal notes — local only, never committed (see PROJECT_GUIDE.local.md)
-*.local.md
-
-# Internal docs — kept on disk for development, not published to the public repo.
-# The public-facing documentation is README.md (self-contained by design).
+# Agent-only notes (Claude Code): entry point, audit ledger, archived history.
+# Human-facing documentation is README.md, CONTRIBUTING.md and docs/.
 CLAUDE.md
-DECISIONS.md
-CHEAT_SHEET.md
-docs/
+AUDIT.md
+.agent/
+*.local.md

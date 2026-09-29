@@ -90,8 +90,9 @@ core/       shared domain model: the metric + quality config (single source of t
 api/        FastAPI service: the read-only REST API (auto-OpenAPI, typed to the SPA)
 pipeline/   offline build: NCBI / Annotrieve / ENA fetch, Postgres load, clade rollup
 web/        React + TypeScript SPA (Vite + React Router)
-infra/      docker-compose (dev + prod) + the Postgres init schema
+infra/      docker-compose (dev + prod), the Postgres schema, a low-memory test harness
 scripts/    dataset restore + auto-refresh, CI seed generation / loading, dataset summary
+docs/       architecture, deployment, data model, design decisions
 ```
 
 Python is a **uv workspace**; the frontend is a Vite SPA.
@@ -111,7 +112,8 @@ docker compose -f infra/docker-compose.prod.yml up --build -d   # web on http://
 On first start the database is empty. The `refresher` service downloads the
 latest published dataset (~50 MB), verifies it, and installs it, which takes a
 few minutes; the site answers with "not found" until then. Afterwards it checks
-for a newer Release once a day and swaps it in without downtime. Follow the
+for a newer Release once a day and swaps it in, with about a second of
+interruption. Follow the
 install with `docker compose -f infra/docker-compose.prod.yml logs -f refresher`,
 and tear everything down with `docker compose -f infra/docker-compose.prod.yml down -v`.
 
@@ -127,73 +129,28 @@ CPU. The database takes about 2.2 GB on disk, and an update briefly holds three
 copies of it (the live one, the incoming one, and the previous one kept for
 rollback).
 
-Configuration is supplied via environment variables (never committed): database
-credentials, the query time limit, the connection pool size, and caching. Copy
-the template and set real values for a real deployment:
+Configuration (credentials, limits, caching, which repository to take data from)
+comes from environment variables in `infra/.env`; start from
+`infra/.env.example`. [docs/deployment.md](docs/deployment.md) covers
+configuration, running behind a TLS proxy, data updates, rollback and running
+from a fork.
 
-```bash
-cp infra/.env.example infra/.env      # then edit; infra/.env is gitignored
-```
+## Documentation
 
-## Development setup
-
-Prerequisites: [Docker](https://docs.docker.com/) + Docker Compose,
-[uv](https://docs.astral.sh/uv/), and Node.js 22+.
-
-```bash
-# 1. Install the Python workspace (core + api + pipeline + dev tools)
-uv sync
-
-# 2. Bring up Postgres (ships with the ltree + pg_trgm extensions)
-docker compose -f infra/docker-compose.yml up -d db
-
-# 3a. Load the published dataset (a few minutes; needs pg_restore 17, from the
-#     postgresql-client-17 package)
-uv run --package eukahub-pipeline python scripts/restore_snapshot.py \
-  --url https://github.com/Cobos-Bioinfo/EukaHub/releases/latest/download/eukahub-dataset.dump
-
-# 3b. ...or build it from the sources yourself. Only needed when working on the
-#     pipeline: it downloads the NCBI taxdump and fetches every assembly,
-#     annotation and RNA-Seq run from NCBI, Annotrieve and ENA, so it is slow.
-#     Add --skip-download to reuse an unpacked taxdump.
-uv run --package eukahub-pipeline python -m eukahub_pipeline.build
-
-# 4. Run the API (http://localhost:8000, with /docs for the OpenAPI UI)
-uv run --package eukahub-api uvicorn eukahub_api.main:app --reload
-
-# 5. Run the web app in another terminal (proxies /api to the API)
-cd web && npm install && npm run dev   # http://localhost:5173
-```
-
-Regenerate the typed API client after any API change:
-
-```bash
-cd web && npm run gen
-```
-
-## Tests
-
-```bash
-uv run pytest          # whole Python workspace (needs Postgres up)
-cd web && npm run build # frontend typecheck + production build
-```
-
-Continuous integration runs ruff, the full pytest suite against a seeded
-throwaway Postgres, the web typecheck/build, a gitleaks secret scan, and
-dependency audits on every push. See `.github/workflows/`.
+- [Architecture](docs/architecture.md): components, request path, data updates,
+  resource budget.
+- [Deployment and operations](docs/deployment.md): install, configuration, TLS,
+  updates, forks.
+- [Data model](docs/data-model.md): what each number means and how it is stored.
+- [Design decisions](docs/decisions.md): why it is built this way.
+- [Contributing](CONTRIBUTING.md): development setup, tests, conventions.
 
 ## Data refresh
 
-The serving dataset is rebuilt offline, never edited in place. A scheduled
-GitHub Actions workflow (`.github/workflows/rebuild.yml`) re-fetches all sources
-monthly, rebuilds the database, gates on the pipeline's invariant checks, and
-publishes a validated `pg_dump` snapshot as a public GitHub Release. A running
-stack's `refresher` service picks it up within a day: it restores the snapshot
-into a staging database, verifies it, and only then swaps it in, keeping the
-previous dataset for a one-command rollback
-(`scripts/restore_snapshot.py --rollback`). If a download or verification fails,
-the live dataset is left untouched. You can also trigger a rebuild on demand
-from the Actions tab.
+The dataset is rebuilt from the sources every month by a GitHub Actions workflow
+(`.github/workflows/rebuild.yml`), checked, and published as a public Release;
+running servers install it on their own within a day, and keep the previous
+dataset for rollback. Details in [docs/architecture.md](docs/architecture.md#data-updates).
 
 ## Acknowledgements
 

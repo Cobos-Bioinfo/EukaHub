@@ -1,0 +1,23 @@
+# TEST-ONLY override: emulate a small shared host (about 1 GB of RAM, one CPU core).
+#   - 1 GB of RAM in total across the four containers (split below), no swap
+#     (memswap_limit == mem_limit), so a real overrun is an OOM kill, not a slowdown.
+#   - Every container pinned to the SAME single CPU core (cpuset "0"), so the
+#     whole stack shares one core, like "one thread".
+# Applied on top of whichever checkout the test script is pointed at.
+services:
+  db:
+    mem_limit: 640m
+    memswap_limit: 640m
+    cpuset: "0"
+  api:
+    mem_limit: 192m
+    memswap_limit: 192m
+    cpuset: "0"
+  web:
+    mem_limit: 64m
+    memswap_limit: 64m
+    cpuset: "0"
+  refresher:
+    mem_limit: 128m
+    memswap_limit: 128m
+    cpuset: "0"

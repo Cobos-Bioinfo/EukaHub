@@ -1,7 +1,7 @@
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 
-// Pure API-backed SPA (Vite + React Router — see DECISIONS.md). In dev,
+// Pure API-backed SPA (Vite + React Router — see docs/decisions.md). In dev,
 // requests to /api are proxied to the FastAPI service.
 export default defineConfig({
   plugins: [react()],
