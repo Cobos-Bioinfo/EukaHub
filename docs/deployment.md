@@ -20,7 +20,8 @@ see [architecture.md](architecture.md).
 ```bash
 git clone https://github.com/Cobos-Bioinfo/EukaHub.git
 cd EukaHub
-cp infra/.env.example infra/.env        # set POSTGRES_PASSWORD at least
+cp infra/.env.example infra/.env
+sed -i "s/^POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=$(openssl rand -hex 24)/" infra/.env
 docker compose -f infra/docker-compose.prod.yml --env-file infra/.env up --build -d
 ```
 
@@ -51,12 +52,13 @@ All services restart automatically (`restart: unless-stopped`) and rotate their 
 
 ## Configuration
 
-Set in `infra/.env` (see `infra/.env.example`). All are optional except the
-password.
+Set in `infra/.env` (see `infra/.env.example`). All are optional except
+`POSTGRES_PASSWORD`: the stack refuses to start without it.
 
 | Variable | Default | Used by | Meaning |
 |---|---|---|---|
-| `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` | `eukahub` | db, api, refresher | Database credentials. Change the password. |
+| `POSTGRES_PASSWORD` | none (required) | db, api, refresher | Database password. Letters and digits only, since it is embedded in a connection URL. |
+| `POSTGRES_USER` / `POSTGRES_DB` | `eukahub` | db, api, refresher | Database user and name. |
 | `EUKAHUB_REPO` | `Cobos-Bioinfo/EukaHub` | refresher | Repository whose dataset Releases are installed (`owner/name`). |
 | `REFRESH_INTERVAL` | `86400` | refresher | Seconds between checks for a newer Release. |
 | `DB_STATEMENT_TIMEOUT_MS` | `15000` | api | Postgres cancels any API query slower than this; the client gets a 504. Keep it below nginx's 60 s proxy timeout. |
@@ -77,9 +79,13 @@ of it (Traefik, nginx, Caddy, ...). Recommended:
   Wikipedia thumbnails, so `img-src` must allow `https://thumb.wikimedia.org`
   (and `https://upload.wikimedia.org`). A starting point:
   `default-src 'self'; img-src 'self' https://thumb.wikimedia.org https://upload.wikimedia.org; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'`.
-- Add rate limiting at the proxy (for example about 10 requests per second per client
-  with a burst of 20 on `/api/`). Each expensive request can hold one of the API's
-  four database connections for up to 15 s.
+- Rate limiting is built in: `web` allows each client about 10 API requests per
+  second. Bursts of up to 20 pass at once, larger ones are slowed down, and past 60
+  they are refused with 429. The client address comes from `X-Forwarded-For` when
+  the request arrives from a private network, which covers a proxy on the same
+  Docker network. If a proxy or load balancer with a public address sits in front,
+  add it to the `set_real_ip_from` lines in `web/nginx.conf`; otherwise every
+  visitor shares a single limit.
 
 The app itself already sends `X-Content-Type-Options`, `X-Frame-Options` and
 `Referrer-Policy`.

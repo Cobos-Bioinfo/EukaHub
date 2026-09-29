@@ -4,6 +4,8 @@
 set -euo pipefail
 REPO=$(cd "${1:?usage: lowmem-test.sh /path/to/EukaHub}" && pwd)
 HERE=$(cd "$(dirname "$0")" && pwd)
+# A throwaway stack, but the prod compose file still requires a password.
+export POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-lowmemtest}"
 C=(docker compose -f "$REPO/infra/docker-compose.prod.yml" -f "$HERE/lowmem.test.yml")
 API=http://localhost:8080/api
 echo "== Testing $REPO @ $(git -C "$REPO" rev-parse --short HEAD 2>/dev/null)$(git -C "$REPO" diff --quiet 2>/dev/null || echo ' + uncommitted changes')"
