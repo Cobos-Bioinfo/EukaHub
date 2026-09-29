@@ -7,12 +7,9 @@ dependencies = [
     "eukahub-core",
     "psycopg[binary]>=3.2",
     "requests>=2.32",
-    # Retry decorator for the flaky Annotrieve + ENA endpoints (ported later).
+    # Retries for the Annotrieve and ENA endpoints.
     "tenacity>=9",
-    # Roll-up engine finalists (DECISIONS.md open fork). Both installed during
-    # Phase 1 so the roll-up can be written/benchmarked before the pick;
-    # Pandas is deliberately excluded.
-    "duckdb>=1.1",
+    # Roll-up engine (docs/decisions.md).
     "polars>=1.9",
 ]
 
