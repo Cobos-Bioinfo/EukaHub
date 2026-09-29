@@ -28,6 +28,11 @@ Streamlit app that answered the same questions but was slow to build and to serv
 - **Source split:** assemblies and their quality fields from NCBI Datasets (all
   assemblies); annotation quality (BUSCO, gene counts, GFF links) from Annotrieve,
   which already computes it; RNA-Seq run counts from ENA.
+- **Every annotation Annotrieve serves counts**, including community-contributed ones
+  such as TOGA2 projections, not only those from GenBank, RefSeq and Ensembl. Any
+  usable GFF is better than none for someone looking for an annotated genome, and
+  excluding them would hide about 2,000 annotated assemblies. The record list shows
+  each annotation's source, so they can be told apart.
 
 ## Build
 

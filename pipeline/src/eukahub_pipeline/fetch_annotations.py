@@ -3,17 +3,19 @@
 Replaces Euka-Survey's ``get_annotations``, which hit the
 ``/annotations/frequencies/taxid`` endpoint and kept only per-taxon counts.
 Annotrieve already computes the rich annotation metadata we want — source DB,
-provider, GFF url, gene counts, and BUSCO — so we page through ``/annotations``
-and keep it per-record for the ``annotation`` table. The per-taxon annotation
-*count* the roll-up needs is derived later by grouping these rows (Stage B).
+provider, GFF url, gene counts, and BUSCO — so we download its TSV report of
+every annotation in one request and keep it per-record for the ``annotation``
+table. The per-taxon annotation *count* the roll-up needs is derived later by
+grouping these rows (Stage B).
 
-Annotrieve is the *annotated subset* (~17k assemblies), so these rows light up
-the reference-quality core of the tree; the authoritative assembly count still
-comes from ``fetch_assemblies`` (NCBI datasets). See docs/decisions.md.
+Everything Annotrieve serves is kept, including community-contributed
+annotations such as TOGA2 projections (docs/decisions.md). The authoritative
+assembly count still comes from ``fetch_assemblies`` (NCBI datasets).
 """
 
 from __future__ import annotations
 
+import json
 import logging
 from collections.abc import Iterator
 
@@ -41,96 +43,109 @@ ANNOTATION_COLUMNS: tuple[str, ...] = (
     "busco_lineage",
 )
 
+# Optional report columns requested on top of the defaults (id, accession,
+# taxid, database, provider, source_url, ...).
+REPORT_FIELDS: tuple[str, ...] = (
+    "release_date",
+    "root_type_counts",
+    "coding_gene_count",
+    "busco_complete",
+    "busco_single_copy",
+    "busco_duplicated",
+    "busco_lineage",
+)
+_REQUIRED_HEADER = {
+    "annotation_id", "assembly_accession", "taxid", "database", "provider", "source_url",
+    *REPORT_FIELDS,
+}
+
 
 def _to_int(value: object) -> int | None:
-    """Cast to int (Annotrieve sends ``taxid`` as a string). None on failure."""
+    """Cast to int (the report is text). None on failure."""
     try:
         return int(value)  # type: ignore[arg-type]
     except (TypeError, ValueError):
         return None
 
 
-def parse_annotation_record(record: dict) -> dict | None:
-    """Normalize one Annotrieve annotation into an ``annotation`` row.
+def _to_float(value: object) -> float | None:
+    try:
+        return float(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return None
 
-    Returns ``None`` when the record lacks an id or a taxid. Pulls gene counts
-    from ``features_summary.root_type_counts.gene`` and the protein-coding total
-    from ``features_statistics.gene_category_stats.coding.total_count``; BUSCO
-    and ``features_statistics`` may be absent, hence the defensive ``.get``s.
+
+def parse_report_row(row: dict[str, str]) -> dict | None:
+    """Normalize one row of the report into an ``annotation`` row.
+
+    Returns ``None`` when the row lacks an id or a taxid. Empty cells become
+    ``None``; the gene count comes from the ``root_type_counts`` JSON object.
     Pure and network-free, so it is the unit the tests exercise.
     """
-    ann_id = record.get("annotation_id")
-    taxid = _to_int(record.get("taxid"))
+    cell = {key: value or None for key, value in row.items()}
+    ann_id = cell.get("annotation_id")
+    taxid = _to_int(cell.get("taxid"))
     if not ann_id or taxid is None:
         return None
 
-    source = record.get("source_file_info") or {}
-    summary = record.get("features_summary") or {}
-    stats = record.get("features_statistics") or {}
-    busco = record.get("busco") or {}
-
-    root_counts = summary.get("root_type_counts") or {}
-    coding = (stats.get("gene_category_stats") or {}).get("coding") or {}
-    release = source.get("release_date")  # ISO datetime string or None
+    try:
+        root_counts = json.loads(cell.get("root_type_counts") or "{}")
+    except json.JSONDecodeError:
+        root_counts = None
+    if not isinstance(root_counts, dict):
+        root_counts = {}
+    release = cell.get("release_date")  # ISO datetime or None
     return {
         "annotation_id": ann_id,
-        "assembly_accession": record.get("assembly_accession"),
+        "assembly_accession": cell.get("assembly_accession"),
         "taxid": taxid,
-        "source_database": source.get("database"),
-        "provider": source.get("provider"),
+        "source_database": cell.get("database"),
+        "provider": cell.get("provider"),
         "release_date": release[:10] if release else None,
-        "gff_url": source.get("url_path"),
+        "gff_url": cell.get("source_url"),
         "gene_count": _to_int(root_counts.get("gene")),
-        "protein_coding_count": _to_int(coding.get("total_count")),
-        "busco_complete": busco.get("complete"),
-        "busco_single_copy": busco.get("single_copy"),
-        "busco_duplicated": busco.get("duplicated"),
-        "busco_lineage": busco.get("busco_lineage"),
+        "protein_coding_count": _to_int(cell.get("coding_gene_count")),
+        "busco_complete": _to_float(cell.get("busco_complete")),
+        "busco_single_copy": _to_float(cell.get("busco_single_copy")),
+        "busco_duplicated": _to_float(cell.get("busco_duplicated")),
+        "busco_lineage": cell.get("busco_lineage"),
     }
 
 
 @retry(stop=stop_after_attempt(5), wait=wait_exponential(multiplier=1, min=2, max=60))
-def _get_page(session: requests.Session, base: str, offset: int, limit: int) -> dict:
-    """One page of ``/annotations`` — retried with backoff on transient errors."""
-    resp = session.get(
-        f"{base}/annotations",
-        params={"offset": offset, "limit": limit},
-        timeout=120,
+def _get_report(base: str) -> str:
+    """The TSV report of every annotation, retried with backoff on transient errors."""
+    resp = requests.get(
+        f"{base}/annotations/report",
+        params={"selected_fields": ",".join(REPORT_FIELDS)},
+        timeout=600,
     )
     resp.raise_for_status()
-    return resp.json()
+    return resp.text
 
 
-def fetch_annotations(
-    *, base: str = ANNOTRIEVE_BASE, page_size: int = 500
-) -> Iterator[dict]:
-    """Page through Annotrieve ``/annotations``, yielding normalized rows.
+def fetch_annotations(*, base: str = ANNOTRIEVE_BASE) -> Iterator[dict]:
+    """Download Annotrieve's annotation report and yield normalized rows.
 
-    The response envelope is ``{total, offset, limit, results}``; we advance
-    ``offset`` by the page length until it reaches ``total`` (or a page comes
-    back empty).
+    Raises ``RuntimeError`` if the report lacks a column we need or has no rows,
+    so a changed or truncated response fails the build instead of shipping a
+    dataset without annotations.
     """
-    session = requests.Session()
-    session.headers.update({"Accept": "application/json"})
-    offset = 0
-    total: int | None = None
+    lines = _get_report(base).splitlines()
+    header = lines[0].split("\t") if lines else []
+    missing = _REQUIRED_HEADER - set(header)
+    if missing:
+        raise RuntimeError(f"Annotrieve report is missing columns: {sorted(missing)}")
+    if len(lines) < 2:
+        raise RuntimeError("Annotrieve report has no rows")
+    log.info("Annotrieve report has %d annotations", len(lines) - 1)
+
     n_kept = 0
-    while True:
-        page = _get_page(session, base, offset, page_size)
-        results = page.get("results") or []
-        if total is None:
-            total = page.get("total")
-            log.info("Annotrieve reports %s annotations", total)
-        if not results:
-            break
-        for record in results:
-            row = parse_annotation_record(record)
-            if row is not None:
-                n_kept += 1
-                yield row
-        offset += len(results)
-        if total is not None and offset >= total:
-            break
+    for line in lines[1:]:
+        row = parse_report_row(dict(zip(header, line.split("\t"))))
+        if row is not None:
+            n_kept += 1
+            yield row
     log.info("Fetched %d annotation rows", n_kept)
 
 

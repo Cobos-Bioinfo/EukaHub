@@ -16,7 +16,7 @@ The schema itself is [`infra/postgres/init/001_schema.sql`](../infra/postgres/in
 | Resource (API key) | Source | Unit | Stored as |
 |---|---|---|---|
 | Assemblies (`ass`) | NCBI Datasets: `datasets summary genome taxon 2759` | One genome assembly. A GenBank assembly and its RefSeq copy count once (the GenBank record is kept), and only the latest version of an assembly is kept. | One row per assembly (`assembly`) |
-| Annotations (`ann`) | [Annotrieve](https://genome.crg.es/annotrieve/) `/annotations` | One genome annotation (GFF), with BUSCO completeness and gene counts. | One row per annotation (`annotation`) |
+| Annotations (`ann`) | [Annotrieve](https://genome.crg.es/annotrieve/) `/annotations/report` | One genome annotation (GFF), with BUSCO completeness and gene counts. Includes community-contributed annotations as well as those from GenBank, RefSeq and Ensembl, for example TOGA2 gene projections from the Hiller Lab. | One row per annotation (`annotation`) |
 | RNA-Seq (`rna`) | ENA read runs | Sequencing runs on any platform. | Counts per taxon only |
 | Long-read RNA-Seq (`lng`) | ENA read runs | Runs on Oxford Nanopore or PacBio SMRT. | Counts per taxon only |
 

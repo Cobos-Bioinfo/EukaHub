@@ -1,6 +1,6 @@
 """Network-free tests for the fetch parsers.
 
-The parsers (``parse_assembly_record`` / ``parse_annotation_record``) are pure,
+The parsers (``parse_assembly_record`` / ``parse_report_row``) are pure,
 so we exercise them on captured real-shaped records — no datasets CLI, no
 Annotrieve. The live fetch wrappers are covered by manual smoke runs, not CI.
 """
@@ -8,9 +8,11 @@ Annotrieve. The live fetch wrappers are covered by manual smoke runs, not CI.
 from __future__ import annotations
 
 import polars as pl
+import pytest
+from eukahub_pipeline import fetch_annotations as fa
 from eukahub_pipeline.fetch_annotations import (
     ANNOTATION_COLUMNS,
-    parse_annotation_record,
+    parse_report_row,
 )
 from eukahub_pipeline.fetch_assemblies import (
     ASSEMBLY_COLUMNS,
@@ -42,25 +44,20 @@ ASSEMBLY_RECORD = {
 }
 
 # A trimmed but real-shaped Annotrieve /annotations record.
-ANNOTATION_RECORD = {
-    "annotation_id": "f628158077010762f66c13935b5630a3",
-    "assembly_accession": "GCA_001624475.1",
-    "taxid": "10090",  # Annotrieve sends taxid as a string
-    "source_file_info": {
-        "database": "Ensembl",
-        "provider": "community",
-        "release_date": "2018-01-01T00:00:00",
-        "url_path": "https://ftp.ebi.ac.uk/pub/.../annotation.gff.gz",
-    },
-    "features_summary": {"root_type_counts": {"gene": 22685, "chromosome": 20}},
-    "features_statistics": {"gene_category_stats": {"coding": {"total_count": 20589}}},
-    "busco": {
-        "busco_lineage": "eukaryota_odb12",
-        "complete": 99.2,
-        "single_copy": 97.7,
-        "duplicated": 1.6,
-    },
-}
+# One row of Annotrieve's /annotations/report with the REPORT_FIELDS columns.
+REPORT_HEADER = (
+    "annotation_id\tassembly_accession\tassembly_name\torganism_name\ttaxid\tdatabase\t"
+    "provider\tsource_url\tbgzip_path\tcsi_path\trelease_date\tbusco_lineage\t"
+    "busco_complete\tbusco_single_copy\tbusco_duplicated\troot_type_counts\t"
+    "coding_gene_count"
+)
+REPORT_LINE = (
+    "f628158077010762f66c13935b5630a3\tGCA_001624475.1\tCBA_J_v1\tMus musculus\t10090\t"
+    "Ensembl\tcommunity\thttps://ftp.ebi.ac.uk/pub/.../genes.gff3.gz\t/10090/a.gff.gz\t"
+    "/10090/a.gff.gz.csi\t2018-01-01T00:00:00\teukaryota_odb12\t99.2\t97.7\t1.6\t"
+    '{"chromosome":20,"gene":22685,"pseudogene":6269}\t20589'
+)
+ANNOTATION_ROW = dict(zip(REPORT_HEADER.split("\t"), REPORT_LINE.split("\t")))
 
 
 def test_parse_assembly_record_full():
@@ -102,8 +99,8 @@ def test_parse_assembly_sparse_record_defaults_to_none():
     assert row["bioprojects"] == []
 
 
-def test_parse_annotation_record_full():
-    row = parse_annotation_record(ANNOTATION_RECORD)
+def test_parse_report_row_full():
+    row = parse_report_row(ANNOTATION_ROW)
     assert row is not None
     assert set(row) == set(ANNOTATION_COLUMNS)
     assert row["annotation_id"] == "f628158077010762f66c13935b5630a3"
@@ -113,7 +110,7 @@ def test_parse_annotation_record_full():
     assert row["provider"] == "community"
     # ISO datetime trimmed to a DATE
     assert row["release_date"] == "2018-01-01"
-    assert row["gff_url"].endswith(".gff.gz")
+    assert row["gff_url"].endswith(".gff3.gz")
     assert row["gene_count"] == 22685
     assert row["protein_coding_count"] == 20589
     assert row["busco_complete"] == 99.2
@@ -121,22 +118,44 @@ def test_parse_annotation_record_full():
     assert row["busco_lineage"] == "eukaryota_odb12"
 
 
-def test_parse_annotation_missing_busco_and_stats():
-    rec = {
-        "annotation_id": "abc",
-        "taxid": "7227",
-        "source_file_info": {"database": "NCBI"},
-    }
-    row = parse_annotation_record(rec)
+def test_parse_report_row_empty_cells_become_none():
+    empty = dict.fromkeys(["busco_lineage", "busco_complete", "busco_single_copy",
+                           "busco_duplicated", "root_type_counts", "coding_gene_count",
+                           "release_date", "provider"], "")
+    row = parse_report_row({**ANNOTATION_ROW, **empty})
     assert row["gene_count"] is None
     assert row["protein_coding_count"] is None
     assert row["busco_complete"] is None
     assert row["busco_lineage"] is None
-    assert row["source_database"] == "NCBI"
+    assert row["release_date"] is None
+    assert row["provider"] is None
+    assert row["source_database"] == "Ensembl"
 
 
-def test_parse_annotation_missing_id_is_dropped():
-    assert parse_annotation_record({"taxid": "7227"}) is None
+def test_parse_report_row_missing_id_or_taxid_is_dropped():
+    assert parse_report_row({**ANNOTATION_ROW, "annotation_id": ""}) is None
+    assert parse_report_row({**ANNOTATION_ROW, "taxid": ""}) is None
+
+
+def test_fetch_annotations_reads_the_report(monkeypatch):
+    monkeypatch.setattr(fa, "_get_report", lambda base: f"{REPORT_HEADER}\n{REPORT_LINE}\n")
+    rows = list(fa.fetch_annotations())
+    assert [r["annotation_id"] for r in rows] == ["f628158077010762f66c13935b5630a3"]
+
+
+@pytest.mark.parametrize(
+    "report",
+    [
+        "",  # empty body
+        REPORT_HEADER + "\n",  # header only
+        REPORT_HEADER.replace("\tbusco_complete", "") + "\n" + REPORT_LINE,  # column gone
+    ],
+)
+def test_fetch_annotations_fails_on_an_unusable_report(monkeypatch, report):
+    """A changed or truncated report must fail the build, not ship no annotations."""
+    monkeypatch.setattr(fa, "_get_report", lambda base: report)
+    with pytest.raises(RuntimeError):
+        list(fa.fetch_annotations())
 
 
 def test_drop_duplicate_assemblies_keeps_one_row_per_assembly():
