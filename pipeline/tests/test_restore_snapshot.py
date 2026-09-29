@@ -47,7 +47,7 @@ def test_live_dbname_reads_the_database_from_the_url():
 
 
 def test_live_dbname_rejects_a_url_without_a_database():
-    with pytest.raises(SystemExit):
+    with pytest.raises(restore_snapshot.RestoreError):
         restore_snapshot._live_dbname("postgresql://eukahub:secret@db.example.org:5433/")
 
 

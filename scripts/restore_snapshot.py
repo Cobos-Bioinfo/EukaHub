@@ -1,47 +1,18 @@
-"""Restore a rebuilt dataset snapshot into the serving Postgres, safely.
+"""Install a dataset snapshot (``pg_dump -Fc``) as the live serving database.
 
-The monthly ``rebuild.yml`` workflow produces a validated ``pg_dump`` snapshot
-but stops there. This is the other half: it takes that snapshot and makes it
-the live dataset, without a window where the site serves a half-loaded
-database and without a failure mode that leaves no way back.
+Restores into ``<db>_next`` while the live database keeps serving, verifies it with
+the pipeline's ``check_invariants``, then swaps by renaming databases and keeps the
+old one as ``<db>_prev`` for ``--rollback``. Any failure before the swap leaves the
+live database untouched. Databases are renamed rather than schemas because the
+``ltree``/``pg_trgm`` extensions live in ``public``; the swap terminates open
+sessions on the renamed databases.
 
-Why not just ``pg_restore --clean`` at the live DB: that drops the tables
-first, so every request errors for the minutes the reload takes, and a restore
-that dies halfway leaves neither the old nor the new dataset. Instead:
-
-    1. restore the snapshot into a STAGING database (``<db>_next``), while the
-       live database keeps serving untouched;
-    2. verify the staging copy with the pipeline's own ``check_invariants``
-       (non-empty tables, the species-universe rollup identity, coverage never
-       exceeding species, the composition split reconciling);
-    3. only then swap, by renaming databases;
-    4. keep the previous dataset as ``<db>_prev`` so a rollback is one command.
-
-If anything fails before step 3, the live database is never touched: the site
-keeps serving the previous dataset and exits non-zero so the caller can alert.
-A stale dataset is a much better failure than a broken one.
-
-The swap renames databases rather than schemas because the ``ltree`` and
-``pg_trgm`` extensions live in ``public``; renaming ``public`` out from under
-them would break every LTREE column. Renaming requires no open connections, so
-the live sessions are terminated first. The API's psycopg pool reconnects on
-its own, making the visible interruption a second or two rather than minutes.
-
-    # from a local file
-    uv run python scripts/restore_snapshot.py --dump eukahub-dataset-20260901.dump
-
-    # from a URL (GITHUB_TOKEN is sent as a bearer token when set)
+    uv run python scripts/restore_snapshot.py --dump snap.dump [--dry-run]
     uv run python scripts/restore_snapshot.py --url https://.../eukahub-dataset.dump
-
-    # restore and verify, but stop short of going live
-    uv run python scripts/restore_snapshot.py --dump snap.dump --dry-run
-
-    # put the previous dataset back
     uv run python scripts/restore_snapshot.py --rollback
 
-``DATABASE_URL`` names the live database (default: the compose dev DB). The
-connecting role must be allowed to CREATE DATABASE and to rename databases,
-which the owning role already is.
+``DATABASE_URL`` names the live database; its role must be able to create and
+rename databases.
 """
 
 from __future__ import annotations
@@ -68,6 +39,10 @@ STAGING_SUFFIX = "_next"
 PREVIOUS_SUFFIX = "_prev"
 
 
+class RestoreError(RuntimeError):
+    """A restore step failed; the live database was left untouched."""
+
+
 def _admin_url(url: str, dbname: str = "postgres") -> str:
     """Same server and credentials, but pointed at a maintenance database.
 
@@ -82,7 +57,7 @@ def _admin_url(url: str, dbname: str = "postgres") -> str:
 def _live_dbname(url: str) -> str:
     name = conninfo_to_dict(url).get("dbname")
     if not name:
-        raise SystemExit("DATABASE_URL does not name a database")
+        raise RestoreError("DATABASE_URL does not name a database")
     return str(name)
 
 
@@ -106,12 +81,7 @@ def _drop_database(conn: psycopg.Connection, name: str) -> None:
 
 
 def _terminate_connections(conn: psycopg.Connection, name: str) -> None:
-    """Close other sessions on ``name`` so it can be renamed or dropped.
-
-    The API's pooled connections are the expected occupants; psycopg_pool
-    transparently reconnects, so this costs a moment of reconnects rather than
-    an outage.
-    """
+    """Close other sessions on ``name`` so it can be renamed or dropped."""
     conn.execute(
         "SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
         "WHERE datname = %s AND pid <> pg_backend_pid()",
@@ -127,15 +97,10 @@ def _rename_database(conn: psycopg.Connection, old: str, new: str) -> None:
     log.info("renamed %s -> %s", old, new)
 
 
-def _download(url: str, dest: Path) -> Path:
-    """Fetch a snapshot over HTTP(S). Sends GITHUB_TOKEN as a bearer token when
-    present, so a private-repo release or artifact URL works unchanged."""
-    request = urllib.request.Request(url)
-    token = os.environ.get("GITHUB_TOKEN")
-    if token:
-        request.add_header("Authorization", f"Bearer {token}")
+def download(url: str, dest: Path) -> Path:
+    """Fetch a snapshot over HTTP(S) to ``dest``."""
     log.info("downloading %s", url)
-    with urllib.request.urlopen(request, timeout=600) as response, dest.open("wb") as out:
+    with urllib.request.urlopen(url, timeout=600) as response, dest.open("wb") as out:
         shutil.copyfileobj(response, out)
     log.info("downloaded %.1f MB to %s", dest.stat().st_size / 1_048_576, dest)
     return dest
@@ -150,7 +115,7 @@ def _pg_restore(url: str, dbname: str, dump: Path) -> None:
     jobs only compete with the site that is still serving meanwhile.
     """
     if shutil.which("pg_restore") is None:
-        raise SystemExit(
+        raise RestoreError(
             "pg_restore not found on PATH. Install the postgresql-client "
             "package matching the server major version."
         )
@@ -167,7 +132,7 @@ def _pg_restore(url: str, dbname: str, dump: Path) -> None:
     result = subprocess.run(cmd, capture_output=True, text=True, check=False)
     if result.returncode != 0:
         log.error("pg_restore failed:\n%s", result.stderr.strip()[:4000])
-        raise SystemExit(f"pg_restore exited {result.returncode}")
+        raise RestoreError(f"pg_restore exited {result.returncode}")
     log.info("restore complete")
 
 
@@ -230,7 +195,7 @@ def rollback(url: str) -> None:
     failed = f"{live}_failed"
     with _connect_admin(url) as admin:
         if not _database_exists(admin, previous):
-            raise SystemExit(f"no {previous} database to roll back to")
+            raise RestoreError(f"no {previous} database to roll back to")
         _drop_database(admin, failed)
         if _database_exists(admin, live):
             _rename_database(admin, live, failed)
@@ -260,17 +225,19 @@ def main() -> None:
     )
     url = os.environ.get("DATABASE_URL", DEFAULT_URL)
 
-    if args.rollback:
-        rollback(url)
-        return
-    if not args.dump and not args.url:
+    if not args.rollback and not args.dump and not args.url:
         parser.error("one of --dump, --url or --rollback is required")
-
-    with tempfile.TemporaryDirectory() as tmp:
-        dump = args.dump if args.dump else _download(args.url, Path(tmp) / "snapshot.dump")
-        if not dump.exists():
-            raise SystemExit(f"{dump} does not exist")
-        restore(url, dump, dry_run=args.dry_run)
+    try:
+        if args.rollback:
+            rollback(url)
+            return
+        with tempfile.TemporaryDirectory() as tmp:
+            dump = args.dump if args.dump else download(args.url, Path(tmp) / "snapshot.dump")
+            if not dump.exists():
+                raise RestoreError(f"{dump} does not exist")
+            restore(url, dump, dry_run=args.dry_run)
+    except (RestoreError, DataValidationError) as exc:
+        raise SystemExit(f"restore failed: {exc}") from exc
 
 
 if __name__ == "__main__":

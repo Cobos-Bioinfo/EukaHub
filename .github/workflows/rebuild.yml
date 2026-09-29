@@ -1,12 +1,9 @@
 name: Dataset rebuild
 
-# Fully-automated offline data refresh: on a monthly schedule (and on demand),
-# fetch fresh NCBI / Annotrieve / ENA sources, rebuild the serving DB, gate on the
-# pipeline's invariant checks, and publish a validated pg_dump snapshot as an
-# artifact. The live serving DB (once deployed at CRG) is restored from the latest
-# snapshot — the atomic-swap half of the resumable-snapshot + atomic-swap
-# discipline. Nothing here touches a live DB; a bad build fails the invariant gate
-# and never publishes.
+# Monthly (and on demand): fetch fresh NCBI / Annotrieve / ENA sources, build the
+# dataset, gate it on the pipeline's invariant checks, and publish it as the
+# `dataset-YYYYMMDD` Release that deployed stacks install (scripts/auto_refresh.py).
+# A build that fails the gate publishes nothing.
 on:
   schedule:
     - cron: "0 4 1 * *" # 04:00 UTC on the 1st of each month
@@ -21,6 +18,18 @@ concurrency:
   cancel-in-progress: false # let an in-flight rebuild finish
 
 jobs:
+  keepalive:
+    name: Keep the monthly schedule enabled
+    # GitHub disables scheduled workflows in public repos after 60 days without
+    # repository activity; re-enabling the workflow through the API resets that.
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh api -X PUT "repos/${{ github.repository }}/actions/workflows/rebuild.yml/enable"
+
   rebuild:
     name: Fetch, build, validate, publish snapshot
     runs-on: ubuntu-latest

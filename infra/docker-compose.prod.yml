@@ -17,10 +17,18 @@ name: eukahub-prod
 # each monthly Release on its own. So bringing this stack up IS the install,
 # and keeping it up IS the maintenance. Nothing else has to be run by hand.
 
+# Every service rotates its logs so years of uptime can't fill the disk.
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   db:
     image: postgres:17
     restart: unless-stopped
+    logging: *logging
     # Sized for a small shared host (one CPU core, ~1 GB RAM for the whole
     # stack). On one core, parallel query/index workers only compete with the
     # process they're helping, and JIT spends CPU + memory compiling queries
@@ -54,6 +62,7 @@ services:
       context: ..
       dockerfile: api/Dockerfile
     restart: unless-stopped
+    logging: *logging
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-eukahub}:${POSTGRES_PASSWORD:-eukahub}@db:5432/${POSTGRES_DB:-eukahub}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
@@ -88,13 +97,14 @@ services:
       context: ../web
       dockerfile: Dockerfile.prod
     restart: unless-stopped
+    logging: *logging
     depends_on:
       api:
         condition: service_healthy
     ports:
       - "8080:80"
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://localhost/"]
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://localhost/healthz"]
       interval: 10s
       timeout: 3s
       retries: 5
@@ -110,6 +120,7 @@ services:
       context: ..
       dockerfile: infra/refresher.Dockerfile
     restart: unless-stopped
+    logging: *logging
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-eukahub}:${POSTGRES_PASSWORD:-eukahub}@db:5432/${POSTGRES_DB:-eukahub}
       # Point at a fork by setting these; defaults target the upstream repo.
