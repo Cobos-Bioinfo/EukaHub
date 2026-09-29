@@ -73,3 +73,28 @@ def test_restore_runs_as_a_single_job(monkeypatch, tmp_path):
     monkeypatch.setattr(restore_snapshot.subprocess, "run", _run)
     restore_snapshot._pg_restore(LIVE, "eukahub_next", tmp_path / "snapshot.dump")
     assert "--jobs" not in seen["cmd"] and "-j" not in seen["cmd"]
+
+
+def test_staging_is_analyzed_before_it_is_verified(monkeypatch, tmp_path):
+    """A dump carries no planner statistics; the swap must not go live without them."""
+    steps: list[str] = []
+
+    class _Admin:
+        def execute(self, *_):
+            return self
+
+        def fetchone(self):
+            return None
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            return False
+
+    monkeypatch.setattr(restore_snapshot, "_connect_admin", lambda url: _Admin())
+    monkeypatch.setattr(restore_snapshot, "_pg_restore", lambda *a: steps.append("restore"))
+    monkeypatch.setattr(restore_snapshot, "_analyze", lambda *a: steps.append("analyze"))
+    monkeypatch.setattr(restore_snapshot, "_verify", lambda *a: steps.append("verify"))
+    restore_snapshot.restore(LIVE, tmp_path / "snapshot.dump", dry_run=True)
+    assert steps == ["restore", "analyze", "verify"]

@@ -1,7 +1,7 @@
 """Install a dataset snapshot (``pg_dump -Fc``) as the live serving database.
 
-Restores into ``<db>_next`` while the live database keeps serving, verifies it with
-the pipeline's ``check_invariants``, then swaps by renaming databases and keeps the
+Restores into ``<db>_next`` while the live database keeps serving, collects planner
+statistics, verifies it with the pipeline's ``check_invariants``, then swaps by renaming databases and keeps the
 old one as ``<db>_prev`` for ``--rollback``. Any failure before the swap leaves the
 live database untouched. Databases are renamed rather than schemas because the
 ``ltree``/``pg_trgm`` extensions live in ``public``; the swap terminates open
@@ -136,6 +136,17 @@ def _pg_restore(url: str, dbname: str, dump: Path) -> None:
     log.info("restore complete")
 
 
+def _analyze(url: str, dbname: str) -> None:
+    """Collect planner statistics, which a dump does not carry.
+
+    Without them the first queries after the swap are planned blind, and the
+    heaviest dashboard requests hit the API's statement timeout until
+    autovacuum catches up."""
+    with psycopg.connect(_admin_url(url, dbname), autocommit=True) as conn:
+        conn.execute("ANALYZE")
+    log.info("analyzed %s", dbname)
+
+
 def _verify(url: str, dbname: str) -> None:
     """Run the pipeline's invariant checks against the staged copy."""
     with psycopg.connect(_admin_url(url, dbname)) as conn:
@@ -165,6 +176,7 @@ def restore(url: str, dump: Path, *, dry_run: bool = False) -> None:
 
     try:
         _pg_restore(url, staging, dump)
+        _analyze(url, staging)
         _verify(url, staging)
     except BaseException:
         # Verification failed, or the restore died. The live dataset was never
