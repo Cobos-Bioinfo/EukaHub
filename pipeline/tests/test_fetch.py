@@ -2,7 +2,8 @@
 
 The parsers (``parse_assembly_record`` / ``parse_report_row``) are pure,
 so we exercise them on captured real-shaped records — no datasets CLI, no
-Annotrieve. The live fetch wrappers are covered by manual smoke runs, not CI.
+Annotrieve. The ENA fetch runs against a stubbed ``_post``. The live fetch
+wrappers are covered by manual smoke runs, not CI.
 """
 
 from __future__ import annotations
@@ -10,6 +11,7 @@ from __future__ import annotations
 import polars as pl
 import pytest
 from eukahub_pipeline import fetch_annotations as fa
+from eukahub_pipeline import fetch_reads as fr
 from eukahub_pipeline.fetch_annotations import (
     ANNOTATION_COLUMNS,
     parse_report_row,
@@ -19,6 +21,7 @@ from eukahub_pipeline.fetch_assemblies import (
     drop_duplicate_assemblies,
     parse_assembly_record,
 )
+from tenacity import stop_after_attempt, wait_none
 
 # A trimmed but real-shaped `datasets summary genome ... --as-json-lines` record.
 ASSEMBLY_RECORD = {
@@ -173,3 +176,52 @@ def test_drop_duplicate_assemblies_keeps_one_row_per_assembly():
     )
     kept = drop_duplicate_assemblies(frame)["assembly_accession"].to_list()
     assert sorted(kept) == ["GCA_000001405.29", "GCA_000006425.2", "GCF_900000001.1"]
+
+
+class _Reply:
+    def __init__(self, text: str = "", rows: list | None = None) -> None:
+        self.text = text
+        self._rows = rows
+
+    def json(self) -> list:
+        return self._rows
+
+
+def _ena(monkeypatch, expected: int, rows: list) -> None:
+    def post(endpoint, **fields):
+        return _Reply(text=f"count\n{expected}\n") if endpoint == "count" else _Reply(rows=rows)
+
+    monkeypatch.setattr(fr, "_post", post)
+
+
+_RUNS = [
+    {"tax_id": "9606", "instrument_platform": "ILLUMINA"},
+    {"tax_id": "9606", "instrument_platform": "OXFORD_NANOPORE"},
+    {"tax_id": "10090", "instrument_platform": "ILLUMINA"},
+]
+
+
+def test_fetch_reads_counts_runs_per_taxon(monkeypatch):
+    _ena(monkeypatch, expected=3, rows=_RUNS)
+    rows = {r["taxid"]: r for r in fr.fetch_reads()}
+    assert rows[9606] == {"taxid": 9606, "short": 1, "long": 1}
+    assert rows[10090] == {"taxid": 10090, "short": 1, "long": 0}
+
+
+@pytest.mark.parametrize("rows", [_RUNS[:1], []])
+def test_fetch_reads_rejects_an_incomplete_download(monkeypatch, rows):
+    """ENA can end a response early with a valid but shorter payload."""
+    _ena(monkeypatch, expected=3, rows=rows)
+    once = fr._query_ena.retry_with(stop=stop_after_attempt(1))
+    with pytest.raises(RuntimeError, match="of 3 runs"):
+        once()
+
+
+def test_fetch_reads_retries_until_the_download_is_complete(monkeypatch):
+    downloads = iter([_RUNS[:1], _RUNS])
+
+    def post(endpoint, **fields):
+        return _Reply(text="count\n3\n") if endpoint == "count" else _Reply(rows=next(downloads))
+
+    monkeypatch.setattr(fr, "_post", post)
+    assert fr._query_ena.retry_with(wait=wait_none())() == _RUNS
