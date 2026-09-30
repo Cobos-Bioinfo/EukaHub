@@ -2,8 +2,9 @@
 per-record ``assembly`` / ``annotation`` tables + the ``clade_features`` rollup.
 
 No ETE3, no ``precomputed_taxa``. The three sources are fetched (or reused from
-parquet snapshots) up front, filtered to the taxonomy, loaded per-record, and
-rolled up species-only. Run it (with Postgres up) via:
+parquet snapshots) up front and filtered to the taxonomy; placeholder taxa without
+data are dropped; records are loaded per-record and rolled up every lineage. Run it
+(with Postgres up) via:
 
     uv run --package eukahub-pipeline python -m eukahub_pipeline.build
 
@@ -39,7 +40,8 @@ from eukahub_pipeline.load import (
     load_dataset_meta,
     load_taxon,
 )
-from eukahub_pipeline.rollup import assemble_leaf_features, rollup_from_frames
+from eukahub_pipeline.placeholders import orphans_below_species, prune_placeholders
+from eukahub_pipeline.rollup import assemble_leaf_features, carrying_taxids, rollup_from_frames
 from eukahub_pipeline.snapshot import cached_frame
 from eukahub_pipeline.taxdump import (
     ancestors,
@@ -219,10 +221,9 @@ def main(argv: list[str] | None = None) -> int:
         "reads", fetch_reads, _READS_SCHEMA, args.sources_dir, refresh=args.refresh_sources
     )
 
-    taxon_df = _taxon_frame(nodes, paths)
     # Drop source rows on taxids absent from the taxonomy (merged/deleted NCBI
     # taxids); the per-record tables should never reference an unknown taxon.
-    known = taxon_df.select("taxid")
+    known = pl.DataFrame({"taxid": list(nodes)}, schema={"taxid": pl.Int64})
     assemblies = assemblies.join(known, on="taxid", how="semi")
     annotations = annotations.join(known, on="taxid", how="semi")
     reads = reads.join(known, on="taxid", how="semi")
@@ -230,10 +231,22 @@ def main(argv: list[str] | None = None) -> int:
         "After taxonomy filter: %d assemblies, %d annotations, %d read taxa",
         assemblies.height, annotations.height, reads.height,
     )
-
     leaf = assemble_leaf_features(assemblies, annotations, reads)
-    # Scope the rollup to Eukaryota — `taxon` holds the whole NCBI tree.
-    clade = rollup_from_frames(taxon_df, leaf, root_taxid=EUKARYOTE_TXID)
+
+    nodes, pruned = prune_placeholders(nodes, names, carrying_taxids(leaf))
+    paths = {t: paths[t] for t in nodes}
+    log.info(
+        "Species: %d formal, %d informal with data kept; %d placeholder taxa without data dropped",
+        pruned.formal_species, pruned.informal_kept, pruned.dropped,
+    )
+    orphans = orphans_below_species(nodes)
+    if orphans:
+        log.warning(
+            "%d below-species taxa have no species above them: %s",
+            len(orphans), ", ".join(f"{t} {names.get(t, '')}" for t in orphans[:20]),
+        )
+
+    clade = rollup_from_frames(_taxon_frame(nodes, paths), leaf, root_taxid=EUKARYOTE_TXID)
     log.info("Rolled up into %d clade rows", clade.height)
 
     with psycopg.connect(args.database_url) as conn:

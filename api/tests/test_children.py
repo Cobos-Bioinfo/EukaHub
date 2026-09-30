@@ -7,6 +7,10 @@ are stable NCBI taxonomy, matching the style of test_lineage.py.
 
 from __future__ import annotations
 
+import psycopg
+import pytest
+from eukahub_api.db import database_url
+
 
 def test_children_root_sorted_by_species(client):
     """Eukaryota's direct children come back sorted by species count desc, each
@@ -73,6 +77,19 @@ def test_children_infraspecific_flag(client):
 
     genus_kids = client.get("/taxon/9605/children").json()["items"]  # Homo (genus) -> species
     assert genus_kids and not any(i["is_infraspecific"] for i in genus_kids)
+
+
+def test_children_of_informal_species_are_infraspecific(client):
+    """Taxa below an informal species are single units too."""
+    with psycopg.connect(database_url()) as conn:
+        row = conn.execute(
+            "SELECT p.taxid FROM taxon p WHERE p.rank = 'informal species' "
+            "AND EXISTS (SELECT 1 FROM taxon c WHERE c.parent_id = p.taxid) LIMIT 1"
+        ).fetchone()
+    if row is None:
+        pytest.skip("no informal species with finer taxa in this dataset")
+    items = client.get(f"/taxon/{row[0]}/children").json()["items"]
+    assert items and all(i["is_infraspecific"] for i in items)
 
 
 def test_children_not_found(client):

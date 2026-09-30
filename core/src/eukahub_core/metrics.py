@@ -17,7 +17,7 @@ The app and pipeline both reason about four genomic resources:
 Each resource produces three columns in ``clade_features``:
 
     c_<key>  species covered (>=1 of that resource)
-    s_<key>  total resource count summed across the clade's species
+    s_<key>  total resource count in the clade, at any rank
     p_<key>  derived percentage (c_<key> / n_rows * 100), computed in code
 
 To add or rename a metric, edit METRICS; every consumer (DB column set,
@@ -99,7 +99,7 @@ METRICS: tuple[Metric, ...] = (
         card_title="Assemblies",
         species_help="Unique species with at least one genome assembly",
         total_label="Total Assemblies",
-        total_help="Total number of genome assemblies across all species",
+        total_help="Total number of genome assemblies in this group",
         external_source_name="NCBI",
         external_url_template="https://www.ncbi.nlm.nih.gov/datasets/genome/?taxon={taxid}",
         tsv_count_column="species_with_assemblies",
@@ -117,7 +117,7 @@ METRICS: tuple[Metric, ...] = (
         card_title="Annotations",
         species_help="Unique species with at least one functional annotation",
         total_label="Total Annotations",
-        total_help="Total number of annotated genomes across all species",
+        total_help="Total number of functional annotations in this group",
         external_source_name="Annotrieve",
         external_url_template="https://genome.crg.es/annotrieve/annotations/?taxids={taxid}",
         tsv_count_column="species_with_annotations",
@@ -135,7 +135,7 @@ METRICS: tuple[Metric, ...] = (
         card_title="RNA-Seq (Any)",
         species_help="Unique species with any RNA-Seq read data",
         total_label="Total Runs",
-        total_help="Total number of RNA-Seq runs across all species",
+        total_help="Total number of RNA-Seq runs in this group",
         external_source_name="ENA",
         external_url_template=(
             "https://www.ebi.ac.uk/ena/browser/advanced-search?"
@@ -159,7 +159,7 @@ METRICS: tuple[Metric, ...] = (
         card_title_help="RNA-Seq experiments performed with Oxford Nanopore or PacBio SMRT platforms",
         species_help="Unique species with at least one long-read RNA-Seq experiment",
         total_label="Total Runs",
-        total_help="Total number of Long-Read RNA-Seq runs across all species",
+        total_help="Total number of long-read RNA-Seq runs in this group",
         external_source_name="ENA",
         external_url_template=(
             "https://www.ebi.ac.uk/ena/browser/advanced-search?"

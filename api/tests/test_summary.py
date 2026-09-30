@@ -78,17 +78,26 @@ def test_summary_zero_filled(client):
         assert body["resources"][key] == {"covered": 0, "total": 0, "percent": 0.0}
 
 
-def test_summary_infraspecific(client):
-    """A below-species taxon reports is_infraspecific, n_rows==1, and its own
-    directly-attached totals (dynamically pick a data-carrying subspecies so the
-    test doesn't pin to a specific taxid that could drift)."""
+def _first(sql: str) -> tuple | None:
     with psycopg.connect(database_url()) as conn:
-        row = conn.execute(
-            "SELECT t.taxid, f.s_ass FROM taxon t JOIN clade_features f USING (taxid) "
-            "WHERE t.rank = 'subspecies' AND f.s_ass > 0 "
-            "AND t.path <@ (SELECT path FROM taxon WHERE taxid = 2759) "
-            "ORDER BY f.s_ass DESC LIMIT 1"
-        ).fetchone()
+        return conn.execute(sql).fetchone()
+
+
+def _children_totals(client, taxid: int) -> dict[str, int]:
+    items = client.get(f"/taxon/{taxid}/children", params={"limit": 500}).json()["items"]
+    return {k: sum(i["resources"][k]["total"] for i in items) for k in ("ass", "ann", "rna", "lng")}
+
+
+def test_summary_infraspecific(client):
+    """A below-species taxon reports is_infraspecific, n_rows==1, and its subtree
+    totals (dynamically pick a data-carrying subspecies so the test doesn't pin
+    to a specific taxid that could drift)."""
+    row = _first(
+        "SELECT t.taxid, f.s_ass FROM taxon t JOIN clade_features f USING (taxid) "
+        "WHERE t.rank = 'subspecies' AND f.s_ass > 0 "
+        "AND t.path <@ (SELECT path FROM taxon WHERE taxid = 2759) "
+        "ORDER BY f.s_ass DESC LIMIT 1"
+    )
     if row is None:
         pytest.skip("no subspecies with assemblies in this dataset")
     taxid, s_ass = row
@@ -98,16 +107,68 @@ def test_summary_infraspecific(client):
     assert body["rank"] == "subspecies"
     assert body["n_rows"] == 1  # a leaf unit, not a clade of species
     assert body["resources"]["ass"]["total"] == s_ass
+    assert body["direct"] is not None
 
 
-def test_summary_species_not_counted_upward(client):
-    """A species is not infraspecific, and its subspecies never inflate it: the
-    subtree species count stays 1 (itself), so subspecies data is not rolled up.
-    Homo sapiens (9606) has two subspecies (Neanderthal, Denisova)."""
-    body = client.get("/clade/9606/summary").json()
+def test_summary_species_includes_subspecies_data(client):
+    """A species with data on a subspecies counts that data: its totals equal the
+    records under it, it stays one species, and its direct records plus its
+    children's totals add up to its totals."""
+    row = _first(
+        "SELECT p.taxid FROM taxon t JOIN clade_features f USING (taxid) "
+        "JOIN taxon p ON p.taxid = t.parent_id "
+        "WHERE t.rank = 'subspecies' AND p.rank = 'species' AND f.s_ass > 0 LIMIT 1"
+    )
+    if row is None:
+        pytest.skip("no subspecies with assemblies in this dataset")
+    taxid = row[0]
+
+    body = client.get(f"/clade/{taxid}/summary").json()
     assert body["rank"] == "species"
     assert body["is_infraspecific"] is False
     assert body["n_rows"] == 1
+    assemblies = client.get(f"/taxon/{taxid}/assemblies", params={"limit": 1}).json()
+    assert body["resources"]["ass"]["total"] == assemblies["total"]
+    assert body["resources"]["ass"]["covered"] == 1
+
+    below = _children_totals(client, taxid)
+    assert below["ass"] > 0
+    for key, value in body["resources"].items():
+        assert body["direct"][key] + below[key] == value["total"]
+
+
+def test_summary_informal_species(client):
+    """An informal species is one unit that is not a species: the clades above it
+    count its records but not it."""
+    row = _first(
+        "SELECT t.taxid, t.parent_id FROM taxon t JOIN clade_features f USING (taxid) "
+        "WHERE t.rank = 'informal species' AND f.s_ass > 0 LIMIT 1"
+    )
+    if row is None:
+        pytest.skip("no informal species with assemblies in this dataset")
+    taxid, parent = row
+
+    body = client.get(f"/clade/{taxid}/summary").json()
+    assert body["rank"] == "informal species"
+    assert body["is_infraspecific"] is False
+    assert body["n_rows"] == 1
+    assert body["direct"] is not None
+    parent_body = client.get(f"/clade/{parent}/summary").json()
+    species_below = _first(
+        "SELECT count(*) FROM taxon WHERE rank = 'species' "
+        f"AND path <@ (SELECT path FROM taxon WHERE taxid = {int(parent)})"
+    )[0]
+    assert parent_body["n_rows"] == species_below
+    assert parent_body["resources"]["ass"]["total"] >= body["resources"]["ass"]["total"]
+
+
+def test_summary_clade_totals_match_records(client):
+    """A clade's totals count every record under it, whatever rank it sits on."""
+    body = client.get("/clade/2759/summary").json()
+    assert body["direct"] is None
+    for key, source in (("ass", "assemblies"), ("ann", "annotations")):
+        records = client.get(f"/taxon/2759/{source}", params={"limit": 1}).json()
+        assert body["resources"][key]["total"] == records["total"]
 
 
 def test_summary_clade_not_infraspecific(client):

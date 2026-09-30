@@ -22,6 +22,7 @@ from eukahub_core.metrics import (
     TOTAL_KEYS,
     CladeMetadata,
 )
+from eukahub_core.taxonomy import UNIT_RANKS
 from psycopg.rows import dict_row
 from psycopg_pool import ConnectionPool
 
@@ -95,12 +96,13 @@ class FilterLogic(str, Enum):
     OR = "OR"
 
 # A taxon is "infraspecific" (below species) iff a proper ancestor in its path
-# has rank 'species' — subspecies, strains, varietas, etc. Their features are
-# stored per-taxon (n_rows=1) and never rolled into an ancestor, so the frontend
-# renders them as leaf detail. One indexed GiST (`@>`) probe per lookup.
+# is a species or an informal species: subspecies, strains, varietas, etc. Each
+# is a single unit (n_rows=1), so the frontend renders it as leaf detail. One
+# indexed GiST (`@>`) probe per lookup.
+_UNIT_RANKS_SQL = ", ".join(f"'{r}'" for r in UNIT_RANKS)
 _IS_INFRASPECIFIC = (
     "EXISTS (SELECT 1 FROM taxon a WHERE a.path @> {path} "
-    "AND a.rank = 'species' AND a.taxid <> {self})"
+    f"AND a.rank IN ({_UNIT_RANKS_SQL}) AND a.taxid <> {{self}})"
 )
 
 # LEFT JOIN: a taxon may exist in `taxon` but have no rollup row (the rollup
@@ -143,8 +145,8 @@ def fetch_summary(
 
     Raises ``TaxonNotFound`` if the taxid is not in the taxonomy. A taxon with
     no rollup row yields a zero-filled ``CladeMetadata``. ``is_infraspecific`` is
-    True for below-species taxa (subspecies/strains/...), whose row holds only
-    their own directly-attached data (``n_rows == 1``) and never counts upward.
+    True for below-species taxa (subspecies/strains/...), each a single unit
+    (``n_rows == 1``) whose data also counts for its species.
     """
     row = conn.execute(_SUMMARY_SQL, (taxid,)).fetchone()
     if row is None:
@@ -156,6 +158,22 @@ def fetch_summary(
     if features[0] is None:  # LEFT JOIN produced NULLs — no clade_features row
         return name, rank, CladeMetadata.zero(taxid), is_infraspecific
     return name, rank, CladeMetadata(taxid, *features), is_infraspecific
+
+
+def fetch_direct_totals(
+    conn: psycopg.Connection, taxid: int, meta: CladeMetadata
+) -> dict[str, int]:
+    """Per-resource records attached to the taxon itself rather than to a finer
+    taxon below it: its subtree totals minus its children's."""
+    below = conn.execute(
+        f"SELECT {', '.join(f'COALESCE(sum(f.{c}), 0)' for c in TOTAL_KEYS)} "
+        "FROM taxon c JOIN clade_features f USING (taxid) "
+        "WHERE c.parent_id = %s AND c.taxid <> c.parent_id",
+        (taxid,),
+    ).fetchone()
+    return {
+        key: getattr(meta, f"s_{key}") - int(n) for key, n in zip(METRIC_KEYS, below, strict=True)
+    }
 
 
 def fetch_overview(

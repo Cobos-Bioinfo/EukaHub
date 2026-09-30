@@ -4,22 +4,26 @@ import { getChildren } from "../api/queries";
 import type { MetricConfig } from "../api/types";
 import { useAsync } from "../hooks/useAsync";
 import { fmt } from "../lib/format";
+import { INFORMAL_SPECIES_RANK } from "../lib/taxonomy";
 
 // How many infraspecific children to list; the rest live in the Tree of Life.
 const MAX = 50;
 
 /** Below-species taxa (subspecies, strains, varietas, isolates, ...) directly
- *  under a focused species or infraspecific node. Each carries its own data and
- *  is navigable, but is never counted toward this taxon's or any ancestor's
- *  totals — so it only appears here, when focused on the parent. Sorted so the
+ *  under a focused species or finer taxon, led by the records attached to the
+ *  focused taxon itself, so the rows add up to the totals above. Sorted so the
  *  data-rich ones surface first. Renders nothing when there are none. */
 export default function SubspeciesSection({
   taxid,
+  name,
   rank,
+  direct,
   metrics,
 }: {
   taxid: number;
+  name: string;
   rank: string;
+  direct?: Record<string, number> | null;
   metrics: MetricConfig[];
 }) {
   const children = useAsync(() => getChildren(taxid, { sort: "s_ass", limit: MAX }), [taxid]);
@@ -37,15 +41,16 @@ export default function SubspeciesSection({
   }
   if (children.loading || !data || data.total === 0) return null;
 
-  const heading = rank === "species" ? "Subspecies & strains" : "Finer subdivisions";
+  const heading =
+    rank === "species" || rank === INFORMAL_SPECIES_RANK ? "Subspecies & strains" : "Finer subdivisions";
   return (
     <section className="bd" aria-label={heading}>
       <div className="bd__head">
         <h2 className="bd__title">{heading}</h2>
       </div>
       <p className="bd__sub" style={{ marginTop: "0.35rem" }}>
-        {fmt(data.total)} infraspecific {data.total === 1 ? "taxon" : "taxa"} recorded here. Each has
-        its own data and is not counted in the totals above.
+        {fmt(data.total)} finer {data.total === 1 ? "taxon" : "taxa"} recorded here. Their data is
+        included in the totals above.
       </p>
 
       <div className="bd__table-wrap" style={{ marginTop: "1rem" }}>
@@ -67,6 +72,19 @@ export default function SubspeciesSection({
             </tr>
           </thead>
           <tbody>
+            {direct && (
+              <tr>
+                <td className="bd-name">{name} (directly)</td>
+                <td className="tree-outline__rank" data-label="Rank">
+                  {rank}
+                </td>
+                {metrics.map((m) => (
+                  <td key={m.key} className="bd-num" data-label={m.card_title}>
+                    {fmt(direct[m.key] ?? 0)}
+                  </td>
+                ))}
+              </tr>
+            )}
             {data.items.map((it) => (
               <tr key={it.taxid}>
                 <td className="bd-name">

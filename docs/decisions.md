@@ -28,6 +28,18 @@ Streamlit app that answered the same questions but was slow to build and to serv
 - **Source split:** assemblies and their quality fields from NCBI Datasets (all
   assemblies); annotation quality (BUSCO, gene counts, GFF links) from Annotrieve,
   which already computes it; RNA-Seq run counts from ENA.
+- **A species is a taxon with a formal species name.** More than half of NCBI's
+  eukaryote species-rank taxa are placeholders ("Homo sp.", "uncultured eukaryote",
+  "cf." identifications, crosses between species); counted as species they would
+  more than halve every coverage figure. The rule is Lifemap's name filters plus a
+  binomial check, so it follows from the taxonomy alone with no curated list. Those
+  without data are dropped at build time, which also halves the `taxon` table; those
+  with data are kept as `informal species`, so no record is lost.
+- **Every record counts toward every clade above it, whatever rank it is attached
+  to.** A species whose genomes are all filed under its subspecies or varieties
+  (banana has 10) is covered, and every total equals the clade's record list. Finer
+  taxa and informal species are not counted as extra species, which would inflate
+  the species count (agreed with the Annotrieve maintainer in issue #31).
 - **Every annotation Annotrieve serves counts**, including community-contributed ones
   such as TOGA2 projections, not only those from GenBank, RefSeq and Ensembl. Any
   usable GFF is better than none for someone looking for an annotated genome, and

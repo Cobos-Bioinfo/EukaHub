@@ -81,7 +81,7 @@ class ResourceSummary(BaseModel):
 class AssemblyComposition(BaseModel):
     """Additive assembly-composition counts for a clade (from ``clade_features``):
     genome assemblies split by level, plus the reference/representative count.
-    Summed species-only up the lineage like the s_* totals."""
+    Summed up the lineage like the s_* totals."""
 
     complete: int
     chromosome: int
@@ -107,13 +107,16 @@ class CladeSummary(BaseModel):
     name: str
     rank: str
     n_rows: int  # species in the subtree
-    # True for below-species taxa (subspecies/strains/varietas/...): the row
-    # holds only this taxon's own directly-attached data (n_rows == 1) and is
-    # never counted toward any ancestor. The frontend renders these as leaf
-    # detail (own resource counts + source links), not a clade coverage summary.
+    # True for below-species taxa (subspecies/strains/varietas/...): a single
+    # unit (n_rows == 1) whose data also counts for its species. The frontend
+    # renders these as leaf detail (resource counts + source links), not a clade
+    # coverage summary.
     is_infraspecific: bool = False
     resources: dict[str, ResourceSummary]  # keyed by metric key, in METRICS order
     composition: AssemblyComposition  # assembly-level split + reference count
+    # Species and finer taxa only: records attached to this taxon itself, keyed by
+    # metric key; the rest of each total sits on the finer taxa below it.
+    direct: dict[str, int] | None = None
 
     @classmethod
     def from_metadata(
