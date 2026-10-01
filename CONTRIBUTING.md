@@ -81,7 +81,11 @@ one-core production host.
 ## Branches and commits
 
 - `main` holds released work; `dev` is where work lands. Open pull requests against
-  `dev`.
+  `dev`. `main` only moves by fast-forwarding to `dev`, so nothing is merged into
+  `main` directly.
+- Dependabot opens its update pull requests against `dev` once a month, grouped per
+  ecosystem (major npm upgrades arrive separately). Review them on GitHub; there is no
+  need to check their branches out locally.
 - Commit messages follow [Conventional Commits](https://www.conventionalcommits.org/):
   `feat(web): ...`, `fix(api): ...`, `docs: ...`, with a body explaining why.
 
