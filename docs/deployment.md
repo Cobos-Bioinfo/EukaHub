@@ -179,4 +179,7 @@ abusive requests:
 sudo bash infra/lowmem-test/lowmem-test.sh "$PWD"
 ```
 
-It deletes the prod stack's database volume first (`down -v`).
+It deletes the prod stack's database volume first (`down -v`), and ends with the
+refresher's install log and the command that tears the test stack down. The test stack
+has no `infra/.env`, so compose commands run against it by hand need `POSTGRES_PASSWORD`
+set to any value, as in that command.

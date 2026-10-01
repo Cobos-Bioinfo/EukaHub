@@ -74,5 +74,10 @@ done
 echo "== Database size on disk"
 docker exec eukahub-prod-db-1 psql -U "${POSTGRES_USER:-eukahub}" -d "${POSTGRES_DB:-eukahub}" -tAc \
   "select datname, pg_size_pretty(pg_database_size(datname)) from pg_database where datname like 'eukahub%'"
+
+echo "== Refresher install (expect analyzed, all invariants passed, promoted)"
+"${C[@]}" logs --no-log-prefix refresher 2>&1 | grep -E "analyzed|invariants passed|promoted|ERROR|Error" || true
+
+# The compose file refuses to load without POSTGRES_PASSWORD; any value does for `down`.
 echo "== Done. Tear down with:"
-echo "   sudo docker compose -f $REPO/infra/docker-compose.prod.yml -f $HERE/lowmem.test.yml down -v"
+echo "   sudo env POSTGRES_PASSWORD=x docker compose -f $REPO/infra/docker-compose.prod.yml -f $HERE/lowmem.test.yml down -v"
