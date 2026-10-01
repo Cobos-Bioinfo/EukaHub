@@ -238,8 +238,8 @@ fixes over time; rebuild with `$C build --pull && $C up -d` every few months.
 - Data pages say "not found" right after the first start: the dataset is still
   installing; see the refresher logs.
 - A request returns 504 "needs more work than the server allows": a very large
-  query hit the time limit. Expected for extreme requests (for example every
-  species in Eukaryota at once); the server is unaffected.
+  query hit the time limit. The server is unaffected; a smaller group or a coarser
+  rank works.
 - 503 "The server is busy": all database connections were busy; clients should
   retry after the `Retry-After` delay.
 
@@ -247,7 +247,7 @@ fixes over time; rebuild with `$C build --pull && $C up -d` every few months.
 
 `infra/lowmem-test/` runs the whole stack capped at 1 GB of RAM (no swap) with every
 container pinned to one CPU core, installs the dataset, and times typical and
-abusive requests:
+heavy requests (such as exporting every eukaryotic species):
 
 ```bash
 sudo bash infra/lowmem-test/lowmem-test.sh "$PWD"

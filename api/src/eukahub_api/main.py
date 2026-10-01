@@ -718,8 +718,8 @@ def clade_export(
         logic=logic,
         exclude_empty=exclude_empty,
     )
-    # Pull the header and first data row now: that runs the query (its sort is
-    # the expensive part) before any byte is sent, so a statement timeout on a
+    # Pull the header and first batch of rows now: that runs the query (its sort
+    # is the expensive part) before any byte is sent, so a statement timeout on a
     # huge export is a clean 504 instead of a 200 that stops mid-download.
     head = list(itertools.islice(rows, 2))
     filename = f"{root_name.replace(' ', '_')}_{rank.value}_data.tsv"
