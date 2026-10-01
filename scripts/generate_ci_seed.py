@@ -56,6 +56,8 @@ EUKARYOTA_TAXID = 2759
 #   Rodentia: Mus musculus
 #   Arthropoda (a 2nd phylum under Eukaryota, for real breakdown sorting):
 #              Drosophila melanogaster
+#   Papio: a cross between two baboon species, the informal-species case
+#   Homo heidelbergensis: a species without data, so the gaps tests find gaps
 ANCHOR_TAXIDS: tuple[int, ...] = (
     9606,    # Homo sapiens (species)
     63221,   # Homo sapiens neanderthalensis (subspecies, childless)
@@ -66,6 +68,8 @@ ANCHOR_TAXIDS: tuple[int, ...] = (
     9685,    # Felis catus (species)
     10090,   # Mus musculus (species)
     7227,    # Drosophila melanogaster (species)
+    208510,  # Papio cynocephalus x Papio anubis (informal species, carries assemblies)
+    1425170,  # Homo heidelbergensis (species without data: every resource has a gap)
 )
 
 # Per-taxid record cap for the data-rich anchors, so the file stays small. Human
@@ -152,9 +156,8 @@ def build_clade_features(
 
     Leaf inputs are rebuilt from the slice's *own* per-record rows (so the
     aggregates match the seeded assemblies/annotations exactly), except reads —
-    which have no per-record table — whose per-species leaf counts are read back
-    from the production rollup (a species' rolled-up ``s_rna``/``s_lng`` is its
-    own leaf value, since a species' subtree is itself)."""
+    which have no per-record table — whose per-taxon counts are read back from the
+    production rollup as each taxon's total minus its children's."""
     acol = {c: i for i, c in enumerate(ASSEMBLY_COLUMNS)}
     assemblies_pl = pl.DataFrame(
         {
@@ -170,10 +173,15 @@ def build_clade_features(
         schema={"taxid": pl.Int64},
     )
 
-    # Reads: per-species (and per-infraspecific) leaf counts from the prod rollup.
     reads_rows = conn.execute(
-        "SELECT taxid, s_rna - s_lng AS short, s_lng AS long FROM clade_features "
-        "WHERE taxid = ANY(%s) AND (s_rna > 0 OR s_lng > 0)",
+        "SELECT f.taxid, "
+        "f.s_rna - f.s_lng - COALESCE(sum(cf.s_rna - cf.s_lng), 0) AS short, "
+        "f.s_lng - COALESCE(sum(cf.s_lng), 0) AS long "
+        "FROM clade_features f "
+        "LEFT JOIN taxon c ON c.parent_id = f.taxid AND c.taxid <> c.parent_id "
+        "LEFT JOIN clade_features cf ON cf.taxid = c.taxid "
+        "WHERE f.taxid = ANY(%s) "
+        "GROUP BY f.taxid, f.s_rna, f.s_lng",
         (taxon["taxid"].to_list(),),
     ).fetchall()
     reads_pl = pl.DataFrame(

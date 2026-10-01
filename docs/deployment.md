@@ -9,8 +9,8 @@ see [architecture.md](architecture.md).
 
 - Docker Engine with the Compose v2 plugin.
 - About 1 GB of RAM and one CPU core for the whole stack (tested under those limits).
-- Disk: the database takes about 2.2 GB. During an update three copies exist for a
-  few minutes (live, incoming, previous), so plan for about 7 GB plus the images.
+- Disk: the database takes about 1 GB. During an update three copies exist for a
+  few minutes (live, incoming, previous), so plan for about 3 GB plus the images.
 - Outbound HTTPS to `api.github.com` and `github.com` (the Release download
   redirects to GitHub's asset storage). No inbound access is needed besides the web
   port.

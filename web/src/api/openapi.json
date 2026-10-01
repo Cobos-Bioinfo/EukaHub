@@ -207,7 +207,7 @@
         "type": "string"
       },
       "AssemblyComposition": {
-        "description": "Additive assembly-composition counts for a clade (from ``clade_features``):\ngenome assemblies split by level, plus the reference/representative count.\nSummed species-only up the lineage like the s_* totals.",
+        "description": "Additive assembly-composition counts for a clade (from ``clade_features``):\ngenome assemblies split by level, plus the reference/representative count.\nSummed up the lineage like the s_* totals.",
         "properties": {
           "chromosome": {
             "title": "Chromosome",
@@ -504,6 +504,20 @@
         "properties": {
           "composition": {
             "$ref": "#/components/schemas/AssemblyComposition"
+          },
+          "direct": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "integer"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Direct"
           },
           "is_infraspecific": {
             "default": false,
@@ -1217,6 +1231,20 @@
           "composition": {
             "$ref": "#/components/schemas/AssemblyComposition"
           },
+          "direct": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "integer"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Direct"
+          },
           "has_children": {
             "title": "Has Children",
             "type": "boolean"
@@ -1596,7 +1624,7 @@
     },
     "/clade/{taxid}/summary": {
       "get": {
-        "description": "Genomic Resource Summary for one taxon: species count + per-resource\ncoverage/total/percent. One indexed lookup on `clade_features`.",
+        "description": "Genomic Resource Summary for one taxon: species count + per-resource\ncoverage/total/percent. For a species or a finer taxon, also the records\nattached to the taxon itself rather than to a finer taxon below it.",
         "operationId": "clade_summary_clade__taxid__summary_get",
         "parameters": [
           {
@@ -1908,7 +1936,7 @@
             "schema": {
               "description": "Name query.",
               "maxLength": 100,
-              "minLength": 1,
+              "minLength": 3,
               "title": "Q",
               "type": "string"
             }

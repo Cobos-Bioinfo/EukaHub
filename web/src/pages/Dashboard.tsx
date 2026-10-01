@@ -18,6 +18,7 @@ import SubspeciesSection from "../components/SubspeciesSection";
 import ViewSwitcher from "../components/ViewSwitcher";
 import { useAsync } from "../hooks/useAsync";
 import { fmt } from "../lib/format";
+import { INFORMAL_SPECIES_RANK } from "../lib/taxonomy";
 
 /** The Genomic Resource Summary (Q1) for one taxon. */
 export default function Dashboard() {
@@ -40,19 +41,17 @@ export default function Dashboard() {
   }
 
   const s = summary.data;
-  // Below-species taxa (subspecies/strains/...) are leaf detail: show their own
-  // record counts + source links, and list any finer taxa beneath them, but no
-  // clade coverage summary or generic rank breakdown. A species is also a leaf
-  // for these purposes (its "breakdown" is its subspecies).
-  const isLeaf = s.is_infraspecific;
-  const isSpecies = s.rank === "species";
-  const showLinks = isSpecies || isLeaf;
-  const showBreakdown = !isSpecies && !isLeaf;
-  const showInfra = isSpecies || isLeaf;
+  // A species, an informal species or a finer taxon is a single unit: its cards
+  // count records (split into those on the taxon itself and on its finer taxa),
+  // and its finer taxa are listed instead of a rank breakdown.
+  const isInfra = s.is_infraspecific;
+  const isInformal = s.rank === INFORMAL_SPECIES_RANK;
+  const isUnit = isInfra || isInformal || s.rank === "species";
   // Per-record drill-down only when the clade actually has assemblies or
   // annotations (avoids an empty browser + its fetches for data-less taxa).
   const hasRecords = s.resources.ass.total > 0 || s.resources.ann.total > 0;
   const rankWord = s.rank && s.rank !== "no rank" ? s.rank : "infraspecific taxon";
+  const belowLabel = isInfra ? "from finer subdivisions" : "from subspecies and strains";
 
   return (
     <section className="dashboard">
@@ -65,20 +64,28 @@ export default function Dashboard() {
               <h1 className="dashboard__name">{s.name}</h1>
               <span className="rank-badge">{s.rank}</span>
             </div>
-            {isLeaf ? (
+            {isInfra ? (
               <p className="dashboard__note">
-                This {rankWord} has its own data. It is not counted toward its parent species or any
-                higher group. <Link to="/faq#subspecies">See FAQs</Link>
+                This {rankWord} is not counted as a separate species. Its data counts toward its
+                species and every group above it. <Link to="/faq#subspecies">See FAQs</Link>
+              </p>
+            ) : isInformal ? (
+              <p className="dashboard__note">
+                NCBI records this taxon without a formal species name, so it is not counted as a
+                species. Its data counts toward every group above it.{" "}
+                <Link to="/faq#informal-species">See FAQs</Link>
               </p>
             ) : (
-              <p className="dashboard__species">
-                <strong>{fmt(s.n_rows)}</strong> species in this clade
-              </p>
+              !isUnit && (
+                <p className="dashboard__species">
+                  <strong>{fmt(s.n_rows)}</strong> species in this clade
+                </p>
+              )
             )}
           </header>
           {about.data && <AboutCard about={about.data} />}
-          {showBreakdown && <ViewSwitcher taxid={taxid} name={s.name} current="dashboard" />}
-          {showLinks && <SpeciesLinks metrics={metrics.data} taxid={taxid} />}
+          {!isUnit && <ViewSwitcher taxid={taxid} name={s.name} current="dashboard" />}
+          {isUnit && <SpeciesLinks metrics={metrics.data} taxid={taxid} />}
         </aside>
 
         <div className="dashboard__content">
@@ -91,7 +98,9 @@ export default function Dashboard() {
                   config={m}
                   value={value}
                   taxid={taxid}
-                  mode={isLeaf ? "count" : "coverage"}
+                  mode={isUnit ? "count" : "coverage"}
+                  direct={s.direct?.[m.key]}
+                  belowLabel={belowLabel}
                 />
               ) : null;
             })}
@@ -101,7 +110,7 @@ export default function Dashboard() {
             <QualitySection taxid={taxid} quality={quality.data} composition={s.composition} />
           )}
 
-          {showBreakdown && !lineage.loading && (
+          {!isUnit && !lineage.loading && (
             <BreakdownMap
               key={`bmap-${taxid}`}
               root={{ taxid, name: s.name, rank: s.rank }}
@@ -110,8 +119,15 @@ export default function Dashboard() {
               variant="embed"
             />
           )}
-          {showInfra && (
-            <SubspeciesSection key={`subsp-${taxid}`} taxid={taxid} rank={s.rank} metrics={metrics.data} />
+          {isUnit && (
+            <SubspeciesSection
+              key={`subsp-${taxid}`}
+              taxid={taxid}
+              name={s.name}
+              rank={s.rank}
+              direct={s.direct}
+              metrics={metrics.data}
+            />
           )}
           {hasRecords && <RecordBrowser key={`rec-${taxid}`} taxid={taxid} />}
         </div>

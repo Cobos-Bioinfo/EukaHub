@@ -30,6 +30,7 @@ from contextlib import asynccontextmanager
 from typing import Annotated
 
 from eukahub_core.metrics import METRICS, QUALITY_STATS
+from eukahub_core.taxonomy import UNIT_RANKS
 from fastapi import FastAPI, HTTPException, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -55,6 +56,7 @@ from eukahub_api.queries import (
     fetch_children,
     fetch_compare,
     fetch_dataset_meta,
+    fetch_direct_totals,
     fetch_gaps,
     fetch_lineage,
     fetch_overview,
@@ -463,12 +465,16 @@ def gaps(
 @app.get("/clade/{taxid}/summary", response_model=CladeSummary)
 def clade_summary(taxid: int, conn: Conn) -> CladeSummary:
     """Genomic Resource Summary for one taxon: species count + per-resource
-    coverage/total/percent. One indexed lookup on `clade_features`."""
+    coverage/total/percent. For a species or a finer taxon, also the records
+    attached to the taxon itself rather than to a finer taxon below it."""
     try:
         name, rank, meta, is_infraspecific = fetch_summary(conn, taxid)
     except TaxonNotFound:
         raise HTTPException(status_code=404, detail=f"taxon {taxid} not found")
-    return CladeSummary.from_metadata(name, rank, meta, is_infraspecific)
+    summary = CladeSummary.from_metadata(name, rank, meta, is_infraspecific)
+    if is_infraspecific or rank in UNIT_RANKS:
+        summary.direct = fetch_direct_totals(conn, taxid, meta)
+    return summary
 
 
 @app.get("/clade/{taxid}/breakdown", response_model=Breakdown)

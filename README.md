@@ -125,7 +125,7 @@ schema at http://localhost:8080/api/openapi.json.
 with **1 GB of RAM in total and a single CPU core** shared by all containers,
 with no process killed. Postgres cancels any API query that runs longer than 15 s
 (the client gets a clear 504), so one expensive request can't monopolize the
-CPU. The database takes about 2.2 GB on disk, and an update briefly holds three
+CPU. The database takes about 1 GB on disk, and an update briefly holds three
 copies of it (the live one, the incoming one, and the previous one kept for
 rollback).
 

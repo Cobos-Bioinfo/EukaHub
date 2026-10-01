@@ -6,18 +6,23 @@ import { externalUrl, fmt, fmtPct } from "../lib/format";
 /** One genomic-resource card.
  *  - "coverage" (default): species-covered count + percent bar + total (for a
  *    clade of species).
- *  - "count": the taxon's own record total, no coverage meter (for an
- *    infraspecific leaf, where a "% of species" is meaningless). */
+ *  - "count": the taxon's record total, no coverage meter (for a species or a
+ *    finer taxon, where a "% of species" is meaningless). When `direct` is given
+ *    and some records sit on finer taxa, the card splits the total. */
 export default function MetricCard({
   config,
   value,
   taxid,
   mode = "coverage",
+  direct,
+  belowLabel = "from finer taxa",
 }: {
   config: MetricConfig;
   value: ResourceSummary;
   taxid: number;
   mode?: "coverage" | "count";
+  direct?: number;
+  belowLabel?: string;
 }) {
   const head = (
     <header className="card__head">
@@ -44,6 +49,12 @@ export default function MetricCard({
           <span className="card__count">{fmt(value.total)}</span>
         </p>
         <p className="card__caption">{value.total === 1 ? "record" : "records"}</p>
+        {direct !== undefined && direct < value.total && (
+          <p className="card__total">
+            <strong>{fmt(direct)}</strong> linked directly,{" "}
+            <strong>{fmt(value.total - direct)}</strong> {belowLabel}
+          </p>
+        )}
       </article>
     );
   }

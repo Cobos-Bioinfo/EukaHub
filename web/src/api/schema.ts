@@ -85,7 +85,8 @@ export interface paths {
         /**
          * Clade Summary
          * @description Genomic Resource Summary for one taxon: species count + per-resource
-         *     coverage/total/percent. One indexed lookup on `clade_features`.
+         *     coverage/total/percent. For a species or a finer taxon, also the records
+         *     attached to the taxon itself rather than to a finer taxon below it.
          */
         get: operations["clade_summary_clade__taxid__summary_get"];
         put?: never;
@@ -481,7 +482,7 @@ export interface components {
          * AssemblyComposition
          * @description Additive assembly-composition counts for a clade (from ``clade_features``):
          *     genome assemblies split by level, plus the reference/representative count.
-         *     Summed species-only up the lineage like the s_* totals.
+         *     Summed up the lineage like the s_* totals.
          */
         AssemblyComposition: {
             /** Chromosome */
@@ -585,6 +586,10 @@ export interface components {
          */
         CladeSummary: {
             composition: components["schemas"]["AssemblyComposition"];
+            /** Direct */
+            direct?: {
+                [key: string]: number;
+            } | null;
             /**
              * Is Infraspecific
              * @default false
@@ -917,6 +922,10 @@ export interface components {
          */
         TaxonNode: {
             composition: components["schemas"]["AssemblyComposition"];
+            /** Direct */
+            direct?: {
+                [key: string]: number;
+            } | null;
             /** Has Children */
             has_children: boolean;
             /**

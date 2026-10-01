@@ -20,6 +20,7 @@ import os
 import sqlite3
 
 import psycopg
+from eukahub_core.taxonomy import INFORMAL_SPECIES_RANK
 
 log = logging.getLogger("eukahub.validate")
 
@@ -48,7 +49,8 @@ def check_invariants(conn: psycopg.Connection) -> None:
 
     The checks are deliberately structural (not pinned magic numbers), so they
     hold across rebuilds as the sources drift: non-empty tables, the species
-    universe matches the rollup, coverage never exceeds the species count, and the
+    universe matches the rollup, the totals match the record tables, no informal
+    species is kept without data, coverage never exceeds the species count, and the
     additive assembly-composition split reconciles with the assembly total.
     """
     with conn.cursor() as cur:
@@ -83,7 +85,29 @@ def check_invariants(conn: psycopg.Connection) -> None:
             )
         log.info("invariant: Eukaryota n_rows == species count (%d)", euk_n_rows)
 
-        # 3. Coverage never exceeds the species count, for any clade.
+        # 3. Every record counts at Eukaryota, whatever rank it is attached to, so
+        #    its totals match the record tables.
+        for table, total in (("assembly", "s_ass"), ("annotation", "s_ann")):
+            records = scalar(f"SELECT count(*) FROM {table}")
+            rolled = scalar(
+                f"SELECT {total} FROM clade_features WHERE taxid = %s", (EUKARYOTA_TAXID,)
+            )
+            if rolled != records:
+                raise DataValidationError(
+                    f"Eukaryota {total} ({rolled}) != {table} records ({records})"
+                )
+        log.info("invariant: Eukaryota totals match the record tables")
+
+        # 4. Informal species are kept only when they carry data.
+        empty_informal = scalar(
+            "SELECT count(*) FROM taxon t LEFT JOIN clade_features f USING (taxid) "
+            "WHERE t.rank = %s AND COALESCE(f.s_ass + f.s_ann + f.s_rna, 0) = 0",
+            (INFORMAL_SPECIES_RANK,),
+        )
+        if empty_informal:
+            raise DataValidationError(f"{empty_informal} informal species carry no data")
+
+        # 5. Coverage never exceeds the species count, for any clade.
         bad = scalar(
             "SELECT count(*) FROM clade_features "
             "WHERE c_ass > n_rows OR c_ann > n_rows OR c_rna > n_rows OR c_lng > n_rows"
@@ -91,7 +115,7 @@ def check_invariants(conn: psycopg.Connection) -> None:
         if bad:
             raise DataValidationError(f"{bad} clade rows have coverage > n_rows")
 
-        # 4. Eukaryota's assembly-level split reconciles: the four buckets sum to
+        # 6. Eukaryota's assembly-level split reconciles: the four buckets sum to
         #    at most s_ass (some assemblies carry no/unmapped level), and non-zero.
         cur.execute(
             "SELECT n_ass_complete + n_ass_chromosome + n_ass_scaffold + n_ass_contig, "

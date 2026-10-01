@@ -3,10 +3,9 @@
 Rebuild/slice-safe: the assertions never pin a specific clade to a fixed rank in
 the top-N (prod has far bigger clades than the CI slice), so they cross-check
 whatever comes back against /clade/{taxid}/summary instead. The one place a
-non-empty result is needed uses resource=lng at class level: the CI slice caps
-its species to ones that carry assemblies/annotations (so ass/ann/rna gaps are 0
-there), but long-read coverage is sparse, so Mammalia keeps a gap on both the
-slice and prod.
+non-empty result is needed uses resource=lng at class level: long-read coverage
+is sparse on prod, and the CI slice carries a mammal species without data, so
+Mammalia keeps a gap on both.
 """
 
 from __future__ import annotations

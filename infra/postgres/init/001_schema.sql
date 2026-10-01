@@ -27,8 +27,8 @@ CREATE INDEX IF NOT EXISTS taxon_name_trgm_idx ON taxon USING GIN (name gin_trgm
 
 -- Precomputed rollups: one row per taxon at ANY rank (computed offline).
 -- Column set mirrors eukahub_core.metrics.METRICS (keys: ass, ann, rna, lng):
---   c_<key> = species covered (>=1 of that resource in the subtree)
---   s_<key> = total resource count summed across the subtree's species
+--   c_<key> = species with >=1 of that resource on themselves or a finer taxon
+--   s_<key> = total resource count in the subtree, at any rank
 -- Percentages (p_<key>) are derived in code, not stored.
 CREATE TABLE IF NOT EXISTS clade_features (
     taxid   INTEGER PRIMARY KEY REFERENCES taxon(taxid),

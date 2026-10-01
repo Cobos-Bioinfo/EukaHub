@@ -36,20 +36,35 @@ export default function Faq() {
         <h2 className="faq__q">What do the coverage percentages mean?</h2>
         <p className="faq__a">
           The share of species in a group that have at least one of a resource. "12%
-          assemblies" means 12% of the species in that group have a genome assembly.
+          assemblies" means 12% of the species in that group have a genome assembly. The
+          totals next to them count every record in the group, whichever taxon it is attached
+          to.
         </p>
       </div>
 
       <div className="faq__item" id="subspecies">
-        <h2 className="faq__q">Why isn't a subspecies' data counted toward its species?</h2>
+        <h2 className="faq__q">Is data on a subspecies counted toward its species?</h2>
         <p className="faq__a">
-          EukaHub measures data availability across species. For any group, the coverage
-          figures show the share of its species that have each resource. Records that NCBI,
-          Annotrieve, or ENA register on a subspecies or strain belong to that taxon, not to
-          the species itself, so counting them upward would inflate the species' totals (and
-          every parent's) with data that isn't theirs and blur what the coverage percentages
-          mean. Instead, aggregates stay at the species level, and a subspecies' or strain's
-          own data appears when you open that taxon directly.
+          Yes. Records that NCBI, Annotrieve or ENA attach to a subspecies, variety or strain
+          count toward its species and every group above it, just like the species' own
+          records. A subspecies is not counted as an extra species: a species whose genomes
+          are all filed under its subspecies counts once, as a species with genomes. A
+          species' page shows which records are attached to the species itself and which to
+          its subspecies and strains.
+        </p>
+      </div>
+
+      <div className="faq__item" id="informal-species">
+        <h2 className="faq__q">Why are there fewer species than in the NCBI Taxonomy?</h2>
+        <p className="faq__a">
+          NCBI gives the species rank to many taxa that are not named species: specimens
+          identified only to genus ("Homo sp."), environmental and uncultured samples,
+          uncertain identifications ("cf.", "aff."), crosses between two species and cultivar
+          groups. They are more than half of NCBI's eukaryote species, so counting them would
+          make every group look emptier than it is. EukaHub counts only species with a formal
+          Latin name. Informal taxa without data are left out. Those with data are kept and
+          labelled "informal species": their records count in every total above them, but
+          they are not counted as species or in the coverage percentages.
         </p>
       </div>
 

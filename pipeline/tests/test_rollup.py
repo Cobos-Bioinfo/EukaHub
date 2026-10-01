@@ -4,7 +4,7 @@ the per-metric derivations without a database or the real taxdump.
 
 import polars as pl
 from eukahub_core.metrics import COMPOSITION_COLUMNS
-from eukahub_pipeline.rollup import assemble_leaf_features, rollup_from_frames
+from eukahub_pipeline.rollup import assemble_leaf_features, carrying_taxids, rollup_from_frames
 
 # Output column order of rollup_from_frames (for the full-row tuple asserts):
 # taxid, n_rows, c_ass, c_ann, c_rna, c_lng, s_ass, s_ann, s_rna, s_lng,
@@ -142,40 +142,82 @@ def test_rollup_composition_columns_sum_up_lineages() -> None:
     assert out[1]["n_ass_contig"] == 1  # all the way to the root
 
 
-def test_rollup_infraspecific_rows_not_counted_upward() -> None:
-    """Below-species taxa get their own directly-attached rows (n_rows=1) but are
-    never rolled into an ancestor — the species rollup stays species-only."""
+def test_rollup_below_species_data_counts_for_the_species() -> None:
+    """Data on a subspecies or strain counts toward its species (coverage and
+    totals) and every clade above; the finer taxa never add to the species count."""
     taxon = pl.DataFrame(
         {
-            "taxid": [1, 2759, 9606, 63221, 2000000],
-            "rank": ["no rank", "superkingdom", "species", "subspecies", "strain"],
+            "taxid": [1, 2759, 9606, 63221, 2000000, 4641, 4642],
+            "rank": ["no rank", "superkingdom", "species", "subspecies", "strain",
+                     "species", "varietas"],
             "path": [
                 "1",
                 "1.2759",
                 "1.2759.9606",
                 "1.2759.9606.63221",
                 "1.2759.9606.63221.2000000",
+                "1.2759.4641",
+                "1.2759.4641.4642",
             ],
         }
     )
     features = pl.DataFrame(
         {
-            "taxid": [9606, 63221, 2000000],
-            "short": [5, 0, 1],
-            "long": [0, 0, 0],
-            "ass": [2, 3, 1],
-            "ann": [1, 0, 0],
+            "taxid": [9606, 63221, 2000000, 4642],
+            "short": [5, 0, 1, 0],
+            "long": [0, 0, 0, 0],
+            "ass": [2, 3, 1, 4],
+            "ann": [1, 0, 0, 0],
         }
     )
     out = {r[0]: r for r in rollup_from_frames(taxon, features).iter_rows()}
 
-    # The species keeps only its OWN species-level features (subspecies dropped):
-    assert out[9606] == (9606, 1, 1, 1, 1, 0, 2, 1, 5, 0) + _ZERO_COMPOSITION
-    # Ancestors count ONLY the one species — the subspecies + strain add nothing:
-    assert out[2759] == (2759, 1, 1, 1, 1, 0, 2, 1, 5, 0) + _ZERO_COMPOSITION
-    # Below-species taxa each get their own row: n_rows=1, directly-attached only.
-    assert out[63221] == (63221, 1, 1, 0, 0, 0, 3, 0, 0, 0) + _ZERO_COMPOSITION
+    # The species sums its own and its subspecies' and strain's data:
+    assert out[9606] == (9606, 1, 1, 1, 1, 0, 6, 1, 6, 0) + _ZERO_COMPOSITION
+    # A species with data only on a variety is covered:
+    assert out[4641] == (4641, 1, 1, 0, 0, 0, 4, 0, 0, 0) + _ZERO_COMPOSITION
+    # Two species, both with assemblies; totals include every record:
+    assert out[2759] == (2759, 2, 2, 1, 1, 0, 10, 1, 6, 0) + _ZERO_COMPOSITION
+    # Finer taxa are single units holding their own subtree's data:
+    assert out[63221] == (63221, 1, 1, 0, 1, 0, 4, 0, 1, 0) + _ZERO_COMPOSITION
     assert out[2000000] == (2000000, 1, 1, 0, 1, 0, 1, 0, 1, 0) + _ZERO_COMPOSITION
+
+
+def test_rollup_informal_species_and_higher_rank_data() -> None:
+    """Data on an informal species or on a genus counts in the totals above it but
+    not as species coverage; an informal species is a single unit."""
+    taxon = pl.DataFrame(
+        {
+            "taxid": [1, 2759, 9605, 9606, 2813598],
+            "rank": ["no rank", "superkingdom", "genus", "species", "informal species"],
+            "path": ["1", "1.2759", "1.2759.9605", "1.2759.9605.9606", "1.2759.9605.2813598"],
+        }
+    )
+    features = pl.DataFrame(
+        {
+            "taxid": [9605, 2813598],
+            "short": [2, 0],
+            "long": [0, 0],
+            "ass": [0, 3],
+            "ann": [0, 0],
+        }
+    )
+    out = {r["taxid"]: r for r in rollup_from_frames(taxon, features).iter_rows(named=True)}
+
+    genus = out[9605]
+    assert genus["n_rows"] == 1  # only the formal species
+    assert (genus["c_ass"], genus["c_rna"]) == (0, 0)  # it has no data of its own
+    assert (genus["s_ass"], genus["s_rna"]) == (3, 2)
+    informal = out[2813598]
+    assert (informal["n_rows"], informal["c_ass"], informal["s_ass"]) == (1, 1, 3)
+    assert out[9606]["s_ass"] == 0
+
+
+def test_carrying_taxids() -> None:
+    features = pl.DataFrame(
+        {"taxid": [1, 2, 3], "short": [0, 4, 0], "long": [0, 0, 0], "ass": [0, 0, 1], "ann": [0, 0, 0]}
+    )
+    assert carrying_taxids(features) == {2, 3}
 
 
 def test_assemble_leaf_features() -> None:
