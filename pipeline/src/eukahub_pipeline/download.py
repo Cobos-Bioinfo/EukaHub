@@ -8,16 +8,16 @@ from pathlib import Path
 
 import requests
 
-log = logging.getLogger("eukahub.download")
+from eukahub_pipeline.sources import TAXDUMP, Source
 
-TAXDUMP_URL = "https://ftp.ncbi.nlm.nih.gov/pub/taxonomy/taxdump.tar.gz"
+log = logging.getLogger("eukahub.download")
 
 # Only these two members are needed; the archive holds several others.
 _WANTED = ("nodes.dmp", "names.dmp")
 
 
 def download_taxdump(
-    dest_dir: str | Path, url: str = TAXDUMP_URL, force: bool = False
+    dest_dir: str | Path, source: Source = TAXDUMP, force: bool = False
 ) -> Path:
     """Fetch and extract nodes.dmp + names.dmp into ``dest_dir``.
 
@@ -31,8 +31,8 @@ def download_taxdump(
         return dest
 
     tgz = dest / "taxdump.tar.gz"
-    log.info("Downloading %s -> %s", url, tgz)
-    with requests.get(url, stream=True, timeout=120) as r:
+    log.info("Downloading %s -> %s", source.url, tgz)
+    with requests.get(source.url, stream=True, timeout=source.timeout) as r:
         r.raise_for_status()
         with open(tgz, "wb") as fh:
             fh.writelines(r.iter_content(chunk_size=1 << 20))

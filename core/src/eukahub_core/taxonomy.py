@@ -1,4 +1,10 @@
-"""Rank vocabulary shared by the pipeline and the API."""
+"""Taxonomy constants and rank vocabulary shared by the pipeline and the API."""
+
+# The dataset covers Eukaryota. `taxon` also holds its two ancestors, the NCBI
+# root and "cellular organisms", so every path starts at the root; they are
+# hidden from search and breadcrumbs.
+EUKARYOTA_TAXID = 2759
+SPINE_TAXIDS: tuple[int, ...] = (1, 131567)
 
 SPECIES_RANK = "species"
 

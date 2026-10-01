@@ -21,6 +21,7 @@ from eukahub_pipeline.fetch_assemblies import (
     drop_duplicate_assemblies,
     parse_assembly_record,
 )
+from eukahub_pipeline.sources import ENA
 from tenacity import stop_after_attempt, wait_none
 
 # A trimmed but real-shaped `datasets summary genome ... --as-json-lines` record.
@@ -188,7 +189,7 @@ class _Reply:
 
 
 def _ena(monkeypatch, expected: int, rows: list) -> None:
-    def post(endpoint, **fields):
+    def post(source, endpoint, **fields):
         return _Reply(text=f"count\n{expected}\n") if endpoint == "count" else _Reply(rows=rows)
 
     monkeypatch.setattr(fr, "_post", post)
@@ -214,14 +215,14 @@ def test_fetch_reads_rejects_an_incomplete_download(monkeypatch, rows):
     _ena(monkeypatch, expected=3, rows=rows)
     once = fr._query_ena.retry_with(stop=stop_after_attempt(1))
     with pytest.raises(RuntimeError, match="of 3 runs"):
-        once()
+        once(ENA)
 
 
 def test_fetch_reads_retries_until_the_download_is_complete(monkeypatch):
     downloads = iter([_RUNS[:1], _RUNS])
 
-    def post(endpoint, **fields):
+    def post(source, endpoint, **fields):
         return _Reply(text="count\n3\n") if endpoint == "count" else _Reply(rows=next(downloads))
 
     monkeypatch.setattr(fr, "_post", post)
-    assert fr._query_ena.retry_with(wait=wait_none())() == _RUNS
+    assert fr._query_ena.retry_with(wait=wait_none())(ENA) == _RUNS

@@ -2,9 +2,7 @@ import { Fragment } from "react";
 import { Link } from "react-router";
 
 import type { TaxonRef } from "../api/types";
-
-// Trim the two synthetic roots NCBI puts above every lineage.
-const HIDDEN_TAXIDS = new Set([1, 131567]); // root, cellular organisms
+import { SPINE_TAXIDS } from "../lib/taxonomy";
 
 /** The lineage from Eukaryota down to the current taxon (every NCBI rank),
  *  shown as a wrapping breadcrumb. */
@@ -15,7 +13,7 @@ export default function Breadcrumb({
   lineage: TaxonRef[];
   currentTaxid: number;
 }) {
-  const hops = lineage.filter((t) => !HIDDEN_TAXIDS.has(t.taxid));
+  const hops = lineage.filter((t) => !SPINE_TAXIDS.has(t.taxid));
 
   return (
     <nav className="breadcrumb" aria-label="Lineage">

@@ -1,12 +1,14 @@
+import { useSiteConfig } from "../hooks/useSiteConfig";
+
 /** EukaHub's privacy policy. Plain language, honest about the little we collect.
  *  Modeled on the sibling Annotrieve policy (both are read-only, account-free
- *  tools hosted at CRG). Prose is intentionally static, nothing is fetched.
- *  The data-protection contact is a placeholder until the CRG deployment. */
+ *  tools hosted at CRG). The prose is static; the data-protection contact is the
+ *  deployment's PRIVACY_CONTACT_EMAIL setting. */
 
 const UPDATED = "1 September 2026";
-const CONTACT_EMAIL = "placeholder@crg.eu";
 
 export default function Privacy() {
+  const contactEmail = useSiteConfig()?.privacy_contact_email;
   return (
     <section className="legal">
       <h1 className="legal__title">Privacy policy</h1>
@@ -112,7 +114,8 @@ export default function Privacy() {
       <div className="legal__section">
         <h2 className="legal__h">Contact</h2>
         <p>
-          Data protection contact: <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>
+          Data protection contact:{" "}
+          {contactEmail ? <a href={`mailto:${contactEmail}`}>{contactEmail}</a> : "…"}
         </p>
       </div>
 

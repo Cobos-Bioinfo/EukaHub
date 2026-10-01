@@ -6,10 +6,9 @@ import GapsScatter from "../components/GapsScatter";
 import RootPicker from "../components/RootPicker";
 import { DashboardIcon, MapIcon, TreeIcon } from "../components/icons";
 import { useAsync } from "../hooks/useAsync";
-import { cladeLabel } from "../lib/clades";
+import { useCladeLabel } from "../hooks/useSiteConfig";
 import { fmt, fmtCompact, fmtPct, fmtQuality } from "../lib/format";
-
-const EUKARYOTA_TAXID = 2759;
+import { EUKARYOTA_TAXID } from "../lib/taxonomy";
 
 // Ranks the leaderboard can group by (species excluded — a species is one row,
 // so its "gap" is 0 or 1 and meaningless). Coarse → fine, the selector order.
@@ -50,6 +49,7 @@ export default function GapsPage() {
     setParams(p);
   };
 
+  const cladeLabel = useCladeLabel();
   const metrics = useAsync(getMetricsConfig, []);
   const quality = useAsync(getQualityConfig, []);
   const gaps = useAsync(
@@ -210,7 +210,7 @@ function GapRow({
   canLookInside: boolean;
   onLookInside: () => void;
 }) {
-  const label = cladeLabel(item.taxid) ?? item.name;
+  const label = useCladeLabel()(item.taxid) ?? item.name;
   const width = Math.max((item.gap / maxGap) * 100, 2);
   // The quality of the genomes this clade *does* have (best BUSCO, median coding
   // genes). Null across the board means the covered species have no functional

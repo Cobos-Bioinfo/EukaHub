@@ -18,14 +18,15 @@ from __future__ import annotations
 import logging
 
 import requests
+from eukahub_core.taxonomy import EUKARYOTA_TAXID
 from tenacity import before_sleep_log, retry, stop_after_attempt, wait_exponential
+
+from eukahub_pipeline.sources import ENA, Source
 
 log = logging.getLogger("eukahub.fetch_reads")
 
-ENA_PORTAL = "https://www.ebi.ac.uk/ena/portal/api"
-EUKARYOTE_TXID = 2759
 _QUERY = (
-    f"tax_tree({EUKARYOTE_TXID}) AND "
+    f"tax_tree({EUKARYOTA_TAXID}) AND "
     '(library_source="transcriptomic" OR library_strategy="rna-seq")'
 )
 # ENA sometimes ends a large response early with a shorter but valid payload. A
@@ -39,21 +40,21 @@ _LONG_READ_PLATFORMS = {"OXFORD_NANOPORE", "PACBIO_SMRT"}
 READS_COLUMNS: tuple[str, ...] = ("taxid", "short", "long")
 
 
-def _post(endpoint: str, **fields: str | int) -> requests.Response:
+def _post(source: Source, endpoint: str, **fields: str | int) -> requests.Response:
     """POST the RNA-Seq read-run query to an ENA portal endpoint."""
     resp = requests.post(
-        f"{ENA_PORTAL}/{endpoint}",
+        f"{source.url}/{endpoint}",
         data={"result": "read_run", "query": _QUERY, **fields},
         headers={"Content-Type": "application/x-www-form-urlencoded"},
-        timeout=300,
+        timeout=source.timeout,
     )
     resp.raise_for_status()
     return resp
 
 
-def _expected_runs() -> int:
+def _expected_runs(source: Source) -> int:
     """How many runs match the query, from ENA's count endpoint ("count\\n<n>")."""
-    return int(_post("count").text.split()[-1])
+    return int(_post(source, "count").text.split()[-1])
 
 
 @retry(
@@ -62,24 +63,26 @@ def _expected_runs() -> int:
     before_sleep=before_sleep_log(log, logging.WARNING),
     reraise=True,
 )
-def _query_ena() -> list[dict]:
+def _query_ena(source: Source) -> list[dict]:
     """Return every matching run as ``{tax_id, instrument_platform}`` rows, retrying
     with backoff until the download is complete."""
-    expected = _expected_runs()
-    data = _post("search", fields="tax_id,instrument_platform", format="json", limit=0).json()
+    expected = _expected_runs(source)
+    data = _post(
+        source, "search", fields="tax_id,instrument_platform", format="json", limit=0
+    ).json()
     if not data or len(data) < expected * _MIN_COMPLETE:
         raise RuntimeError(f"ENA returned {len(data)} of {expected} runs")
     return data
 
 
-def fetch_reads() -> list[dict]:
+def fetch_reads(source: Source = ENA) -> list[dict]:
     """Return per-taxon RNA-Seq run counts as rows of ``{taxid, short, long}``.
 
     ``short`` = runs on any non-long-read platform; ``long`` = Oxford Nanopore /
     PacBio SMRT runs (``rna`` = short+long and ``lng`` = long are derived in the
     roll-up, matching the existing metrics).
     """
-    data = _query_ena()
+    data = _query_ena(source)
     counts: dict[int, list[int]] = {}  # taxid -> [short, long]
     for record in data:
         try:

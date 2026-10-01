@@ -499,6 +499,34 @@
         "title": "BucketQuality",
         "type": "object"
       },
+      "CladeGroup": {
+        "additionalProperties": false,
+        "description": "A curated group: its friendly label is shown wherever the group appears,\nit is in the \"Surprise me\" pool, and ``featured`` groups are the landing-page\ncards. Also the entry format of the deployment's groups file.",
+        "properties": {
+          "featured": {
+            "default": false,
+            "title": "Featured",
+            "type": "boolean"
+          },
+          "label": {
+            "maxLength": 60,
+            "minLength": 1,
+            "title": "Label",
+            "type": "string"
+          },
+          "taxid": {
+            "exclusiveMinimum": 0.0,
+            "title": "Taxid",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "taxid",
+          "label"
+        ],
+        "title": "CladeGroup",
+        "type": "object"
+      },
       "CladeSummary": {
         "description": "The Genomic Resource Summary (Q1) payload for one taxon.",
         "properties": {
@@ -1087,6 +1115,38 @@
           "percent"
         ],
         "title": "ResourceSummary",
+        "type": "object"
+      },
+      "SiteConfig": {
+        "description": "Deployment settings the web app reads once per page load (served by\n``/site-config``).",
+        "properties": {
+          "feedback_url": {
+            "title": "Feedback Url",
+            "type": "string"
+          },
+          "groups": {
+            "items": {
+              "$ref": "#/components/schemas/CladeGroup"
+            },
+            "title": "Groups",
+            "type": "array"
+          },
+          "privacy_contact_email": {
+            "title": "Privacy Contact Email",
+            "type": "string"
+          },
+          "source_code_url": {
+            "title": "Source Code Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "feedback_url",
+          "source_code_url",
+          "privacy_contact_email",
+          "groups"
+        ],
+        "title": "SiteConfig",
         "type": "object"
       },
       "SortColumn": {
@@ -1981,6 +2041,25 @@
           }
         },
         "summary": "Search"
+      }
+    },
+    "/site-config": {
+      "get": {
+        "description": "Deployment settings for the web app: the feedback, source code and privacy\ncontact links, and the curated groups (friendly labels, the \"Surprise me\"\npool, and the landing-page cards, flagged ``featured``).",
+        "operationId": "site_config_site_config_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SiteConfig"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Site Config"
       }
     },
     "/taxon/{taxid}": {

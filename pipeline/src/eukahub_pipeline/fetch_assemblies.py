@@ -19,10 +19,9 @@ import subprocess
 from collections.abc import Iterator
 
 import polars as pl
+from eukahub_core.taxonomy import EUKARYOTA_TAXID
 
 log = logging.getLogger("eukahub.fetch_assemblies")
-
-EUKARYOTE_TXID = 2759
 
 # Column set of the `assembly` table (infra/postgres/init/001_schema.sql), in
 # order — the per-record dicts yielded here use exactly these keys.
@@ -132,7 +131,7 @@ def drop_duplicate_assemblies(assemblies: pl.DataFrame) -> pl.DataFrame:
 
 
 def fetch_assemblies(
-    txid: int = EUKARYOTE_TXID, *, datasets_bin: str = "datasets"
+    txid: int = EUKARYOTA_TAXID, *, datasets_bin: str = "datasets"
 ) -> Iterator[dict]:
     """Stream normalized ``assembly`` rows for ``txid`` and its descendants.
 
@@ -184,7 +183,7 @@ if __name__ == "__main__":
     )
     import sys
 
-    root = int(sys.argv[1]) if len(sys.argv) > 1 else EUKARYOTE_TXID
+    root = int(sys.argv[1]) if len(sys.argv) > 1 else EUKARYOTA_TAXID
     rows = list(fetch_assemblies(root))
     log.info("Fetched %d assemblies under taxon %d", len(rows), root)
     for row in rows[:5]:

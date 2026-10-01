@@ -16,8 +16,8 @@ Phase 2 read endpoints:
 - ``GET /search``                      — name search for the root picker.
 
 ``/health`` (liveness) + ``/health/ready`` (DB readiness), ``/metrics-config``,
-``/quality-config``, and ``/meta`` (dataset provenance: the "Data updated" stamp)
-round out the service. Every request is logged as one structured JSON line (see
+``/quality-config``, ``/site-config`` (deployment links and curated groups), and
+``/meta`` (dataset provenance: the "Data updated" stamp) round out the service. Every request is logged as one structured JSON line (see
 ``logging_config``).
 """
 
@@ -30,7 +30,7 @@ from contextlib import asynccontextmanager
 from typing import Annotated
 
 from eukahub_core.metrics import METRICS, QUALITY_STATS
-from eukahub_core.taxonomy import UNIT_RANKS
+from eukahub_core.taxonomy import EUKARYOTA_TAXID, UNIT_RANKS
 from fastapi import FastAPI, HTTPException, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -41,7 +41,6 @@ from eukahub_api.db import Conn
 from eukahub_api.db import lifespan as db_lifespan
 from eukahub_api.logging_config import configure_logging
 from eukahub_api.queries import (
-    EUKARYOTA_TAXID,
     AnnotationSort,
     AssemblySort,
     FilterLogic,
@@ -85,12 +84,14 @@ from eukahub_api.schemas import (
     OverviewTotals,
     QualityStatConfig,
     QualityStatValue,
+    SiteConfig,
     TaxonAbout,
     TaxonChildren,
     TaxonLineage,
     TaxonNode,
     TaxonRef,
 )
+from eukahub_api.settings import get_settings
 from eukahub_api.wikipedia import fetch_about
 
 log = logging.getLogger("eukahub.api")
@@ -163,8 +164,10 @@ def cors_allow_origins() -> list[str]:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Configure structured logging, then open the DB pool (see db.lifespan)."""
+    """Configure structured logging, read the deployment settings (so any warning
+    about them is logged at startup), then open the DB pool (see db.lifespan)."""
     configure_logging()
+    get_settings()
     async with db_lifespan(app):
         log.info("startup complete")
         yield
@@ -293,7 +296,8 @@ def readiness(request: Request, response: Response) -> dict[str, str]:
 def metrics_config() -> list[MetricConfig]:
     """The tracked metrics — static card chrome the frontend renders once,
     keyed by the same metric keys the per-clade payloads use."""
-    return [MetricConfig.from_metric(m) for m in METRICS]
+    templates = get_settings().link_templates
+    return [MetricConfig.from_metric(m, templates[m.key]) for m in METRICS]
 
 
 @app.get("/quality-config", response_model=list[QualityStatConfig])
@@ -302,6 +306,20 @@ def quality_config() -> list[QualityStatConfig]:
     keyed by the stat keys the per-taxon quality values use (BUSCO, gene count,
     genome size, N50). The analogue of ``/metrics-config`` for the new dimension."""
     return [QualityStatConfig.from_stat(q) for q in QUALITY_STATS]
+
+
+@app.get("/site-config", response_model=SiteConfig)
+def site_config() -> SiteConfig:
+    """Deployment settings for the web app: the feedback, source code and privacy
+    contact links, and the curated groups (friendly labels, the "Surprise me"
+    pool, and the landing-page cards, flagged ``featured``)."""
+    settings = get_settings()
+    return SiteConfig(
+        feedback_url=settings.feedback_url,
+        source_code_url=settings.source_code_url,
+        privacy_contact_email=settings.privacy_contact_email,
+        groups=list(settings.groups),
+    )
 
 
 @app.get("/meta", response_model=DatasetMeta)
@@ -329,7 +347,7 @@ def overview(conn: Conn) -> Overview:
     """Landing-page "at a glance": global totals across the eukaryotic tree plus
     a few featured groups with their assembly/annotation coverage — one cacheable
     request so the hero can render live headline numbers + coverage cards."""
-    totals, featured = fetch_overview(conn)
+    totals, featured = fetch_overview(conn, get_settings().featured_taxids)
     return Overview(
         totals=OverviewTotals(
             species=totals.n_rows,

@@ -299,6 +299,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/site-config": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Site Config
+         * @description Deployment settings for the web app: the feedback, source code and privacy
+         *     contact links, and the curated groups (friendly labels, the "Surprise me"
+         *     pool, and the landing-page cards, flagged ``featured``).
+         */
+        get: operations["site_config_site_config_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/taxon/{taxid}": {
         parameters: {
             query?: never;
@@ -581,6 +603,23 @@ export interface components {
             taxid: number;
         };
         /**
+         * CladeGroup
+         * @description A curated group: its friendly label is shown wherever the group appears,
+         *     it is in the "Surprise me" pool, and ``featured`` groups are the landing-page
+         *     cards. Also the entry format of the deployment's groups file.
+         */
+        CladeGroup: {
+            /**
+             * Featured
+             * @default false
+             */
+            featured: boolean;
+            /** Label */
+            label: string;
+            /** Taxid */
+            taxid: number;
+        };
+        /**
          * CladeSummary
          * @description The Genomic Resource Summary (Q1) payload for one taxon.
          */
@@ -856,6 +895,21 @@ export interface components {
             percent: number;
             /** Total */
             total: number;
+        };
+        /**
+         * SiteConfig
+         * @description Deployment settings the web app reads once per page load (served by
+         *     ``/site-config``).
+         */
+        SiteConfig: {
+            /** Feedback Url */
+            feedback_url: string;
+            /** Groups */
+            groups: components["schemas"]["CladeGroup"][];
+            /** Privacy Contact Email */
+            privacy_contact_email: string;
+            /** Source Code Url */
+            source_code_url: string;
         };
         /**
          * SortColumn
@@ -1347,6 +1401,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    site_config_site_config_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SiteConfig"];
                 };
             };
         };
