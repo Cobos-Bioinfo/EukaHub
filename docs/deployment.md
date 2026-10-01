@@ -63,6 +63,7 @@ Set in `infra/.env` (see `infra/.env.example`). All are optional except
 | `REFRESH_INTERVAL` | `86400` | refresher | Seconds between checks for a newer Release. |
 | `DB_STATEMENT_TIMEOUT_MS` | `15000` | api | Postgres cancels any API query slower than this; the client gets a 504. Keep it below nginx's 60 s proxy timeout. |
 | `DB_POOL_MAX` | `4` | api | Most database connections the API holds. Raise only with more CPU cores. |
+| `EXPORT_BATCH_ROWS` | `5000` | api | Rows per chunk of a TSV download, 1000 to 10000. Larger is slightly faster and costs about 1 MB of API memory per 1,000 rows, for each download running at once. An invalid value is logged and the default is used. |
 | `CACHE_MAX_AGE` | `3600` | api | Seconds that browsers and the nginx cache may reuse a response. |
 | `CORS_ALLOW_ORIGINS` | `http://localhost:8080` | api | Comma-separated origins allowed to call the API from another site. The bundled SPA calls it same-origin and does not need this. |
 | `LOG_LEVEL` | `INFO` | api | Python log level; logs are JSON lines on stdout. |

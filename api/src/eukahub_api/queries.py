@@ -457,10 +457,6 @@ def _tsv_cell(value: object) -> str:
     return str(value).replace("\t", " ").replace("\n", " ").replace("\r", " ")
 
 
-# Rows per server-side FETCH and per streamed chunk.
-_EXPORT_BATCH = 2000
-
-
 def iter_export_tsv(
     pool: ConnectionPool,
     *,
@@ -470,9 +466,10 @@ def iter_export_tsv(
     filter_keys: list[str],
     logic: FilterLogic,
     exclude_empty: bool,
+    batch_rows: int,
 ) -> Iterator[str]:
     """Stream the full breakdown at ``rank`` as TSV: the header, then one chunk
-    per batch of rows (no limit).
+    per ``batch_rows`` rows, each a single server-side FETCH (no limit).
 
     The generator owns its pooled connection and a **server-side** cursor for
     the whole stream, so even a huge export (e.g. a big root at species rank,
@@ -495,7 +492,7 @@ def iter_export_tsv(
         cur.execute(sql, params)
         # Each chunk costs a thread hop through the ASGI stack; one chunk per row
         # would take ~40x longer than the query itself on a full-species export.
-        while rows := cur.fetchmany(_EXPORT_BATCH):
+        while rows := cur.fetchmany(batch_rows):
             yield "".join("\t".join(_tsv_cell(v) for v in row) + "\n" for row in rows)
 
 

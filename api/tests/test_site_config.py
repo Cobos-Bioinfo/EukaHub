@@ -54,8 +54,10 @@ def test_overrides():
             "PRIVACY_CONTACT_EMAIL": "dpo@example.org",
             "WIKIPEDIA_SUMMARY_URL": "https://es.wikipedia.org/api/rest_v1/page/summary/{title}",
             "WIKIPEDIA_TIMEOUT_SECONDS": "2.5",
+            "EXPORT_BATCH_ROWS": "10000",
         }
     )
+    assert s.export_batch_rows == 10000
     assert s.link_templates["ass"] == "https://assemblies.example.org/?taxon={taxid}"
     assert s.link_templates["ann"] == METRICS[1].external_url_template
     assert s.feedback_url == "https://example.org/feedback"
@@ -77,6 +79,9 @@ def test_overrides():
         ("WIKIPEDIA_SUMMARY_URL", "https://en.wikipedia.org/api/rest_v1/page/summary/"),
         ("WIKIPEDIA_USER_AGENT", "EukaHub\r\nX-Injected: 1"),
         ("WIKIPEDIA_TIMEOUT_SECONDS", "120"),
+        ("EXPORT_BATCH_ROWS", "500"),
+        ("EXPORT_BATCH_ROWS", "20000"),
+        ("EXPORT_BATCH_ROWS", "5e3"),
     ],
 )
 def test_invalid_values_fall_back_with_a_warning(caplog, variable, value):

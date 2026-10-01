@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import dataclasses
 import math
 
 from eukahub_api import main, queries
 from eukahub_api.queries import EXPORT_HEADER, FilterLogic
+from eukahub_api.settings import get_settings
 
 
 def _parse(text: str) -> tuple[list[str], list[list[str]]]:
@@ -61,7 +63,8 @@ def test_export_streams_one_chunk_per_batch(client, monkeypatch):
     url = "/clade/40674/export.tsv?rank=species"  # Mammalia: in the full DB and the CI slice
     whole = client.get(url).text.splitlines()
 
-    monkeypatch.setattr(queries, "_EXPORT_BATCH", 3)
+    small_batches = dataclasses.replace(get_settings(), export_batch_rows=3)
+    monkeypatch.setattr(main, "get_settings", lambda: small_batches)
     small = client.get(url).text.splitlines()
     assert small[0] == whole[0]
     assert sorted(small[1:]) == sorted(whole[1:])
@@ -77,6 +80,7 @@ def test_export_streams_one_chunk_per_batch(client, monkeypatch):
             filter_keys=[],
             logic=FilterLogic.AND,
             exclude_empty=False,
+            batch_rows=3,
         )
     )
     n_rows = len(whole) - 1

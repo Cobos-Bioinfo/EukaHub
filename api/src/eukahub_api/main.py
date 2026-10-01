@@ -717,6 +717,7 @@ def clade_export(
         filter_keys=filter_keys,
         logic=logic,
         exclude_empty=exclude_empty,
+        batch_rows=get_settings().export_batch_rows,
     )
     # Pull the header and first batch of rows now: that runs the query (its sort
     # is the expensive part) before any byte is sent, so a statement timeout on a
