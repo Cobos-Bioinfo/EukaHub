@@ -36,3 +36,5 @@ data/
 AUDIT.md
 .agent/
 *.local.md
+
+graphify-out/cache*
