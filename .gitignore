@@ -36,3 +36,6 @@ data/
 AUDIT.md
 .agent/
 *.local.md
+
+# graphify code graph: each developer builds it locally (graphify update .).
+graphify-out/
