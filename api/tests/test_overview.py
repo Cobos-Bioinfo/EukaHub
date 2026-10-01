@@ -7,7 +7,7 @@ and the CI seed slice, so it is a stable anchor in the featured list.
 
 from __future__ import annotations
 
-from eukahub_api.queries import FEATURED_TAXIDS
+from eukahub_api.settings import get_settings
 
 
 def test_overview_totals_match_eukaryota_summary(client):
@@ -32,10 +32,11 @@ def test_overview_featured_shape(client):
     featured = ov["featured"]
     assert featured, "at least Mammalia should be featured"
 
+    configured = get_settings().featured_taxids
     taxids = [f["taxid"] for f in featured]
-    assert set(taxids) <= set(FEATURED_TAXIDS)
-    # Preserved FEATURED_TAXIDS order (a filtered subsequence of it).
-    assert taxids == [t for t in FEATURED_TAXIDS if t in set(taxids)]
+    assert set(taxids) <= set(configured)
+    # Preserved configured order (a filtered subsequence of it).
+    assert taxids == [t for t in configured if t in set(taxids)]
 
     for f in featured:
         assert f["name"]

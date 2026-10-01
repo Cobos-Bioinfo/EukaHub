@@ -1,7 +1,7 @@
 import { useState } from "react";
 
 import type { GapItem, QualityStatConfig } from "../api/types";
-import { cladeLabel } from "../lib/clades";
+import { useCladeLabel } from "../hooks/useSiteConfig";
 import { fmt, fmtCompact, fmtPct, fmtQuality } from "../lib/format";
 
 // A single-series scatter of the gap clades: x = species (log), y = coverage %,
@@ -40,6 +40,7 @@ export default function GapsScatter({
   qstats: QualityStatConfig[];
 }) {
   const [hover, setHover] = useState<number | null>(null);
+  const cladeLabel = useCladeLabel();
 
   // x = species, log10, with ~12% of a decade of padding each side so edge
   // points sit off the frame. Ticks are the whole powers of 10 inside the

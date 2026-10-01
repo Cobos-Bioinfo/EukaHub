@@ -1,16 +1,15 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
 
-// Feedback path: a Google Form that files a labeled GitHub issue via an Apps
-// Script server-side, so no GitHub account is needed. Users who have an account
-// can open an issue on GitHub directly (with templates); the FAQ says so.
-const FEEDBACK_FORM_URL =
-  "https://docs.google.com/forms/d/e/1FAIpQLSfEEOn9g8c1G14DLkRr9qlMQldLdibyVO7zotzkIT4PKYgMKQ/viewform";
+import { useSiteConfig } from "../hooks/useSiteConfig";
 
 /** The "more" dropdown in the header: feedback, API docs, and the FAQ. */
 export default function HeaderMenu() {
   const [open, setOpen] = useState(false);
   const boxRef = useRef<HTMLDivElement>(null);
+  // The deployment's feedback form (by default a Google Form that files a GitHub
+  // issue, so no GitHub account is needed).
+  const feedbackUrl = useSiteConfig()?.feedback_url;
 
   useEffect(() => {
     const onClick = (e: MouseEvent) => {
@@ -35,18 +34,20 @@ export default function HeaderMenu() {
       </button>
       {open && (
         <ul className="menu__list" role="menu">
-          <li role="none">
-            <a
-              className="menu__item"
-              role="menuitem"
-              href={FEEDBACK_FORM_URL}
-              target="_blank"
-              rel="noreferrer"
-              onClick={() => setOpen(false)}
-            >
-              Send feedback ↗
-            </a>
-          </li>
+          {feedbackUrl && (
+            <li role="none">
+              <a
+                className="menu__item"
+                role="menuitem"
+                href={feedbackUrl}
+                target="_blank"
+                rel="noreferrer"
+                onClick={() => setOpen(false)}
+              >
+                Send feedback ↗
+              </a>
+            </li>
+          )}
           <li role="none">
             <a
               className="menu__item"

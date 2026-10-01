@@ -39,6 +39,7 @@ from pathlib import Path
 import polars as pl
 import psycopg
 from eukahub_core.metrics import clade_feature_columns
+from eukahub_core.taxonomy import EUKARYOTA_TAXID
 from eukahub_pipeline.fetch_annotations import ANNOTATION_COLUMNS
 from eukahub_pipeline.fetch_assemblies import ASSEMBLY_COLUMNS
 from eukahub_pipeline.rollup import assemble_leaf_features, rollup_from_frames
@@ -46,7 +47,6 @@ from eukahub_pipeline.rollup import assemble_leaf_features, rollup_from_frames
 DEFAULT_SOURCE_URL = "postgresql://eukahub:eukahub@localhost:5432/eukahub"
 DEFAULT_OUT = Path(__file__).resolve().parents[1] / "api" / "tests" / "seed.sql"
 
-EUKARYOTA_TAXID = 2759
 
 # Record-bearing anchor taxa, chosen so the slice satisfies every test invariant
 # (see the module docstring). Real NCBI taxids; select_slice fails if one is missing.

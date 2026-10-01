@@ -18,6 +18,7 @@ import type {
   MetricFilter,
   Overview,
   QualityStatConfig,
+  SiteConfig,
   SortColumn,
   TargetRank,
   TaxonAbout,
@@ -56,6 +57,10 @@ export const getOverview = async (): Promise<Overview> => unwrap(await api.GET("
 // Dataset provenance for the app-wide "Data updated" footer stamp. built_at is
 // null before the first build has stamped the DB.
 export const getMeta = async (): Promise<DatasetMeta> => unwrap(await api.GET("/meta"));
+
+// Deployment settings: header links, privacy contact and the curated groups.
+export const getSiteConfig = async (): Promise<SiteConfig> =>
+  unwrap(await api.GET("/site-config"));
 
 // Compare several groups side by side (2-6). Unknown taxids are dropped server-side.
 export const getCompare = async (taxids: number[]): Promise<Compare> =>

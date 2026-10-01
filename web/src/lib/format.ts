@@ -21,7 +21,7 @@ export function fmtDate(iso: string | null | undefined): string {
 
 /** Substitute the taxid into a metric's external URL template. */
 export const externalUrl = (template: string, taxid: number): string =>
-  template.replace("{taxid}", String(taxid));
+  template.replaceAll("{taxid}", String(taxid));
 
 /** A base-pair count as a human-readable size: 2841134231 -> "2.84 Gb",
  *  78812546 -> "78.8 Mb", 606714 -> "607 kb". Keeps ~3 significant figures. */

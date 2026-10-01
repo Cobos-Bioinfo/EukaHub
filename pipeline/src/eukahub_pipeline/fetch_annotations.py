@@ -22,9 +22,9 @@ from collections.abc import Iterator
 import requests
 from tenacity import retry, stop_after_attempt, wait_exponential
 
-log = logging.getLogger("eukahub.fetch_annotations")
+from eukahub_pipeline.sources import ANNOTRIEVE, Source
 
-ANNOTRIEVE_BASE = "https://genome.crg.es/annotrieve/api/v0"
+log = logging.getLogger("eukahub.fetch_annotations")
 
 # Column set of the `annotation` table (infra/postgres/init/001_schema.sql).
 ANNOTATION_COLUMNS: tuple[str, ...] = (
@@ -113,25 +113,25 @@ def parse_report_row(row: dict[str, str]) -> dict | None:
 
 
 @retry(stop=stop_after_attempt(5), wait=wait_exponential(multiplier=1, min=2, max=60))
-def _get_report(base: str) -> str:
+def _get_report(source: Source) -> str:
     """The TSV report of every annotation, retried with backoff on transient errors."""
     resp = requests.get(
-        f"{base}/annotations/report",
+        f"{source.url}/annotations/report",
         params={"selected_fields": ",".join(REPORT_FIELDS)},
-        timeout=600,
+        timeout=source.timeout,
     )
     resp.raise_for_status()
     return resp.text
 
 
-def fetch_annotations(*, base: str = ANNOTRIEVE_BASE) -> Iterator[dict]:
+def fetch_annotations(source: Source = ANNOTRIEVE) -> Iterator[dict]:
     """Download Annotrieve's annotation report and yield normalized rows.
 
     Raises ``RuntimeError`` if the report lacks a column we need or has no rows,
     so a changed or truncated response fails the build instead of shipping a
     dataset without annotations.
     """
-    lines = _get_report(base).splitlines()
+    lines = _get_report(source).splitlines()
     header = lines[0].split("\t") if lines else []
     missing = _REQUIRED_HEADER - set(header)
     if missing:

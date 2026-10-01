@@ -6,11 +6,9 @@ import RandomCladeButton from "../components/RandomCladeButton";
 import RootPicker from "../components/RootPicker";
 import { RandomIcon, SearchIcon, TreeIcon } from "../components/icons";
 import { useAsync } from "../hooks/useAsync";
-import { cladeLabel } from "../lib/clades";
+import { useCladeLabel } from "../hooks/useSiteConfig";
 import { fmt, fmtCompact, fmtPct } from "../lib/format";
-
-// The whole surveyed tree: the default "explore everything" entry point.
-const EUKARYOTA_TAXID = 2759;
+import { EUKARYOTA_TAXID } from "../lib/taxonomy";
 
 /** The landing / hero page at `/`. Puts the EukaHub name front and centre, then
  *  gives a strong entry point: a prominent search, quick-jump chips, a
@@ -92,7 +90,7 @@ function LandingGaps() {
 
 /** One teaser row: name, a gap-magnitude bar, and the missing-species count. */
 function TeaserRow({ item, maxGap }: { item: GapItem; maxGap: number }) {
-  const label = cladeLabel(item.taxid) ?? item.name;
+  const label = useCladeLabel()(item.taxid) ?? item.name;
   const width = Math.max((item.gap / maxGap) * 100, 3);
   return (
     <li>
@@ -168,7 +166,7 @@ function LandingOverview() {
 /** One featured-group card: friendly name, species count, and two coverage
  *  meters (assembled / annotated), linking into the group's dashboard. */
 function FeaturedCard({ clade }: { clade: FeaturedClade }) {
-  const label = cladeLabel(clade.taxid) ?? clade.name;
+  const label = useCladeLabel()(clade.taxid) ?? clade.name;
   // The gap in absolute terms: species with no genome assembly yet. Reframes the
   // card around the app's thesis (scale, then coverage, then the concrete gap).
   const missing = Math.max(0, Math.round(clade.species * (1 - clade.assembly_percent / 100)));

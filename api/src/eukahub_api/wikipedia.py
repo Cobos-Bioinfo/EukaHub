@@ -10,7 +10,7 @@ Why this lives server-side (an API proxy, not a browser fetch): Wikipedia's
 API policy wants a descriptive ``User-Agent`` — a header browsers forbid
 ``fetch`` from setting — and doing the call here lets us cache it across
 viewers and keep the external egress off the client. There's no SSRF surface:
-the URL is fixed to the summary endpoint with the (URL-encoded) name.
+the URL is the configured summary endpoint with the (URL-encoded) name.
 
 Results are cached per name for 24h (mirroring Euka-Survey), so there's at most
 one request per unique root taxon per TTL — and we cache the *absence* of an
@@ -29,15 +29,11 @@ import urllib.parse
 import urllib.request
 
 from eukahub_api.schemas import TaxonAbout
+from eukahub_api.settings import get_settings
 
 log = logging.getLogger("eukahub.api.wikipedia")
 
-_SUMMARY_URL = "https://en.wikipedia.org/api/rest_v1/page/summary/{title}"
-_TIMEOUT_SECONDS = 6
 _CACHE_TTL_SECONDS = 86_400  # 24h; Wikipedia content changes slowly
-# Wikipedia's API policy requires a descriptive User-Agent; requests without
-# one can be rejected with HTTP 403.
-_USER_AGENT = "EukaHub/1.0 (https://github.com/Cobos-Bioinfo/EukaHub)"
 
 # Names we never resolve — placeholders that would only ever miss.
 _UNRESOLVABLE = {"", "Unknown", "Error"}
@@ -70,10 +66,14 @@ def fetch_about(name: str) -> TaxonAbout | None:
 
 def _lookup(name: str) -> TaxonAbout | None:
     """Perform the (uncached) Wikipedia REST summary request for ``name``."""
-    url = _SUMMARY_URL.format(title=urllib.parse.quote(name))
-    request = urllib.request.Request(url, headers={"User-Agent": _USER_AGENT})
+    settings = get_settings()
+    title = urllib.parse.quote(name)
+    url = settings.wikipedia_summary_url.replace("{title}", title)
+    # Wikipedia's API policy requires a descriptive User-Agent; requests without
+    # one can be rejected with HTTP 403.
+    request = urllib.request.Request(url, headers={"User-Agent": settings.wikipedia_user_agent})
     try:
-        with urllib.request.urlopen(request, timeout=_TIMEOUT_SECONDS) as resp:
+        with urllib.request.urlopen(request, timeout=settings.wikipedia_timeout_seconds) as resp:
             if resp.status != 200:
                 return None
             data = json.load(resp)
@@ -93,6 +93,5 @@ def _lookup(name: str) -> TaxonAbout | None:
         description=data.get("description") or "",
         extract=data.get("extract") or "",
         thumbnail=(data.get("thumbnail") or {}).get("source"),
-        url=desktop.get("page")
-        or f"https://en.wikipedia.org/wiki/{urllib.parse.quote(name)}",
+        url=desktop.get("page") or f"https://{urllib.parse.urlsplit(url).netloc}/wiki/{title}",
     )

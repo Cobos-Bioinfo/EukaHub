@@ -71,9 +71,12 @@ jobs:
         # fetch_assemblies shells out to the `datasets` binary; grab the static
         # linux-amd64 build and put it on PATH. Left unpinned on purpose: an old
         # client breaks when NCBI changes its API, and nobody is around to bump it.
+        # The repository variable NCBI_DATASETS_CLI_URL overrides the download URL.
+        env:
+          DATASETS_URL: ${{ vars.NCBI_DATASETS_CLI_URL || 'https://ftp.ncbi.nlm.nih.gov/pub/datasets/command-line/v2/linux-amd64/datasets' }}
         run: |
-          curl -sSL -o datasets \
-            'https://ftp.ncbi.nlm.nih.gov/pub/datasets/command-line/v2/linux-amd64/datasets'
+          case "$DATASETS_URL" in https://*) ;; *) echo "NCBI_DATASETS_CLI_URL must be an https:// URL" >&2; exit 1 ;; esac
+          curl -fsSL -o datasets "$DATASETS_URL"
           chmod +x datasets
           sudo mv datasets /usr/local/bin/datasets
           datasets --version
@@ -82,7 +85,16 @@ jobs:
         # Downloads the taxdump, re-fetches all three sources (ignoring any
         # snapshots), rolls up, applies the schema, loads, then validate() runs the
         # hard invariant checks and raises on any violation — failing the job
-        # before anything is published or stamped.
+        # before anything is published or stamped. Source URLs and timeouts come
+        # from repository variables when set (docs/deployment.md); an unset one is
+        # empty here, which keeps the default in pipeline/.../sources.py.
+        env:
+          TAXDUMP_URL: ${{ vars.TAXDUMP_URL }}
+          TAXDUMP_TIMEOUT_SECONDS: ${{ vars.TAXDUMP_TIMEOUT_SECONDS }}
+          ENA_PORTAL_URL: ${{ vars.ENA_PORTAL_URL }}
+          ENA_TIMEOUT_SECONDS: ${{ vars.ENA_TIMEOUT_SECONDS }}
+          ANNOTRIEVE_API_URL: ${{ vars.ANNOTRIEVE_API_URL }}
+          ANNOTRIEVE_TIMEOUT_SECONDS: ${{ vars.ANNOTRIEVE_TIMEOUT_SECONDS }}
         run: uv run --package eukahub-pipeline python -m eukahub_pipeline.build --refresh-sources
 
       - name: Job summary

@@ -10,6 +10,7 @@ render one card per resource.
 from __future__ import annotations
 
 from datetime import date, datetime
+from typing import Annotated
 
 from eukahub_core.metrics import (
     METRIC_KEYS,
@@ -17,7 +18,7 @@ from eukahub_core.metrics import (
     Metric,
     QualityStat,
 )
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt, StringConstraints
 
 
 class MetricConfig(BaseModel):
@@ -48,7 +49,7 @@ class MetricConfig(BaseModel):
     legend_label: str
 
     @classmethod
-    def from_metric(cls, m: Metric) -> MetricConfig:
+    def from_metric(cls, m: Metric, external_url_template: str) -> MetricConfig:
         return cls(
             key=m.key,
             card_title=m.card_title,
@@ -58,7 +59,7 @@ class MetricConfig(BaseModel):
             total_help=m.total_help,
             color=m.color,
             external_source_name=m.external_source_name,
-            external_url_template=m.external_url_template,
+            external_url_template=external_url_template,
             coverage_column=m.coverage_key,
             total_column=m.total_key,
             filter_label=m.filter_label,
@@ -171,6 +172,28 @@ class Overview(BaseModel):
 
     totals: OverviewTotals
     featured: list[FeaturedClade]
+
+
+class CladeGroup(BaseModel):
+    """A curated group: its friendly label is shown wherever the group appears,
+    it is in the "Surprise me" pool, and ``featured`` groups are the landing-page
+    cards. Also the entry format of the deployment's groups file."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    taxid: Annotated[StrictInt, Field(gt=0)]
+    label: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=60)]
+    featured: StrictBool = False
+
+
+class SiteConfig(BaseModel):
+    """Deployment settings the web app reads once per page load (served by
+    ``/site-config``)."""
+
+    feedback_url: str
+    source_code_url: str
+    privacy_contact_email: str
+    groups: list[CladeGroup]
 
 
 class DatasetMeta(BaseModel):

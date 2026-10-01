@@ -26,6 +26,8 @@ data/
 .env
 .env.*
 !.env.example
+# A deployment's own groups file (infra/config/groups.example.json is the template)
+infra/config/groups.json
 
 # Editor / OS
 .DS_Store

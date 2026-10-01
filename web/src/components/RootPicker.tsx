@@ -3,9 +3,7 @@ import { useNavigate } from "react-router";
 
 import { getLineage, searchTaxa } from "../api/queries";
 import type { TaxonRef } from "../api/types";
-
-// EukaHub only covers the eukaryotic subtree; a TaxID outside it is rejected.
-const EUKARYOTA_TAXID = 2759;
+import { EUKARYOTA_TAXID } from "../lib/taxonomy";
 
 /** Search box that finds a clade by name or NCBI TaxID.
  *

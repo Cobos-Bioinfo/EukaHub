@@ -1,57 +1,8 @@
-// A curated pool of recognizable, data-rich eukaryotic groups. Used two ways on
-// the landing page: as quick-jump "Try:" chips (a diverse subset) and as the
-// source for the "Surprise me" random-clade button. Every taxid here was
-// verified against the live DB to resolve to the named group with real data, so
-// a new user always lands somewhere interesting (never an obscure, empty node).
-export interface Clade {
-  taxid: number;
-  label: string;
-}
+import type { CladeGroup } from "../api/types";
 
-export const FEATURED_CLADES: Clade[] = [
-  { taxid: 9443, label: "Primates" },
-  { taxid: 40674, label: "Mammals" },
-  { taxid: 8782, label: "Birds" },
-  { taxid: 9989, label: "Rodents" },
-  { taxid: 9397, label: "Bats" },
-  { taxid: 9721, label: "Whales & dolphins" },
-  { taxid: 7898, label: "Ray-finned fishes" },
-  { taxid: 7777, label: "Sharks & rays" },
-  { taxid: 8292, label: "Amphibians" },
-  { taxid: 8509, label: "Lizards & snakes" },
-  { taxid: 50557, label: "Insects" },
-  { taxid: 7041, label: "Beetles" },
-  { taxid: 7088, label: "Butterflies & moths" },
-  { taxid: 7399, label: "Bees, wasps & ants" },
-  { taxid: 7147, label: "Flies" },
-  { taxid: 4751, label: "Fungi" },
-  { taxid: 5204, label: "Mushroom fungi" },
-  { taxid: 4891, label: "Yeasts" },
-  { taxid: 33090, label: "Green plants" },
-  { taxid: 3398, label: "Flowering plants" },
-  { taxid: 4479, label: "Grasses" },
-  { taxid: 4747, label: "Orchids" },
-  { taxid: 3803, label: "Legumes" },
-  { taxid: 6231, label: "Nematodes" },
-  { taxid: 6447, label: "Molluscs" },
-  { taxid: 6854, label: "Arachnids" },
-  { taxid: 6683, label: "Crabs & shrimp" },
-  { taxid: 6073, label: "Corals & jellyfish" },
-  { taxid: 7586, label: "Echinoderms" },
-  { taxid: 5794, label: "Apicomplexans" },
-  { taxid: 5878, label: "Ciliates" },
-  { taxid: 2836, label: "Diatoms" },
-];
-
-const LABEL_BY_TAXID = new Map(FEATURED_CLADES.map((c) => [c.taxid, c.label]));
-
-/** The friendly display label for a curated taxid, if we have one. Lets the
- *  landing page show "Mammals" over the API's scientific "Mammalia". */
-export const cladeLabel = (taxid: number): string | undefined => LABEL_BY_TAXID.get(taxid);
-
-/** A random featured taxid, never the one the user is already looking at. */
-export function pickRandomCladeTaxid(exclude?: number): number {
-  const pool = FEATURED_CLADES.filter((c) => c.taxid !== exclude);
-  const list = pool.length > 0 ? pool : FEATURED_CLADES;
-  return list[Math.floor(Math.random() * list.length)].taxid;
+/** A random curated group's taxid, never the one the user is already looking at. */
+export function pickRandomTaxid(groups: CladeGroup[], exclude?: number): number | undefined {
+  const pool = groups.filter((g) => g.taxid !== exclude);
+  const list = pool.length > 0 ? pool : groups;
+  return list.length > 0 ? list[Math.floor(Math.random() * list.length)].taxid : undefined;
 }

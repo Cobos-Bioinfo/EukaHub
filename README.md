@@ -129,8 +129,9 @@ CPU. The database takes about 1 GB on disk, and an update briefly holds three
 copies of it (the live one, the incoming one, and the previous one kept for
 rollback).
 
-Configuration (credentials, limits, caching, which repository to take data from)
-comes from environment variables in `infra/.env`; start from
+Configuration (credentials, limits, caching, which repository to take data from,
+external links and the featured groups) comes from environment variables in
+`infra/.env` and an optional groups file; start from
 `infra/.env.example`. [docs/deployment.md](docs/deployment.md) covers
 configuration, running behind a TLS proxy, data updates, rollback and running
 from a fork.

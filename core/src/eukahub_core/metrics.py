@@ -45,7 +45,8 @@ class Metric:
       ``sort_total_label``.
     - summary card: ``card_title``, ``card_title_help``, ``species_help``,
       ``total_label``, ``total_help``, ``external_source_name``,
-      ``external_url_template``.
+      ``external_url_template`` (the default; a deployment can override it, see
+      ``eukahub_api.settings``).
     - TSV export: ``tsv_count_column``, ``tsv_total_column`` — the
       snake_case names in the public TSV schema.
     """
@@ -80,10 +81,6 @@ class Metric:
     @property
     def percent_key(self) -> str:
         return f"p_{self.key}"
-
-    def external_url(self, taxid: int) -> str:
-        """Return the per-taxon external link rendered in the card."""
-        return self.external_url_template.format(taxid=taxid)
 
 
 METRICS: tuple[Metric, ...] = (

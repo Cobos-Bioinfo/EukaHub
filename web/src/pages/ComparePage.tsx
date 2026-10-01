@@ -5,7 +5,7 @@ import { getCompare, getMetricsConfig, getQualityConfig } from "../api/queries";
 import type { CompareGroup, MetricConfig, QualityStatConfig, TaxonRef } from "../api/types";
 import RootPicker from "../components/RootPicker";
 import { useAsync } from "../hooks/useAsync";
-import { cladeLabel } from "../lib/clades";
+import { useCladeLabel } from "../hooks/useSiteConfig";
 import { fmt, fmtPct, fmtQuality } from "../lib/format";
 
 const MAX_GROUPS = 6;
@@ -20,8 +20,6 @@ const PRESETS: { label: string; taxids: number[] }[] = [
   { label: "Insects vs Mammals", taxids: [50557, 40674] },
   { label: "Fungi vs Flowering plants", taxids: [4751, 3398] },
 ];
-
-const displayName = (taxid: number, name?: string) => name ?? cladeLabel(taxid) ?? `TaxID ${taxid}`;
 
 /** Round a percentage up to the next "nice" axis maximum (strictly greater, so
  *  the longest bar always leaves room for its value label at the tip). */
@@ -46,6 +44,8 @@ export default function ComparePage() {
   const key = taxids.join(",");
 
   const [names, setNames] = useState<Record<number, string>>({});
+  const cladeLabel = useCladeLabel();
+  const nameOf = (taxid: number) => names[taxid] ?? cladeLabel(taxid) ?? `TaxID ${taxid}`;
   const setTaxids = (next: number[]) => {
     const p = new URLSearchParams(params);
     if (next.length) p.set("taxids", next.join(","));
@@ -120,13 +120,13 @@ export default function ComparePage() {
               <li key={t} className="cmp__chip">
                 <span className="cmp__swatch" style={{ background: `var(${colorVar(t)})` }} />
                 <Link to={`/clade/${t}`} className="cmp__chip-name">
-                  {displayName(t, names[t])}
+                  {nameOf(t)}
                 </Link>
                 <button
                   type="button"
                   className="cmp__chip-x"
                   onClick={() => removeGroup(t)}
-                  aria-label={`Remove ${displayName(t, names[t])}`}
+                  aria-label={`Remove ${nameOf(t)}`}
                   title="Remove"
                 >
                   ×
@@ -159,7 +159,7 @@ export default function ComparePage() {
       {taxids.length > 0 && data.loading && !data.data && <p className="cmp__status">Loading…</p>}
 
       {groups.length > 0 && metrics.data && (
-        <CompareChart groups={groups} metrics={metrics.data} colorVar={colorVar} names={names} />
+        <CompareChart groups={groups} metrics={metrics.data} colorVar={colorVar} nameOf={nameOf} />
       )}
       {groups.length > 0 && metrics.data && quality.data && (
         <CompareTable
@@ -167,7 +167,7 @@ export default function ComparePage() {
           metrics={metrics.data}
           quality={quality.data}
           colorVar={colorVar}
-          names={names}
+          nameOf={nameOf}
         />
       )}
     </section>
@@ -179,12 +179,12 @@ function CompareChart({
   groups,
   metrics,
   colorVar,
-  names,
+  nameOf,
 }: {
   groups: CompareGroup[];
   metrics: MetricConfig[];
   colorVar: (taxid: number) => string;
-  names: Record<number, string>;
+  nameOf: (taxid: number) => string;
 }) {
   const maxPct = Math.max(
     1,
@@ -200,7 +200,7 @@ function CompareChart({
         {groups.map((g) => (
           <li key={g.taxid} className="ccht__legend-item">
             <span className="ccht__swatch" style={{ background: `var(${colorVar(g.taxid)})` }} />
-            {displayName(g.taxid, names[g.taxid])}
+            {nameOf(g.taxid)}
           </li>
         ))}
       </ul>
@@ -222,7 +222,7 @@ function CompareChart({
                 <div
                   key={g.taxid}
                   className="ccht__barrow"
-                  title={`${displayName(g.taxid, names[g.taxid])} · ${m.card_title}: ${fmtPct(
+                  title={`${nameOf(g.taxid)} · ${m.card_title}: ${fmtPct(
                     pct,
                   )}% (${fmt(r?.covered ?? 0)} of ${fmt(g.n_rows)} species)`}
                 >
@@ -260,13 +260,13 @@ function CompareTable({
   metrics,
   quality,
   colorVar,
-  names,
+  nameOf,
 }: {
   groups: CompareGroup[];
   metrics: MetricConfig[];
   quality: QualityStatConfig[];
   colorVar: (taxid: number) => string;
-  names: Record<number, string>;
+  nameOf: (taxid: number) => string;
 }) {
   const [sort, setSort] = useState<SortState>(null);
 
@@ -329,7 +329,7 @@ function CompareTable({
             <tr key={g.taxid}>
               <th scope="row" className="cmp-table__group">
                 <span className="cmp__swatch" style={{ background: `var(${colorVar(g.taxid)})` }} />
-                <Link to={`/clade/${g.taxid}`}>{displayName(g.taxid, names[g.taxid])}</Link>
+                <Link to={`/clade/${g.taxid}`}>{nameOf(g.taxid)}</Link>
               </th>
               {columns.map((c) => {
                 const v = c.get(g);

@@ -67,6 +67,57 @@ Set in `infra/.env` (see `infra/.env.example`). All are optional except
 | `CORS_ALLOW_ORIGINS` | `http://localhost:8080` | api | Comma-separated origins allowed to call the API from another site. The bundled SPA calls it same-origin and does not need this. |
 | `LOG_LEVEL` | `INFO` | api | Python log level; logs are JSON lines on stdout. |
 
+### Links, contact and Wikipedia
+
+These change what the site shows without rebuilding anything: set them in
+`infra/.env`, then recreate the API container with `$C up -d api` (`$C` is defined
+under [Data updates](#data-updates)). Browsers and the nginx cache may keep the old
+values for up to `CACHE_MAX_AGE` seconds. An invalid value does not stop the API: it logs a warning
+naming the variable (`ignoring FEEDBACK_URL (...)`) and uses the default. Every link
+must be an `https://` URL.
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `ASSEMBLY_LINK_TEMPLATE` | NCBI Datasets genome search | "Open at the source" link for assemblies. Must contain `{taxid}`, which is replaced by the taxon's id. |
+| `ANNOTATION_LINK_TEMPLATE` | Annotrieve annotation search | The same for annotations. |
+| `RNA_SEQ_LINK_TEMPLATE` / `LONG_READ_LINK_TEMPLATE` | ENA advanced searches | The same for RNA-Seq and long-read RNA-Seq runs. The defaults are in `core/src/eukahub_core/metrics.py`. |
+| `FEEDBACK_URL` | the EukaHub Google Form | "Send feedback" in the header menu. |
+| `SOURCE_CODE_URL` | `https://github.com/Cobos-Bioinfo/EukaHub` | The GitHub icon in the header. |
+| `PRIVACY_CONTACT_EMAIL` | `placeholder@crg.eu` | Data protection contact on the Privacy page. Set it to the address of whoever runs the server. |
+| `WIKIPEDIA_SUMMARY_URL` | `https://en.wikipedia.org/api/rest_v1/page/summary/{title}` | Where the "About" summaries come from. Must contain `{title}`. |
+| `WIKIPEDIA_USER_AGENT` | `EukaHub/1.0 (<SOURCE_CODE_URL>)` | Sent with every Wikipedia request. Wikipedia asks for one that says how to reach the operator. |
+| `WIKIPEDIA_TIMEOUT_SECONDS` | `6` | How long a summary lookup may take, 1 to 30 seconds. |
+
+### Curated groups
+
+The groups with a friendly name ("Mammals" rather than "Mammalia"), the pool that
+"Surprise me" picks from, and the cards under "Featured groups" on the landing page
+come from `infra/config/groups.json`. Without that file the API uses the built-in
+list, which is also in `infra/config/groups.example.json`. To change it:
+
+```bash
+cp infra/config/groups.example.json infra/config/groups.json
+# edit infra/config/groups.json
+$C restart api
+```
+
+```json
+{
+  "groups": [
+    {"taxid": 40674, "label": "Mammals", "featured": true},
+    {"taxid": 9443, "label": "Primates"}
+  ]
+}
+```
+
+- `taxid`: an NCBI taxon id. A group that is not in the dataset is skipped.
+- `label`: the name shown on the site, 1 to 60 characters.
+- `featured` (optional): `true` puts the group on the landing page. Featured groups
+  appear in file order; at most 12.
+
+The file holds 1 to 100 groups, each taxid once. If it cannot be read or breaks any
+of these rules, the API logs a warning that says why and uses the built-in list.
+
 ## Behind a reverse proxy (TLS)
 
 The stack serves plain HTTP on port 8080 and expects TLS to be terminated in front
@@ -146,6 +197,29 @@ A fork can serve data in one of two ways:
 
 GitHub disables scheduled workflows in public repositories after 60 days without
 activity; `rebuild.yml` re-enables itself on every run to prevent that.
+
+### Rebuild settings
+
+If a data source moves, the rebuild can be pointed at the new address without a
+commit: add a repository variable under Settings → Secrets and variables → Actions →
+Variables (organization variables work too). These are variables, not secrets: the
+values are public, and GitHub hides secrets in the logs, which would also hide the
+address a build actually used. An unset variable keeps the default, and each build
+logs the values it uses. An invalid value (a URL that is not `https://`, a timeout
+that is not a positive number) stops the build before it downloads anything, so
+nothing is published.
+
+| Variable | Default |
+|---|---|
+| `TAXDUMP_URL` | `https://ftp.ncbi.nlm.nih.gov/pub/taxonomy/taxdump.tar.gz` |
+| `ENA_PORTAL_URL` | `https://www.ebi.ac.uk/ena/portal/api` |
+| `ANNOTRIEVE_API_URL` | `https://genome.crg.es/annotrieve/api/v0` |
+| `TAXDUMP_TIMEOUT_SECONDS` / `ENA_TIMEOUT_SECONDS` / `ANNOTRIEVE_TIMEOUT_SECONDS` | `120` / `300` / `600` (per request) |
+| `NCBI_DATASETS_CLI_URL` | `https://ftp.ncbi.nlm.nih.gov/pub/datasets/command-line/v2/linux-amd64/datasets` |
+
+The same variables, set in the environment, apply to a local
+`python -m eukahub_pipeline.build`. The defaults live in
+`pipeline/src/eukahub_pipeline/sources.py`.
 
 ## Updating the application
 

@@ -23,12 +23,12 @@ from pathlib import Path
 
 import polars as pl
 import psycopg
+from eukahub_core.taxonomy import EUKARYOTA_TAXID
 
 from eukahub_pipeline.download import download_taxdump
 from eukahub_pipeline.fetch_annotations import ANNOTATION_COLUMNS, fetch_annotations
 from eukahub_pipeline.fetch_assemblies import (
     ASSEMBLY_COLUMNS,
-    EUKARYOTE_TXID,
     drop_duplicate_assemblies,
     fetch_assemblies,
 )
@@ -43,6 +43,7 @@ from eukahub_pipeline.load import (
 from eukahub_pipeline.placeholders import orphans_below_species, prune_placeholders
 from eukahub_pipeline.rollup import assemble_leaf_features, carrying_taxids, rollup_from_frames
 from eukahub_pipeline.snapshot import cached_frame
+from eukahub_pipeline.sources import load_sources
 from eukahub_pipeline.taxdump import (
     ancestors,
     build_paths,
@@ -174,11 +175,18 @@ def main(argv: list[str] | None = None) -> int:
         help="assume the schema already exists (skip applying schema-dir)",
     )
     args = p.parse_args(argv)
+    try:
+        sources = load_sources(os.environ)
+    except ValueError as e:
+        p.error(str(e))
+    for name in ("taxdump", "ena", "annotrieve"):
+        source = getattr(sources, name)
+        log.info("Source %s: %s (timeout %gs)", name, source.url, source.timeout)
 
     t0 = time.time()
 
     if not args.skip_download:
-        download_taxdump(args.taxdump_dir)
+        download_taxdump(args.taxdump_dir, sources.taxdump)
 
     d = Path(args.taxdump_dir)
     log.info("Parsing taxdump in %s", d)
@@ -197,7 +205,7 @@ def main(argv: list[str] | None = None) -> int:
     # rows (taxid 1 / 131567) still have a `taxon` row for their FK. Paths are
     # built from the full tree first, so kept nodes retain their real lineage
     # string. See docs/data-model.md.
-    keep = descendants(parents, EUKARYOTE_TXID) | ancestors(parents, EUKARYOTE_TXID)
+    keep = descendants(parents, EUKARYOTA_TAXID) | ancestors(parents, EUKARYOTA_TAXID)
     nodes = {t: v for t, v in nodes.items() if t in keep}
     paths = {t: p for t, p in paths.items() if t in keep}
     log.info("Scoped taxonomy to Eukaryota: kept %d of %d nodes", len(nodes), len(parents))
@@ -205,7 +213,7 @@ def main(argv: list[str] | None = None) -> int:
     # Fetch (or reuse) the three sources — no DB connection needed for this.
     assemblies = cached_frame(
         "assemblies",
-        lambda: fetch_assemblies(EUKARYOTE_TXID),
+        lambda: fetch_assemblies(EUKARYOTA_TAXID),
         _ASSEMBLY_SCHEMA,
         args.sources_dir,
         refresh=args.refresh_sources,
@@ -214,11 +222,18 @@ def main(argv: list[str] | None = None) -> int:
     assemblies = drop_duplicate_assemblies(assemblies)
     log.info("Dropped %d duplicate assembly records", n_fetched - assemblies.height)
     annotations = cached_frame(
-        "annotations", fetch_annotations, _ANNOTATION_SCHEMA, args.sources_dir,
+        "annotations",
+        lambda: fetch_annotations(sources.annotrieve),
+        _ANNOTATION_SCHEMA,
+        args.sources_dir,
         refresh=args.refresh_sources,
     )
     reads = cached_frame(
-        "reads", fetch_reads, _READS_SCHEMA, args.sources_dir, refresh=args.refresh_sources
+        "reads",
+        lambda: fetch_reads(sources.ena),
+        _READS_SCHEMA,
+        args.sources_dir,
+        refresh=args.refresh_sources,
     )
 
     # Drop source rows on taxids absent from the taxonomy (merged/deleted NCBI
@@ -246,7 +261,7 @@ def main(argv: list[str] | None = None) -> int:
             len(orphans), ", ".join(f"{t} {names.get(t, '')}" for t in orphans[:20]),
         )
 
-    clade = rollup_from_frames(_taxon_frame(nodes, paths), leaf, root_taxid=EUKARYOTE_TXID)
+    clade = rollup_from_frames(_taxon_frame(nodes, paths), leaf, root_taxid=EUKARYOTA_TAXID)
     log.info("Rolled up into %d clade rows", clade.height)
 
     with psycopg.connect(args.database_url) as conn:

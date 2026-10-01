@@ -22,7 +22,7 @@ from eukahub_core.metrics import (
     TOTAL_KEYS,
     CladeMetadata,
 )
-from eukahub_core.taxonomy import UNIT_RANKS
+from eukahub_core.taxonomy import EUKARYOTA_TAXID, SPINE_TAXIDS, UNIT_RANKS
 from psycopg.rows import dict_row
 from psycopg_pool import ConnectionPool
 
@@ -68,25 +68,6 @@ def _identifier(value: str, allowed: Collection[str]) -> str:
     if value not in allowed:
         raise ValueError(f"not an allowed SQL identifier: {value!r}")
     return value
-
-EUKARYOTA_TAXID = 2759
-# `taxon` holds Eukaryota plus its two ancestors (root, cellular organisms);
-# search hides those two.
-SPINE_TAXIDS: tuple[int, ...] = (1, 131567)
-
-# Featured groups for the landing page's "at a glance" section: recognizable,
-# data-rich clades spread across the tree (a vertebrate / bird / fish / insect /
-# fungus / plant). The frontend maps each taxid to a friendly label; a taxid
-# absent from the serving DB is simply dropped (keeps the slice-seeded CI DB and
-# any future rebuild robust). Order here is the display order.
-FEATURED_TAXIDS: tuple[int, ...] = (
-    40674,  # Mammalia — Mammals
-    8782,   # Aves — Birds
-    7898,   # Actinopterygii — Ray-finned fishes
-    50557,  # Insecta — Insects
-    4751,   # Fungi
-    3398,   # Magnoliopsida — Flowering plants
-)
 
 
 class FilterLogic(str, Enum):
@@ -177,26 +158,26 @@ def fetch_direct_totals(
 
 
 def fetch_overview(
-    conn: psycopg.Connection,
+    conn: psycopg.Connection, featured_taxids: Sequence[int]
 ) -> tuple[CladeMetadata, list[tuple[int, str, int, int, int, int]]]:
     """Landing-page "at a glance" data in one request.
 
     Returns ``(eukaryota_metadata, featured)`` where ``featured`` is one tuple
-    ``(taxid, name, n_rows, s_ass, c_ass, c_ann)`` per FEATURED group present in
-    the DB, in FEATURED_TAXIDS order. Two small indexed lookups: Eukaryota's own
-    rollup (the global totals) and the featured clades' rollups. A featured taxid
-    missing from ``clade_features`` (e.g. a sliced CI DB) is dropped, never an
-    error, so the section degrades gracefully."""
+    ``(taxid, name, n_rows, s_ass, c_ass, c_ann)`` per featured group present in
+    the DB, in ``featured_taxids`` order. Two small indexed lookups: Eukaryota's
+    own rollup (the global totals) and the featured clades' rollups. A featured
+    taxid missing from ``clade_features`` (e.g. a sliced CI DB) is dropped, never
+    an error, so the section degrades gracefully."""
     _name, _rank, totals, _inf = fetch_summary(conn, EUKARYOTA_TAXID)
 
     rows = conn.execute(
         "SELECT t.taxid, t.name, f.n_rows, f.s_ass, f.c_ass, f.c_ann "
         "FROM taxon t JOIN clade_features f USING (taxid) "
         "WHERE t.taxid = ANY(%s)",
-        (list(FEATURED_TAXIDS),),
+        (list(featured_taxids),),
     ).fetchall()
     by_id = {r[0]: r for r in rows}
-    featured = [by_id[t] for t in FEATURED_TAXIDS if t in by_id]
+    featured = [by_id[t] for t in featured_taxids if t in by_id]
     return totals, featured
 
 

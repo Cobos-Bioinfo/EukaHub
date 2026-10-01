@@ -25,7 +25,8 @@ ENA           ┘   (rebuild.yml)          (public)          ▲
 | API | `api/` | FastAPI, read-only, auto-generated OpenAPI at `/api/docs`. Endpoint SQL lives in `api/src/eukahub_api/queries.py`. |
 | Web | `web/` | React + TypeScript SPA built with Vite, served by nginx, which also proxies `/api` and caches API responses. |
 | Refresher | `scripts/auto_refresh.py` + `scripts/restore_snapshot.py` | Sidecar container. Installs the latest dataset Release on first start, then checks daily for a newer one. |
-| Shared config | `core/src/eukahub_core/metrics.py` | The four resource metrics and the quality stats, shared by pipeline and API and exported to the web app through OpenAPI. |
+| Shared config | `core/src/eukahub_core/metrics.py`, `taxonomy.py` | The four resource metrics, the quality stats and the root taxids, shared by pipeline and API and exported to the web app through OpenAPI. |
+| Deployment settings | `api/src/eukahub_api/settings.py`, `infra/config/` | Links, privacy contact, Wikipedia lookup and curated groups, read by the API at startup and served to the web app by `/api/site-config`. See [deployment.md](deployment.md#configuration). |
 
 ## Request path
 
@@ -74,11 +75,11 @@ CPU core. It has been tested under exactly those limits (see
 ## Repository layout
 
 ```
-core/       metric and quality-stat definitions shared by pipeline and API
+core/       metric, quality-stat and taxonomy definitions shared by pipeline and API
 pipeline/   offline build: fetch, roll up, load, validate
 api/        FastAPI service and its tests (api/tests/seed.sql is the CI dataset)
 web/        React SPA, nginx config, production Dockerfile
-infra/      docker-compose files, Postgres schema, refresher image, low-memory test
+infra/      docker-compose files, Postgres schema, refresher image, groups file, low-memory test
 scripts/    restore/refresh tooling and CI dataset helpers
 docs/       these documents
 ```

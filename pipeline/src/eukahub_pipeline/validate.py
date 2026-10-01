@@ -20,14 +20,12 @@ import os
 import sqlite3
 
 import psycopg
-from eukahub_core.taxonomy import INFORMAL_SPECIES_RANK
+from eukahub_core.taxonomy import EUKARYOTA_TAXID, INFORMAL_SPECIES_RANK
 
 log = logging.getLogger("eukahub.validate")
 
-EUKARYOTA_TAXID = 2759
-
 COMMON = [
-    (2759, "Eukaryota"),
+    (EUKARYOTA_TAXID, "Eukaryota"),
     (33208, "Metazoa"),
     (40674, "Mammalia"),
     (9443, "Primates"),

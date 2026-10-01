@@ -21,7 +21,7 @@ changes. Put personal or machine-specific notes in a gitignored `CLAUDE.local.md
 |---|---|
 | `core/src/eukahub_core/metrics.py` | `METRICS`, `QUALITY_STATS`, `CladeMetadata`, shared by pipeline and API and exported to the web app via OpenAPI. The schema SQL, `rollup._subtree_totals` and `validate._COLS` are kept in sync by hand. |
 | `pipeline/src/eukahub_pipeline/build.py` | taxdump → Eukaryota trim → fetch (parquet cache in `data/sources/`) → `drop_duplicate_assemblies` → `prune_placeholders` → rollup (Polars) → load → `check_invariants` → `dataset_meta` last |
-| `api/src/eukahub_api/` | `main.py` routes and middleware; `queries.py` all SQL (`_quality_by_bucket` is the per-bucket stats helper); `schemas.py`; `db.py` connection pool |
+| `api/src/eukahub_api/` | `main.py` routes and middleware; `queries.py` all SQL (`_quality_by_bucket` is the per-bucket stats helper); `schemas.py`; `db.py` connection pool; `settings.py` deployment settings (env + `infra/config/groups.json`, served by `/site-config`) |
 | `web/src/` | `api/queries.ts` (all fetches), generated `api/openapi.json` + `schema.ts`; `hooks/useAsync` (results keyed by deps, `reload()`); `hooks/useTree` (visible-node cap); colours are CSS variables in `index.css` |
 | `infra/` | `docker-compose.yml` (dev DB), `docker-compose.prod.yml` (db, api, web, refresher), `postgres/init/001_schema.sql` (schema of record), `lowmem-test/` (1 GB / one-core harness) |
 | `scripts/` | `restore_snapshot.py` (stage, verify, rename swap, `--rollback`), `auto_refresh.py`, `generate_ci_seed.py` + `load_ci_db.py` (CI dataset) |
@@ -41,6 +41,10 @@ changes. Put personal or machine-specific notes in a gitignored `CLAUDE.local.md
 - No ETE3 and no per-root precomputed tables: a breakdown is one indexed `ltree` subtree
   query for any root.
 - `taxon` holds Eukaryota (2759) plus its two ancestors (1, 131567). No foreign keys.
+  These taxids come from `eukahub_core.taxonomy` (web: `lib/taxonomy.ts`), never literals.
+- Deployment-specific values (links, contact, Wikipedia, curated groups, source URLs)
+  are settings with code defaults: the API falls back on an invalid value, the
+  pipeline (`sources.py`) fails.
 - `n_rows` counts species (formal names, with or without data); `s_*` count every record
   in the subtree at any rank; `c_*` count species with data on themselves or below. Informal
   species and below-species taxa are single units (`n_rows = 1`). Placeholder taxa without
