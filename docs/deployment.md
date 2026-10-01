@@ -53,7 +53,9 @@ All services restart automatically (`restart: unless-stopped`) and rotate their 
 ## Configuration
 
 Set in `infra/.env` (see `infra/.env.example`). All are optional except
-`POSTGRES_PASSWORD`: the stack refuses to start without it.
+`POSTGRES_PASSWORD`: the stack refuses to start without it. The `api` service loads
+the whole file, so every API setting below takes effect after `$C up -d api` (`$C` is
+defined under [Data updates](#data-updates)) with no change to the compose file.
 
 | Variable | Default | Used by | Meaning |
 |---|---|---|---|
@@ -71,9 +73,8 @@ Set in `infra/.env` (see `infra/.env.example`). All are optional except
 ### Links, contact and Wikipedia
 
 These change what the site shows without rebuilding anything: set them in
-`infra/.env`, then recreate the API container with `$C up -d api` (`$C` is defined
-under [Data updates](#data-updates)). Browsers and the nginx cache may keep the old
-values for up to `CACHE_MAX_AGE` seconds. An invalid value does not stop the API: it logs a warning
+`infra/.env`, then recreate the API container with `$C up -d api`. Browsers and the
+nginx cache may keep the old values for up to `CACHE_MAX_AGE` seconds. An invalid value does not stop the API: it logs a warning
 naming the variable (`ignoring FEEDBACK_URL (...)`) and uses the default. Every link
 must be an `https://` URL.
 

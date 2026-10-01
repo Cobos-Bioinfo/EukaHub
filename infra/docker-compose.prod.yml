@@ -51,6 +51,11 @@ services:
       dockerfile: api/Dockerfile
     restart: unless-stopped
     logging: *logging
+    # Every variable in infra/.env reaches the API, so a new setting needs no
+    # change here. Optional, so a stack without one (the low-memory test) starts.
+    env_file:
+      - path: .env
+        required: false
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-eukahub}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in infra/.env}@db:5432/${POSTGRES_DB:-eukahub}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
@@ -66,17 +71,6 @@ services:
       # Most DB connections the API uses at once; small, since on one core
       # concurrent heavy queries just slow each other down.
       DB_POOL_MAX: ${DB_POOL_MAX:-4}
-      # Deployment settings (docs/deployment.md). Empty means the API's default.
-      ASSEMBLY_LINK_TEMPLATE: ${ASSEMBLY_LINK_TEMPLATE:-}
-      ANNOTATION_LINK_TEMPLATE: ${ANNOTATION_LINK_TEMPLATE:-}
-      RNA_SEQ_LINK_TEMPLATE: ${RNA_SEQ_LINK_TEMPLATE:-}
-      LONG_READ_LINK_TEMPLATE: ${LONG_READ_LINK_TEMPLATE:-}
-      FEEDBACK_URL: ${FEEDBACK_URL:-}
-      SOURCE_CODE_URL: ${SOURCE_CODE_URL:-}
-      PRIVACY_CONTACT_EMAIL: ${PRIVACY_CONTACT_EMAIL:-}
-      WIKIPEDIA_SUMMARY_URL: ${WIKIPEDIA_SUMMARY_URL:-}
-      WIKIPEDIA_USER_AGENT: ${WIKIPEDIA_USER_AGENT:-}
-      WIKIPEDIA_TIMEOUT_SECONDS: ${WIKIPEDIA_TIMEOUT_SECONDS:-}
       # Curated groups; the defaults apply while infra/config/groups.json is absent.
       GROUPS_FILE: /config/groups.json
     volumes:
