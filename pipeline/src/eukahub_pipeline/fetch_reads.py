@@ -18,12 +18,20 @@ from __future__ import annotations
 import logging
 
 import requests
-from tenacity import retry, stop_after_attempt, wait_exponential
+from tenacity import before_sleep_log, retry, stop_after_attempt, wait_exponential
 
 log = logging.getLogger("eukahub.fetch_reads")
 
-ENA_BASE = "https://www.ebi.ac.uk/ena/portal/api/search"
+ENA_PORTAL = "https://www.ebi.ac.uk/ena/portal/api"
 EUKARYOTE_TXID = 2759
+_QUERY = (
+    f"tax_tree({EUKARYOTE_TXID}) AND "
+    '(library_source="transcriptomic" OR library_strategy="rna-seq")'
+)
+# ENA sometimes ends a large response early with a shorter but valid payload. A
+# download must hold at least this share of the runs ENA's count endpoint reports
+# (a little slack for runs withdrawn between the two requests).
+_MIN_COMPLETE = 0.99
 
 _LONG_READ_PLATFORMS = {"OXFORD_NANOPORE", "PACBIO_SMRT"}
 
@@ -31,31 +39,36 @@ _LONG_READ_PLATFORMS = {"OXFORD_NANOPORE", "PACBIO_SMRT"}
 READS_COLUMNS: tuple[str, ...] = ("taxid", "short", "long")
 
 
-@retry(stop=stop_after_attempt(5), wait=wait_exponential(multiplier=1, min=2, max=60))
-def _query_ena() -> list[dict]:
-    """POST the ENA portal query and return the full JSON payload (list of
-    ``{tax_id, instrument_platform}`` rows). Retried with backoff."""
-    payload = {
-        "result": "read_run",
-        "query": (
-            f"tax_tree({EUKARYOTE_TXID}) AND "
-            f'(library_source="transcriptomic" OR library_strategy="rna-seq")'
-        ),
-        "fields": "tax_id,instrument_platform",
-        "format": "json",
-        "limit": 0,
-    }
+def _post(endpoint: str, **fields: str | int) -> requests.Response:
+    """POST the RNA-Seq read-run query to an ENA portal endpoint."""
     resp = requests.post(
-        ENA_BASE,
-        data=payload,
+        f"{ENA_PORTAL}/{endpoint}",
+        data={"result": "read_run", "query": _QUERY, **fields},
         headers={"Content-Type": "application/x-www-form-urlencoded"},
         timeout=300,
     )
     resp.raise_for_status()
-    data = resp.json()
-    if not data:
-        # Empty is a hard failure — the Eukaryota RNA-Seq query always has rows.
-        raise RuntimeError("empty ENA response")
+    return resp
+
+
+def _expected_runs() -> int:
+    """How many runs match the query, from ENA's count endpoint ("count\\n<n>")."""
+    return int(_post("count").text.split()[-1])
+
+
+@retry(
+    stop=stop_after_attempt(5),
+    wait=wait_exponential(multiplier=1, min=2, max=60),
+    before_sleep=before_sleep_log(log, logging.WARNING),
+    reraise=True,
+)
+def _query_ena() -> list[dict]:
+    """Return every matching run as ``{tax_id, instrument_platform}`` rows, retrying
+    with backoff until the download is complete."""
+    expected = _expected_runs()
+    data = _post("search", fields="tax_id,instrument_platform", format="json", limit=0).json()
+    if not data or len(data) < expected * _MIN_COMPLETE:
+        raise RuntimeError(f"ENA returned {len(data)} of {expected} runs")
     return data
 
 
