@@ -713,7 +713,8 @@ _SET_TAXA_SQL = (
 
 def fetch_set_taxa(conn: psycopg.Connection, taxids: Collection[int]) -> dict[int, SetTaxon]:
     """The given taxids that are in the taxonomy, with their path and rollup row
-    (zero-filled when they have none)."""
+    (zero-filled when they have none). Callers bound ``taxids``: at most 40 from
+    ``/aggregate``, and what the groups file names for ``/custom-groups``."""
     taxa: dict[int, SetTaxon] = {}
     for taxid, name, rank, path, infraspecific, *features in conn.execute(
         _SET_TAXA_SQL, (list(taxids),)

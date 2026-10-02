@@ -418,18 +418,18 @@ def compare(
 
 
 def _parse_clades(raw: str, name: str) -> list[int]:
-    """The distinct taxids in a comma-separated list, or a 422 naming the problem."""
-    ids: list[int] = []
+    """The distinct taxids in a comma-separated list, or a 422 naming the problem.
+    Stops at the first taxid over the cap, so a long list costs nothing."""
+    ids: dict[int, None] = {}
     for part in filter(None, (p.strip() for p in raw.split(","))):
         if not (part.isascii() and part.isdigit() and len(part) <= 10):
             raise HTTPException(status_code=422, detail=f"{name}: {part!r} is not a taxid")
-        if int(part) not in ids:
-            ids.append(int(part))
-    if len(ids) > MAX_CLADES_PER_GROUP:
-        raise HTTPException(
-            status_code=422, detail=f"{name}: at most {MAX_CLADES_PER_GROUP} taxids"
-        )
-    return ids
+        ids[int(part)] = None
+        if len(ids) > MAX_CLADES_PER_GROUP:
+            raise HTTPException(
+                status_code=422, detail=f"{name}: at most {MAX_CLADES_PER_GROUP} taxids"
+            )
+    return list(ids)
 
 
 def _taxon_refs(taxids: Iterable[int], taxa: Mapping[int, SetTaxon]) -> list[TaxonRef]:

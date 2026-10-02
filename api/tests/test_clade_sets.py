@@ -312,6 +312,7 @@ def test_aggregate_can_include_inside_an_excluded_clade(client):
         ({"include": "40674,abc"}, "is not a taxid"),
         ({"include": "-5"}, "is not a taxid"),
         ({"include": ",".join(str(i) for i in range(1, MAX_CLADES_PER_GROUP + 2))}, "at most"),
+        ({"include": "40674", "exclude": ",".join(str(i) for i in range(1, 2001))}, "at most"),
         ({"include": "40674", "exclude": "40674"}, "both included and excluded"),
         ({"include": "999999999"}, "not in the dataset"),
         ({"include": "9443", "exclude": "40674"}, "not inside an included clade"),
