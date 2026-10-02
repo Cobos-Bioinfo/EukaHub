@@ -53,7 +53,9 @@ All services restart automatically (`restart: unless-stopped`) and rotate their 
 ## Configuration
 
 Set in `infra/.env` (see `infra/.env.example`). All are optional except
-`POSTGRES_PASSWORD`: the stack refuses to start without it.
+`POSTGRES_PASSWORD`: the stack refuses to start without it. The `api` service loads
+the whole file, so every API setting below takes effect after `$C up -d api` (`$C` is
+defined under [Data updates](#data-updates)) with no change to the compose file.
 
 | Variable | Default | Used by | Meaning |
 |---|---|---|---|
@@ -63,6 +65,7 @@ Set in `infra/.env` (see `infra/.env.example`). All are optional except
 | `REFRESH_INTERVAL` | `86400` | refresher | Seconds between checks for a newer Release. |
 | `DB_STATEMENT_TIMEOUT_MS` | `15000` | api | Postgres cancels any API query slower than this; the client gets a 504. Keep it below nginx's 60 s proxy timeout. |
 | `DB_POOL_MAX` | `4` | api | Most database connections the API holds. Raise only with more CPU cores. |
+| `EXPORT_BATCH_ROWS` | `5000` | api | Rows per chunk of a TSV download, 1000 to 10000. Larger is slightly faster and costs about 1 MB of API memory per 1,000 rows, for each download running at once. An invalid value is logged and the default is used. |
 | `CACHE_MAX_AGE` | `3600` | api | Seconds that browsers and the nginx cache may reuse a response. |
 | `CORS_ALLOW_ORIGINS` | `http://localhost:8080` | api | Comma-separated origins allowed to call the API from another site. The bundled SPA calls it same-origin and does not need this. |
 | `LOG_LEVEL` | `INFO` | api | Python log level; logs are JSON lines on stdout. |
@@ -70,9 +73,8 @@ Set in `infra/.env` (see `infra/.env.example`). All are optional except
 ### Links, contact and Wikipedia
 
 These change what the site shows without rebuilding anything: set them in
-`infra/.env`, then recreate the API container with `$C up -d api` (`$C` is defined
-under [Data updates](#data-updates)). Browsers and the nginx cache may keep the old
-values for up to `CACHE_MAX_AGE` seconds. An invalid value does not stop the API: it logs a warning
+`infra/.env`, then recreate the API container with `$C up -d api`. Browsers and the
+nginx cache may keep the old values for up to `CACHE_MAX_AGE` seconds. An invalid value does not stop the API: it logs a warning
 naming the variable (`ignoring FEEDBACK_URL (...)`) and uses the default. Every link
 must be an `https://` URL.
 
@@ -238,8 +240,8 @@ fixes over time; rebuild with `$C build --pull && $C up -d` every few months.
 - Data pages say "not found" right after the first start: the dataset is still
   installing; see the refresher logs.
 - A request returns 504 "needs more work than the server allows": a very large
-  query hit the time limit. Expected for extreme requests (for example every
-  species in Eukaryota at once); the server is unaffected.
+  query hit the time limit. The server is unaffected; a smaller group or a coarser
+  rank works.
 - 503 "The server is busy": all database connections were busy; clients should
   retry after the `Retry-After` delay.
 
@@ -247,7 +249,7 @@ fixes over time; rebuild with `$C build --pull && $C up -d` every few months.
 
 `infra/lowmem-test/` runs the whole stack capped at 1 GB of RAM (no swap) with every
 container pinned to one CPU core, installs the dataset, and times typical and
-abusive requests:
+heavy requests (such as exporting every eukaryotic species):
 
 ```bash
 sudo bash infra/lowmem-test/lowmem-test.sh "$PWD"

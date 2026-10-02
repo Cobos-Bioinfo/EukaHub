@@ -28,7 +28,7 @@ _CALLS = {
     ),
     "export sort": lambda: next(queries.iter_export_tsv(
         None, root_path="2759", rank="phylum", sort=HOSTILE, filter_keys=[],
-        logic=FilterLogic.AND, exclude_empty=False,
+        logic=FilterLogic.AND, exclude_empty=False, batch_rows=1,
     )),
     "quality source": lambda: queries._fetch_quality_stats(None, HOSTILE, "2759"),
     "records sort": lambda: queries._fetch_records(

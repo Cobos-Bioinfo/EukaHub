@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Fresh install + realistic and abusive requests, whole stack capped at 1 GB RAM / 1 CPU core.
+# Fresh install + realistic and heavy requests, whole stack capped at 1 GB RAM / 1 CPU core.
 # Usage: sudo bash lowmem-test.sh /path/to/EukaHub-checkout
 set -euo pipefail
 REPO=$(cd "${1:?usage: lowmem-test.sh /path/to/EukaHub}" && pwd)
@@ -40,11 +40,11 @@ hit "gaps order (gaps page)"              "$API/gaps?rank=order&limit=25"
 hit "compare 6 groups"                    "$API/compare?taxids=40674,8782,50557,4751,33090,7898"
 hit "export Eukaryota phylum (download)"  "$API/clade/2759/export.tsv?rank=phylum"
 
-echo "== Abusive requests (a clean 504 after ~15-30s is the correct outcome)"
+echo "== Heaviest requests (expect 200 within seconds; a clean 504 after ~15s is acceptable, a hang or a crash is not)"
 hit "quality Eukaryota genus"             "$API/clade/2759/breakdown/quality?rank=genus"
 hit "export every eukaryote species"      "$API/clade/2759/export.tsv?rank=species"
 
-echo "== Six different requests at once"
+echo "== Six different requests at once (expect all 200, slower than alone)"
 hit "quality Metazoa genus"   "$API/clade/33208/breakdown/quality?rank=genus" &
 hit "quality Fungi genus"     "$API/clade/4751/breakdown/quality?rank=genus" &
 hit "gaps family"             "$API/gaps?rank=family&limit=200" &

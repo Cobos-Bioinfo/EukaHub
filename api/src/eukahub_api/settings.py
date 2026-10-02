@@ -42,6 +42,10 @@ DEFAULT_WIKIPEDIA_SUMMARY_URL = "https://en.wikipedia.org/api/rest_v1/page/summa
 DEFAULT_WIKIPEDIA_TIMEOUT_SECONDS = 6.0
 # A lookup holds a pooled database connection while it waits.
 MAX_WIKIPEDIA_TIMEOUT_SECONDS = 30.0
+# Rows per TSV export chunk. A batch costs about 1 MB of API memory per 1,000
+# rows, for each export running at once.
+DEFAULT_EXPORT_BATCH_ROWS = 5000
+EXPORT_BATCH_ROWS_RANGE = (1000, 10000)
 
 MAX_GROUPS = 100
 MAX_FEATURED_GROUPS = 12
@@ -113,6 +117,7 @@ class Settings:
     wikipedia_summary_url: str  # URL template with {title}
     wikipedia_user_agent: str
     wikipedia_timeout_seconds: float
+    export_batch_rows: int
     groups: tuple[CladeGroup, ...]
 
     @property
@@ -124,6 +129,13 @@ def _check_email(value: str) -> str:
     if not _EMAIL.fullmatch(value):
         raise ValueError("must be an email address")
     return value
+
+
+def _check_batch_rows(value: str) -> int:
+    low, high = EXPORT_BATCH_ROWS_RANGE
+    if not value.isdigit() or not low <= int(value) <= high:
+        raise ValueError(f"must be a whole number from {low} to {high}")
+    return int(value)
 
 
 def _check_user_agent(value: str) -> str:
@@ -201,6 +213,9 @@ def load_settings(environ: Mapping[str, str]) -> Settings:
             "WIKIPEDIA_TIMEOUT_SECONDS",
             DEFAULT_WIKIPEDIA_TIMEOUT_SECONDS,
             lambda v: check_seconds(v, maximum=MAX_WIKIPEDIA_TIMEOUT_SECONDS),
+        ),
+        export_batch_rows=_setting(
+            environ, "EXPORT_BATCH_ROWS", DEFAULT_EXPORT_BATCH_ROWS, _check_batch_rows
         ),
         groups=_load_groups(environ.get("GROUPS_FILE", "").strip()),
     )

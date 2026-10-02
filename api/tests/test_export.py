@@ -2,7 +2,12 @@
 
 from __future__ import annotations
 
-from eukahub_api.queries import EXPORT_HEADER
+import dataclasses
+import math
+
+from eukahub_api import main, queries
+from eukahub_api.queries import EXPORT_HEADER, FilterLogic
+from eukahub_api.settings import get_settings
 
 
 def _parse(text: str) -> tuple[list[str], list[list[str]]]:
@@ -51,3 +56,33 @@ def test_export_bad_root_404(client):
 
 def test_export_invalid_rank_422(client):
     assert client.get("/clade/2759/export.tsv?rank=kingdom").status_code == 422
+
+
+def test_export_streams_one_chunk_per_batch(client, monkeypatch):
+    """The batch size changes how rows are chunked, never which rows are sent."""
+    url = "/clade/40674/export.tsv?rank=species"  # Mammalia: in the full DB and the CI slice
+    whole = client.get(url).text.splitlines()
+
+    small_batches = dataclasses.replace(get_settings(), export_batch_rows=3)
+    monkeypatch.setattr(main, "get_settings", lambda: small_batches)
+    small = client.get(url).text.splitlines()
+    assert small[0] == whole[0]
+    assert sorted(small[1:]) == sorted(whole[1:])
+
+    with main.app.state.pool.connection() as conn:
+        _name, _rank, root_path = queries.fetch_root(conn, 40674)
+    chunks = list(
+        queries.iter_export_tsv(
+            main.app.state.pool,
+            root_path=root_path,
+            rank="species",
+            sort="n_rows",
+            filter_keys=[],
+            logic=FilterLogic.AND,
+            exclude_empty=False,
+            batch_rows=3,
+        )
+    )
+    n_rows = len(whole) - 1
+    assert n_rows > 3
+    assert len(chunks) == 1 + math.ceil(n_rows / 3)  # header, then one chunk per batch
