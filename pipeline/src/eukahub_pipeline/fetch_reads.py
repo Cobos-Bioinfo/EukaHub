@@ -9,13 +9,18 @@ resources.
 
 Note on format (kept from Euka-Survey): ``format=tsv`` streaming returned a
 fraction of the rows (an undocumented cap / severed stream), so we use
-``format=json`` and materialize the payload — a few hundred MB for the current
-~8M-row response, acceptable for an offline build.
+``format=json``. The array is parsed as it arrives and runs are counted on the
+fly, so memory stays flat however many runs ENA has.
 """
 
 from __future__ import annotations
 
+import codecs
+import json
 import logging
+import re
+from collections.abc import Iterable, Iterator
+from typing import Any
 
 import requests
 from eukahub_core.taxonomy import EUKARYOTA_TAXID
@@ -40,16 +45,57 @@ _LONG_READ_PLATFORMS = {"OXFORD_NANOPORE", "PACBIO_SMRT"}
 READS_COLUMNS: tuple[str, ...] = ("taxid", "short", "long")
 
 
-def _post(source: Source, endpoint: str, **fields: str | int) -> requests.Response:
+# Whitespace and punctuation between the elements of a JSON array.
+_BETWEEN_ELEMENTS = re.compile(r"[\s,\[\]]*")
+# A larger unparsed remainder means a malformed stream, not one run record.
+_MAX_ELEMENT_CHARS = 1 << 20
+
+
+def _post(
+    source: Source, endpoint: str, *, stream: bool = False, **fields: str | int
+) -> requests.Response:
     """POST the RNA-Seq read-run query to an ENA portal endpoint."""
     resp = requests.post(
         f"{source.url}/{endpoint}",
         data={"result": "read_run", "query": _QUERY, **fields},
         headers={"Content-Type": "application/x-www-form-urlencoded"},
         timeout=source.timeout,
+        stream=stream,
     )
     resp.raise_for_status()
     return resp
+
+
+def iter_json_array(chunks: Iterable[bytes]) -> Iterator[Any]:
+    """The elements of a JSON array of objects, parsed as its UTF-8 bytes arrive.
+    Raises ``ValueError`` if the array is malformed or cut short."""
+    decoder = json.JSONDecoder()
+    utf8 = codecs.getincrementaldecoder("utf-8")()
+    buf, closed, done = "", False, False
+    chunks = iter(chunks)
+    while not done:
+        chunk = next(chunks, None)
+        done = chunk is None
+        buf += utf8.decode(b"" if done else chunk, final=done)
+        pos = 0
+        while True:
+            gap = _BETWEEN_ELEMENTS.match(buf, pos)
+            closed = closed or "]" in gap.group()
+            pos = gap.end()
+            if pos == len(buf):
+                break
+            try:
+                element, pos = decoder.raw_decode(buf, pos)
+            except json.JSONDecodeError:
+                if done:
+                    raise ValueError("malformed JSON array") from None
+                break  # the element continues in the next chunk
+            yield element
+        buf = buf[pos:]
+        if len(buf) > _MAX_ELEMENT_CHARS:
+            raise ValueError("malformed JSON array")
+    if not closed:
+        raise ValueError("the JSON array was cut short")
 
 
 def _expected_runs(source: Source) -> int:
@@ -63,16 +109,27 @@ def _expected_runs(source: Source) -> int:
     before_sleep=before_sleep_log(log, logging.WARNING),
     reraise=True,
 )
-def _query_ena(source: Source) -> list[dict]:
-    """Return every matching run as ``{tax_id, instrument_platform}`` rows, retrying
-    with backoff until the download is complete."""
+def _count_runs(source: Source) -> dict[int, list[int]]:
+    """Runs per taxon as ``{taxid: [short, long]}``, counted while ENA streams
+    them, retrying with backoff until the download is complete."""
     expected = _expected_runs(source)
-    data = _post(
-        source, "search", fields="tax_id,instrument_platform", format="json", limit=0
-    ).json()
-    if not data or len(data) < expected * _MIN_COMPLETE:
-        raise RuntimeError(f"ENA returned {len(data)} of {expected} runs")
-    return data
+    counts: dict[int, list[int]] = {}
+    runs = 0
+    with _post(
+        source, "search", stream=True, fields="tax_id,instrument_platform", format="json", limit=0
+    ) as resp:
+        for record in iter_json_array(resp.iter_content(chunk_size=1 << 20)):
+            runs += 1
+            try:
+                taxid = int(record.get("tax_id"))
+            except (TypeError, ValueError):
+                continue
+            entry = counts.setdefault(taxid, [0, 0])
+            entry[1 if record.get("instrument_platform", "") in _LONG_READ_PLATFORMS else 0] += 1
+    if not runs or runs < expected * _MIN_COMPLETE:
+        raise RuntimeError(f"ENA returned {runs} of {expected} runs")
+    log.info("ENA: %d runs across %d taxa", runs, len(counts))
+    return counts
 
 
 def fetch_reads(source: Source = ENA) -> list[dict]:
@@ -82,25 +139,10 @@ def fetch_reads(source: Source = ENA) -> list[dict]:
     PacBio SMRT runs (``rna`` = short+long and ``lng`` = long are derived in the
     roll-up, matching the existing metrics).
     """
-    data = _query_ena(source)
-    counts: dict[int, list[int]] = {}  # taxid -> [short, long]
-    for record in data:
-        try:
-            taxid = int(record.get("tax_id"))
-        except (TypeError, ValueError):
-            continue
-        entry = counts.setdefault(taxid, [0, 0])
-        if record.get("instrument_platform", "") in _LONG_READ_PLATFORMS:
-            entry[1] += 1
-        else:
-            entry[0] += 1
-
-    rows = [
+    return [
         {"taxid": taxid, "short": short, "long": long}
-        for taxid, (short, long) in counts.items()
+        for taxid, (short, long) in _count_runs(source).items()
     ]
-    log.info("ENA: %d runs across %d taxa", len(data), len(rows))
-    return rows
 
 
 if __name__ == "__main__":

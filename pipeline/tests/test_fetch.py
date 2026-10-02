@@ -2,11 +2,15 @@
 
 The parsers (``parse_assembly_record`` / ``parse_report_row``) are pure,
 so we exercise them on captured real-shaped records — no datasets CLI, no
-Annotrieve. The ENA fetch runs against a stubbed ``_post``. The live fetch
-wrappers are covered by manual smoke runs, not CI.
+Annotrieve. The ENA fetch runs against a stubbed ``_post`` and the Annotrieve
+fetch against stubbed report lines. The live fetch wrappers are covered by manual
+smoke runs, not CI.
 """
 
 from __future__ import annotations
+
+import json
+from typing import Self
 
 import polars as pl
 import pytest
@@ -141,8 +145,12 @@ def test_parse_report_row_missing_id_or_taxid_is_dropped():
     assert parse_report_row({**ANNOTATION_ROW, "taxid": ""}) is None
 
 
+def _report(monkeypatch, text: str) -> None:
+    monkeypatch.setattr(fa, "_report_lines", lambda source: iter(text.splitlines()))
+
+
 def test_fetch_annotations_reads_the_report(monkeypatch):
-    monkeypatch.setattr(fa, "_get_report", lambda base: f"{REPORT_HEADER}\n{REPORT_LINE}\n")
+    _report(monkeypatch, f"{REPORT_HEADER}\n{REPORT_LINE}\n")
     rows = list(fa.fetch_annotations())
     assert [r["annotation_id"] for r in rows] == ["f628158077010762f66c13935b5630a3"]
 
@@ -157,7 +165,7 @@ def test_fetch_annotations_reads_the_report(monkeypatch):
 )
 def test_fetch_annotations_fails_on_an_unusable_report(monkeypatch, report):
     """A changed or truncated report must fail the build, not ship no annotations."""
-    monkeypatch.setattr(fa, "_get_report", lambda base: report)
+    _report(monkeypatch, report)
     with pytest.raises(RuntimeError):
         list(fa.fetch_annotations())
 
@@ -182,14 +190,21 @@ def test_drop_duplicate_assemblies_keeps_one_row_per_assembly():
 class _Reply:
     def __init__(self, text: str = "", rows: list | None = None) -> None:
         self.text = text
-        self._rows = rows
+        self._body = json.dumps(rows).encode() if rows is not None else b""
 
-    def json(self) -> list:
-        return self._rows
+    def __enter__(self) -> Self:
+        return self
+
+    def __exit__(self, *exc) -> None:
+        pass
+
+    def iter_content(self, chunk_size: int) -> list[bytes]:
+        """The body in 7-byte chunks, so records straddle chunk boundaries."""
+        return [self._body[i : i + 7] for i in range(0, len(self._body), 7)]
 
 
 def _ena(monkeypatch, expected: int, rows: list) -> None:
-    def post(source, endpoint, **fields):
+    def post(source, endpoint, *, stream=False, **fields):
         return _Reply(text=f"count\n{expected}\n") if endpoint == "count" else _Reply(rows=rows)
 
     monkeypatch.setattr(fr, "_post", post)
@@ -213,7 +228,7 @@ def test_fetch_reads_counts_runs_per_taxon(monkeypatch):
 def test_fetch_reads_rejects_an_incomplete_download(monkeypatch, rows):
     """ENA can end a response early with a valid but shorter payload."""
     _ena(monkeypatch, expected=3, rows=rows)
-    once = fr._query_ena.retry_with(stop=stop_after_attempt(1))
+    once = fr._count_runs.retry_with(stop=stop_after_attempt(1))
     with pytest.raises(RuntimeError, match="of 3 runs"):
         once(ENA)
 
@@ -221,8 +236,38 @@ def test_fetch_reads_rejects_an_incomplete_download(monkeypatch, rows):
 def test_fetch_reads_retries_until_the_download_is_complete(monkeypatch):
     downloads = iter([_RUNS[:1], _RUNS])
 
-    def post(source, endpoint, **fields):
+    def post(source, endpoint, *, stream=False, **fields):
         return _Reply(text="count\n3\n") if endpoint == "count" else _Reply(rows=next(downloads))
 
     monkeypatch.setattr(fr, "_post", post)
-    assert fr._query_ena.retry_with(wait=wait_none())(ENA) == _RUNS
+    assert fr._count_runs.retry_with(wait=wait_none())(ENA) == {9606: [1, 1], 10090: [1, 0]}
+
+
+# ENA's layout: one record per line, commas on lines of their own.
+_ENA_BODY = (
+    '[\n{"run_accession":"ERR1","tax_id":"3702","instrument_platform":"OXFORD_NANOPORE"}\n,\n'
+    '{"run_accession":"ERR2","tax_id":"9606","note":"\u00e9t\u00e9 \\"quoted\\" \u03b1\u2192\u03b2"}\n'
+    ",\n{}\n]"
+).encode()
+
+
+@pytest.mark.parametrize("size", [1, 2, 3, 5, 64, len(_ENA_BODY)])
+def test_iter_json_array_parses_across_any_chunking(size):
+    chunks = [_ENA_BODY[i : i + size] for i in range(0, len(_ENA_BODY), size)]
+    assert list(fr.iter_json_array(chunks)) == json.loads(_ENA_BODY)
+
+
+def test_iter_json_array_handles_split_multibyte_characters():
+    body = json.dumps([{"name": "Ér\u00e9 \u03b1\u2192\u03b2"}], ensure_ascii=False).encode()
+    for cut in range(1, len(body)):
+        assert list(fr.iter_json_array([body[:cut], body[cut:]])) == json.loads(body)
+
+
+def test_iter_json_array_of_an_empty_array():
+    assert list(fr.iter_json_array([b"[", b"]"])) == []
+
+
+@pytest.mark.parametrize("body", [b"", b'[{"a":1},', b'[{"a":1},{"b":', b'[{"a":1},{"b":}]'])
+def test_iter_json_array_rejects_a_cut_or_malformed_array(body):
+    with pytest.raises(ValueError):
+        list(fr.iter_json_array([body]))

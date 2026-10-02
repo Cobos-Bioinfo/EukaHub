@@ -184,7 +184,8 @@ if __name__ == "__main__":
     import sys
 
     root = int(sys.argv[1]) if len(sys.argv) > 1 else EUKARYOTA_TAXID
-    rows = list(fetch_assemblies(root))
-    log.info("Fetched %d assemblies under taxon %d", len(rows), root)
-    for row in rows[:5]:
-        log.info("%s", row)
+    n = 0
+    for n, row in enumerate(fetch_assemblies(root), 1):
+        if n <= 5:
+            log.info("%s", row)
+    log.info("Fetched %d assemblies under taxon %d", n, root)

@@ -54,6 +54,11 @@ Streamlit app that answered the same questions but was slow to build and to serv
 - **The pipeline runs on GitHub Actions, not on the server.** The server only
   restores finished datasets, so it needs no build tooling, source credentials or
   CPU headroom.
+- **Sources are streamed, never held whole in memory.** Each fetcher parses its
+  source as it arrives and the rows go to disk in batches, so the build's memory does
+  not grow with the sources. ENA's runs (about 8 million) are counted per taxon while
+  its JSON streams in. A source's snapshot appears only once its fetch completes, so
+  a failed fetch never leaves a partial one to be reused.
 - **A dataset is published only after invariant checks pass**, and the same checks
   run again on the server before it goes live.
 
