@@ -18,7 +18,15 @@ from eukahub_core.metrics import (
     Metric,
     QualityStat,
 )
-from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt, StringConstraints
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StrictBool,
+    StrictInt,
+    StringConstraints,
+    model_validator,
+)
 
 
 class MetricConfig(BaseModel):
@@ -78,6 +86,18 @@ class ResourceSummary(BaseModel):
     total: int  # s_<key>: resource count summed across the subtree
     percent: float  # covered / n_rows * 100 (0.0 when n_rows == 0)
 
+    @classmethod
+    def by_metric(cls, meta: CladeMetadata) -> dict[str, ResourceSummary]:
+        """One summary per metric key, in METRICS order."""
+        return {
+            key: cls(
+                covered=getattr(meta, f"c_{key}"),
+                total=getattr(meta, f"s_{key}"),
+                percent=round(meta.percent(key), 2),
+            )
+            for key in METRIC_KEYS
+        }
+
 
 class AssemblyComposition(BaseModel):
     """Additive assembly-composition counts for a clade (from ``clade_features``):
@@ -129,14 +149,7 @@ class CladeSummary(BaseModel):
             rank=rank,
             n_rows=meta.n_rows,
             is_infraspecific=is_infraspecific,
-            resources={
-                key: ResourceSummary(
-                    covered=getattr(meta, f"c_{key}"),
-                    total=getattr(meta, f"s_{key}"),
-                    percent=round(meta.percent(key), 2),
-                )
-                for key in METRIC_KEYS
-            },
+            resources=ResourceSummary.by_metric(meta),
             composition=AssemblyComposition.from_metadata(meta),
         )
 
@@ -174,6 +187,14 @@ class Overview(BaseModel):
     featured: list[FeaturedClade]
 
 
+MAX_CLADES_PER_GROUP = 20
+
+_Taxid = Annotated[StrictInt, Field(gt=0)]
+_Label = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=60)]
+_GroupId = Annotated[str, StringConstraints(pattern=r"^[a-z0-9]+(-[a-z0-9]+)*$", max_length=40)]
+_Clades = Annotated[tuple[_Taxid, ...], Field(max_length=MAX_CLADES_PER_GROUP)]
+
+
 class CladeGroup(BaseModel):
     """A curated group: its friendly label is shown wherever the group appears,
     it is in the "Surprise me" pool, and ``featured`` groups are the landing-page
@@ -181,9 +202,38 @@ class CladeGroup(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    taxid: Annotated[StrictInt, Field(gt=0)]
-    label: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=60)]
+    taxid: _Taxid
+    label: _Label
     featured: StrictBool = False
+
+
+class CustomGroup(BaseModel):
+    """A custom group from the deployment's groups file: the clades in ``include``
+    minus the clades inside them in ``exclude``. A ``rest`` group is instead
+    everything in its ``parent`` group that the parent's other groups leave out."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    id: _GroupId
+    label: _Label
+    include: _Clades = ()
+    exclude: _Clades = ()
+    parent: _GroupId | None = None
+    rest: StrictBool = False
+
+    @model_validator(mode="after")
+    def _check_clades(self) -> CustomGroup:
+        if self.rest:
+            if self.parent is None:
+                raise ValueError("a rest group needs a parent")
+            if self.include or self.exclude:
+                raise ValueError("a rest group takes no include or exclude")
+        elif not self.include:
+            raise ValueError("include at least one taxid")
+        taxids = self.include + self.exclude
+        if len(set(taxids)) != len(taxids):
+            raise ValueError("each taxid may appear only once in a group")
+        return self
 
 
 class SiteConfig(BaseModel):
@@ -449,3 +499,37 @@ class Compare(BaseModel):
     the requested set."""
 
     groups: list[CompareGroup]
+
+
+class Aggregate(BaseModel):
+    """Species count, per-resource coverage and quality stats for a set of clades
+    (served by ``/aggregate``): a taxon is in the set when the nearest listed
+    clade above it (or the taxon itself) is in ``include``."""
+
+    include: list[TaxonRef]
+    exclude: list[TaxonRef]
+    n_rows: int  # species in the set
+    resources: dict[str, ResourceSummary]  # keyed by metric key, in METRICS order
+    composition: AssemblyComposition
+    quality: list[QualityStatValue]  # BUSCO / genes / genome size / N50, QUALITY_STATS order
+
+
+class CustomGroupItem(BaseModel):
+    """One custom group from the groups file. ``include`` and ``exclude`` are the
+    clades it is made of, worked out from the parent's other groups for a
+    ``rest`` group, so they can be passed to ``/aggregate`` as they are. A rest
+    group with nothing left lists no clades."""
+
+    id: str
+    label: str
+    parent: str | None  # id of the group it sits under
+    rest: bool  # everything in the parent that the parent's other groups leave out
+    include: list[TaxonRef]
+    exclude: list[TaxonRef]
+
+
+class CustomGroups(BaseModel):
+    """The deployment's custom groups, in groups-file order (served by
+    ``/custom-groups``). A group that doesn't fit the current taxonomy is left out."""
+
+    groups: list[CustomGroupItem]

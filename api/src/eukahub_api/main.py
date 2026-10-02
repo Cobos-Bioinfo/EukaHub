@@ -4,6 +4,8 @@ Phase 2 read endpoints:
 
 - ``GET /overview``                    — landing-page totals + featured groups.
 - ``GET /compare``                     — several groups lined up side by side.
+- ``GET /aggregate``                   — data for a set of clades (include minus exclude).
+- ``GET /custom-groups``               — the deployment's custom groups and their clades.
 - ``GET /gaps``                        — the biggest under-sequenced groups.
 - ``GET /clade/{taxid}/summary``       — the Genomic Resource Summary (Q1).
 - ``GET /clade/{taxid}/breakdown``     — descendants at a target rank (Q2).
@@ -26,6 +28,7 @@ import itertools
 import logging
 import os
 import time
+from collections.abc import Iterable, Mapping
 from contextlib import asynccontextmanager
 from typing import Annotated
 
@@ -37,6 +40,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from psycopg.errors import QueryCanceled
 from psycopg_pool import PoolTimeout
 
+from eukahub_api.clade_sets import SetTaxon, clade_set, resolve_groups, set_metadata, set_pieces
 from eukahub_api.db import Conn
 from eukahub_api.db import lifespan as db_lifespan
 from eukahub_api.logging_config import configure_logging
@@ -61,13 +65,18 @@ from eukahub_api.queries import (
     fetch_overview,
     fetch_quality_for_taxids,
     fetch_root,
+    fetch_set_quality,
+    fetch_set_taxa,
     fetch_summary,
     iter_export_tsv,
     search_taxa,
 )
 from eukahub_api.schemas import (
+    MAX_CLADES_PER_GROUP,
+    Aggregate,
     AnnotationList,
     AnnotationRecord,
+    AssemblyComposition,
     AssemblyList,
     AssemblyRecord,
     Breakdown,
@@ -75,6 +84,8 @@ from eukahub_api.schemas import (
     CladeSummary,
     Compare,
     CompareGroup,
+    CustomGroupItem,
+    CustomGroups,
     DatasetMeta,
     FeaturedClade,
     GapItem,
@@ -84,6 +95,7 @@ from eukahub_api.schemas import (
     OverviewTotals,
     QualityStatConfig,
     QualityStatValue,
+    ResourceSummary,
     SiteConfig,
     TaxonAbout,
     TaxonChildren,
@@ -403,6 +415,91 @@ def compare(
             )
         )
     return Compare(groups=groups)
+
+
+def _parse_clades(raw: str, name: str) -> list[int]:
+    """The distinct taxids in a comma-separated list, or a 422 naming the problem."""
+    ids: list[int] = []
+    for part in filter(None, (p.strip() for p in raw.split(","))):
+        if not (part.isascii() and part.isdigit() and len(part) <= 10):
+            raise HTTPException(status_code=422, detail=f"{name}: {part!r} is not a taxid")
+        if int(part) not in ids:
+            ids.append(int(part))
+    if len(ids) > MAX_CLADES_PER_GROUP:
+        raise HTTPException(
+            status_code=422, detail=f"{name}: at most {MAX_CLADES_PER_GROUP} taxids"
+        )
+    return ids
+
+
+def _taxon_refs(taxids: Iterable[int], taxa: Mapping[int, SetTaxon]) -> list[TaxonRef]:
+    return [TaxonRef(taxid=t, name=taxa[t].name, rank=taxa[t].rank) for t in taxids]
+
+
+@app.get("/aggregate", response_model=Aggregate)
+def aggregate(
+    conn: Conn,
+    include: Annotated[
+        str, Query(description="Comma-separated taxids of the clades to add up (1-20, e.g. 7742).")
+    ],
+    exclude: Annotated[
+        str,
+        Query(description="Comma-separated taxids of clades inside them to leave out (e.g. 32523)."),
+    ] = "",
+) -> Aggregate:
+    """Species count, per-resource coverage and quality stats for a set of clades:
+    the clades in ``include`` minus the clades inside them in ``exclude`` (e.g.
+    fish as Vertebrata minus Tetrapoda). A clade inside an excluded one can be
+    included again. Counts are sums and differences of the clades' rollups;
+    quality stats are computed from the records in the set."""
+    inc, exc = _parse_clades(include, "include"), _parse_clades(exclude, "exclude")
+    if not inc:
+        raise HTTPException(status_code=422, detail="include: at least one taxid")
+    if set(inc) & set(exc):
+        raise HTTPException(status_code=422, detail="a taxid cannot be both included and excluded")
+    taxa = fetch_set_taxa(conn, inc + exc)
+    marks = clade_set(inc, exc, taxa)
+    if isinstance(marks, str):
+        raise HTTPException(status_code=422, detail=marks)
+    path = {t: ".".join(map(str, taxa[t].path)) for t in marks}
+    quality = fetch_set_quality(
+        conn,
+        [(path[i], [path[o] for o in outside]) for i, outside in set_pieces(marks, taxa)],
+    )
+    meta = set_metadata(marks, taxa)
+    return Aggregate(
+        include=_taxon_refs((t for t in inc if marks.get(t) is True), taxa),
+        exclude=_taxon_refs((t for t in exc if marks.get(t) is False), taxa),
+        n_rows=meta.n_rows,
+        resources=ResourceSummary.by_metric(meta),
+        composition=AssemblyComposition.from_metadata(meta),
+        quality=[QualityStatValue(key=q.key, value=quality[q.key]) for q in QUALITY_STATS],
+    )
+
+
+@app.get("/custom-groups", response_model=CustomGroups)
+def custom_groups(conn: Conn) -> CustomGroups:
+    """The custom groups from the deployment's groups file, in file order, each
+    with the clades it is made of (pass them to ``/aggregate`` for its data). A
+    group that doesn't fit the current taxonomy is left out and logged."""
+    groups = get_settings().custom_groups
+    if not groups:
+        return CustomGroups(groups=[])
+    order = dict.fromkeys(t for g in groups for t in g.include + g.exclude)
+    taxa = fetch_set_taxa(conn, order)
+    return CustomGroups(
+        groups=[
+            CustomGroupItem(
+                id=r.group.id,
+                label=r.group.label,
+                parent=r.group.parent,
+                rest=r.group.rest,
+                include=_taxon_refs((t for t in order if r.marks.get(t) is True), taxa),
+                exclude=_taxon_refs((t for t in order if r.marks.get(t) is False), taxa),
+            )
+            for r in resolve_groups(groups, taxa)
+        ]
+    )
 
 
 @app.get("/gaps", response_model=Gaps)

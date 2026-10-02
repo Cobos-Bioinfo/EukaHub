@@ -1,5 +1,5 @@
-"""Deployment settings: external links, the Wikipedia lookup and the curated
-groups, read once from the environment and the optional groups file.
+"""Deployment settings: external links, the Wikipedia lookup, the curated groups
+and the custom groups, read once from the environment and the optional groups file.
 
 Every setting has a default, so an empty environment serves the upstream
 values. An invalid value is logged and replaced by its default rather than
@@ -21,7 +21,7 @@ from eukahub_core.config import check_https_url, check_seconds
 from eukahub_core.metrics import METRICS
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
-from eukahub_api.schemas import CladeGroup
+from eukahub_api.schemas import CladeGroup, CustomGroup
 
 log = logging.getLogger("eukahub.api.settings")
 
@@ -49,6 +49,7 @@ EXPORT_BATCH_ROWS_RANGE = (1000, 10000)
 
 MAX_GROUPS = 100
 MAX_FEATURED_GROUPS = 12
+MAX_CUSTOM_GROUPS = 100
 
 DEFAULT_GROUPS: tuple[CladeGroup, ...] = tuple(
     CladeGroup(taxid=taxid, label=label, featured=featured)
@@ -92,11 +93,14 @@ _EMAIL = re.compile(r"[^@\s]+@[^@\s]+\.[^@\s]+")
 
 
 class GroupsFile(BaseModel):
-    """The groups file: ``{"groups": [{"taxid", "label", "featured"?}, ...]}``."""
+    """The groups file: ``{"groups": [{"taxid", "label", "featured"?}, ...],
+    "custom_groups"?: [{"id", "label", "include"?, "exclude"?, "parent"?, "rest"?}, ...]}``.
+    Rules that need the taxonomy are checked per request (``clade_sets.py``)."""
 
     model_config = ConfigDict(extra="forbid")
 
     groups: Annotated[list[CladeGroup], Field(min_length=1, max_length=MAX_GROUPS)]
+    custom_groups: Annotated[list[CustomGroup], Field(max_length=MAX_CUSTOM_GROUPS)] = []
 
     @model_validator(mode="after")
     def _check_groups(self) -> GroupsFile:
@@ -105,6 +109,26 @@ class GroupsFile(BaseModel):
             raise ValueError("each taxid may appear only once")
         if sum(g.featured for g in self.groups) > MAX_FEATURED_GROUPS:
             raise ValueError(f"at most {MAX_FEATURED_GROUPS} groups may be featured")
+        return self
+
+    @model_validator(mode="after")
+    def _check_custom_groups(self) -> GroupsFile:
+        parents = {g.id: g.parent for g in self.custom_groups}
+        if len(parents) != len(self.custom_groups):
+            raise ValueError("each custom group id may appear only once")
+        for g in self.custom_groups:
+            seen = {g.id}
+            parent = g.parent
+            while parent is not None:
+                if parent not in parents:
+                    raise ValueError(f"custom group {g.id!r} has an unknown parent {parent!r}")
+                if parent in seen:
+                    raise ValueError(f"custom group {g.id!r} is inside itself")
+                seen.add(parent)
+                parent = parents[parent]
+        rest_parents = [g.parent for g in self.custom_groups if g.rest]
+        if len(set(rest_parents)) != len(rest_parents):
+            raise ValueError("a parent group may have only one rest group")
         return self
 
 
@@ -119,6 +143,7 @@ class Settings:
     wikipedia_timeout_seconds: float
     export_batch_rows: int
     groups: tuple[CladeGroup, ...]
+    custom_groups: tuple[CustomGroup, ...]
 
     @property
     def featured_taxids(self) -> tuple[int, ...]:
@@ -159,27 +184,30 @@ def _setting[T](
         return default
 
 
-def _load_groups(path: str) -> tuple[CladeGroup, ...]:
-    """The groups in the file at ``path``, or the defaults when no path is set or
-    the file is missing or invalid (logged). Any invalid entry rejects the file."""
+def _load_groups(path: str) -> tuple[tuple[CladeGroup, ...], tuple[CustomGroup, ...]]:
+    """The curated and custom groups in the file at ``path``, or the defaults (no
+    custom groups) when no path is set or the file is missing or invalid (logged).
+    Any invalid entry rejects the file."""
+    defaults: tuple[tuple[CladeGroup, ...], tuple[CustomGroup, ...]] = (DEFAULT_GROUPS, ())
     if not path:
-        return DEFAULT_GROUPS
+        return defaults
     try:
         text = Path(path).read_text(encoding="utf-8")
     except FileNotFoundError:
         log.info("no groups file at %s; using the default groups", path)
-        return DEFAULT_GROUPS
+        return defaults
     except OSError as e:
         log.warning("cannot read the groups file %s (%s); using the default groups", path, e)
-        return DEFAULT_GROUPS
+        return defaults
     try:
-        return tuple(GroupsFile.model_validate_json(text).groups)
+        file = GroupsFile.model_validate_json(text)
     except ValidationError as e:
         problems = "; ".join(
             f"{'.'.join(map(str, err['loc'])) or 'file'}: {err['msg']}" for err in e.errors()[:3]
         )
         log.warning("ignoring the groups file %s (%s); using the default groups", path, problems)
-        return DEFAULT_GROUPS
+        return defaults
+    return tuple(file.groups), tuple(file.custom_groups)
 
 
 def _url_check(placeholder: str | None = None) -> Callable[[str], str]:
@@ -189,6 +217,7 @@ def _url_check(placeholder: str | None = None) -> Callable[[str], str]:
 def load_settings(environ: Mapping[str, str]) -> Settings:
     """Read every setting from ``environ`` and the groups file it names."""
     source_code_url = _setting(environ, "SOURCE_CODE_URL", DEFAULT_SOURCE_CODE_URL, _url_check())
+    groups, custom_groups = _load_groups(environ.get("GROUPS_FILE", "").strip())
     return Settings(
         link_templates={
             m.key: _setting(
@@ -217,7 +246,8 @@ def load_settings(environ: Mapping[str, str]) -> Settings:
         export_batch_rows=_setting(
             environ, "EXPORT_BATCH_ROWS", DEFAULT_EXPORT_BATCH_ROWS, _check_batch_rows
         ),
-        groups=_load_groups(environ.get("GROUPS_FILE", "").strip()),
+        groups=groups,
+        custom_groups=custom_groups,
     )
 
 

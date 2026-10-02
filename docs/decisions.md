@@ -95,6 +95,14 @@ Streamlit app that answered the same questions but was slow to build and to serv
   source addresses are GitHub Actions repository variables instead, since the
   pipeline runs there; there an invalid value stops the build, because a build
   against a source nobody chose must not publish.
+- **Custom groups are sets of clades, computed per request.** A set is whole clades
+  included, minus clades inside them excluded, so its counts are sums and differences
+  of `clade_features` rows. Its quality stats are medians and maxima, which cannot be
+  subtracted, so they come from the records in the set. The API keeps the two
+  concerns apart: `/custom-groups` lists the deployment's groups and their clades,
+  and `/aggregate` computes any set. Nothing is precomputed, so a deployment changes
+  its groups with a restart, not a rebuild. Groups under one parent may not overlap,
+  so that they and the parent's "rest" group always add up to the parent.
 - **The root taxids stay in code**, in one constant per side
   (`eukahub_core.taxonomy` and `web/src/lib/taxonomy.ts`). The dataset is built and
   validated for Eukaryota, so another root needs a rebuild and new checks anyway.

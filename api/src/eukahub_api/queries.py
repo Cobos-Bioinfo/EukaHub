@@ -26,6 +26,8 @@ from eukahub_core.taxonomy import EUKARYOTA_TAXID, SPINE_TAXIDS, UNIT_RANKS
 from psycopg.rows import dict_row
 from psycopg_pool import ConnectionPool
 
+from eukahub_api.clade_sets import SetTaxon
+
 # n_rows, then c_* (COVERAGE_KEYS), then s_* (TOTAL_KEYS), then the additive
 # composition columns — the exact tail of CladeMetadata's constructor after
 # taxid, so `CladeMetadata(taxid, *features)` stays positional.
@@ -695,4 +697,62 @@ def fetch_quality_for_taxids(
     }
     if taxids:
         result.update(_quality_by_bucket(conn, "b.taxid = ANY(%s)", (list(taxids),)))
+    return result
+
+
+# --- Sets of clades ---------------------------------------------------------------
+
+_SET_TAXA_SQL = (
+    "SELECT t.taxid, t.name, t.rank, ltree2text(t.path), "
+    f"{_IS_INFRASPECIFIC.format(path='t.path', self='t.taxid')}, "
+    f"{', '.join('f.' + c for c in _FEATURE_COLS)} "
+    "FROM taxon t LEFT JOIN clade_features f USING (taxid) "
+    "WHERE t.taxid = ANY(%s)"
+)
+
+
+def fetch_set_taxa(conn: psycopg.Connection, taxids: Collection[int]) -> dict[int, SetTaxon]:
+    """The given taxids that are in the taxonomy, with their path and rollup row
+    (zero-filled when they have none)."""
+    taxa: dict[int, SetTaxon] = {}
+    for taxid, name, rank, path, infraspecific, *features in conn.execute(
+        _SET_TAXA_SQL, (list(taxids),)
+    ).fetchall():
+        taxa[taxid] = SetTaxon(
+            taxid=taxid,
+            name=name,
+            rank=rank,
+            path=tuple(int(label) for label in path.split(".")),
+            infraspecific=infraspecific,
+            features=(
+                CladeMetadata.zero(taxid) if features[0] is None else CladeMetadata(taxid, *features)
+            ),
+        )
+    return taxa
+
+
+def fetch_set_quality(
+    conn: psycopg.Connection, pieces: Sequence[tuple[str, Sequence[str]]]
+) -> dict[str, float | None]:
+    """QUALITY_STATS over the records in a set of clades, given as disjoint
+    pieces ``(inside_path, [outside_paths under it])``. Each path is a literal
+    parameter, so every piece is an indexed subtree filter."""
+    clauses, params = [], []
+    for inside, outside in pieces:
+        clause = "t.path <@ %s::ltree"
+        if outside:
+            clause += " AND NOT (" + " OR ".join(["t.path <@ %s::ltree"] * len(outside)) + ")"
+        clauses.append(f"({clause})")
+        params += [inside, *outside]
+    result: dict[str, float | None] = dict.fromkeys(q.key for q in QUALITY_STATS)
+    if not clauses:
+        return result
+    for source in ("assembly", "annotation"):
+        keys = [q.key for q in QUALITY_STATS if q.source == source]
+        row = conn.execute(
+            f"SELECT {_quality_stats_agg(source)} FROM {source} r JOIN taxon t USING (taxid) "
+            f"WHERE {' OR '.join(clauses)}",
+            params,
+        ).fetchone()
+        result |= {k: float(v) if v is not None else None for k, v in zip(keys, row, strict=True)}
     return result

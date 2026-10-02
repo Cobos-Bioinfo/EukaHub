@@ -120,6 +120,51 @@ $C restart api
 The file holds 1 to 100 groups, each taxid once. If it cannot be read or breaks any
 of these rules, the API logs a warning that says why and uses the built-in list.
 
+### Custom groups
+
+Groups that are not a single clade, such as fish (vertebrates without tetrapods), go
+in the same file under `custom_groups`. `/api/custom-groups` lists them with the
+clades each is made of, and `/api/aggregate?include=7742&exclude=32523` gives the
+species count, coverage and quality stats of any such set of clades. There are none
+by default, and the web app does not show them yet.
+
+```json
+{
+  "groups": [{"taxid": 40674, "label": "Mammals", "featured": true}],
+  "custom_groups": [
+    {"id": "vertebrates", "label": "Vertebrates", "include": [7742]},
+    {"id": "fish", "label": "Fish", "parent": "vertebrates", "include": [7742], "exclude": [32523]},
+    {"id": "reptiles", "label": "Reptiles", "parent": "vertebrates", "include": [8457], "exclude": [8782]},
+    {"id": "other-vertebrates", "label": "Other vertebrates", "parent": "vertebrates", "rest": true}
+  ]
+}
+```
+
+- `id`: lowercase letters, digits and hyphens, at most 40 characters, each id once.
+- `label`: the name shown on the site, 1 to 60 characters.
+- `include`: NCBI taxids of the clades in the group, at most 20.
+- `exclude` (optional): clades inside them to leave out, at most 20. A taxon is in
+  the group when the nearest listed clade above it (or the taxon itself) is in
+  `include`, so a clade inside an excluded one can be included again.
+- `parent` (optional): the id of the group this one sits under.
+- `rest` (optional): `true` makes the group everything in its parent that the
+  parent's other groups leave out. It takes no `include` or `exclude`, and a parent
+  has at most one.
+
+The file holds at most 100 custom groups, and no group may sit inside itself. Breaking
+one of these rules rejects the whole file, as above. The rules that depend on the
+taxonomy are checked on each request instead, and a group that breaks one is left
+out with a logged warning:
+
+- every taxid is in the dataset and is a clade or a species, not an informal species
+  or a taxon below a species;
+- every excluded clade is inside an included one;
+- a group is inside its parent and does not overlap an earlier group under the same
+  parent, so the groups under a parent and its rest group add up to the parent.
+
+The groups under a group that was left out are left out too. A rest group is
+computed from the groups beside it that remain.
+
 ## Behind a reverse proxy (TLS)
 
 The stack serves plain HTTP on port 8080 and expects TLS to be terminated in front
