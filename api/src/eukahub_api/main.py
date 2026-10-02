@@ -545,13 +545,30 @@ def clade_breakdown_quality(
     taxid: int,
     conn: Conn,
     rank: Annotated[TargetRank, Query(description="Rank the root is broken down by.")],
+    sort: SortColumn = SortColumn.n_rows,
+    filter: Annotated[
+        list[MetricFilter] | None,
+        Query(description="Keep only taxa with data for these resource(s)."),
+    ] = None,
+    logic: FilterLogic = FilterLogic.AND,
+    exclude_empty: bool = True,
+    limit: Annotated[int, Query(ge=1, le=1000)] = 25,
 ) -> list[BucketQuality]:
     """Per-bucket distribution stats (BUSCO / median genes / genome size / N50)
-    for a rank breakdown — the quality lenses of the "data map". One grouped
-    `ltree` query per source table attributes every record under the root to its
-    rank-`rank` ancestor, then aggregates. Merge into `breakdown` by taxid."""
+    for a rank breakdown — the quality lenses of the "data map". Covers the clades
+    `breakdown` returns for the same parameters (so at most `limit`); merge into
+    it by taxid. Clades without records are absent."""
     try:
-        buckets = fetch_breakdown_quality(conn, root_taxid=taxid, rank=rank.value)
+        buckets = fetch_breakdown_quality(
+            conn,
+            root_taxid=taxid,
+            rank=rank.value,
+            sort=sort.value,
+            filter_keys=[f.value for f in (filter or [])],
+            logic=logic,
+            exclude_empty=exclude_empty,
+            limit=limit,
+        )
     except TaxonNotFound:
         raise HTTPException(status_code=404, detail=f"taxon {taxid} not found")
     return [

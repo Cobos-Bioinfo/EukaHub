@@ -50,3 +50,22 @@ def test_breakdown_quality_missing_rank_422(client):
 
 def test_breakdown_quality_bad_root_404(client):
     assert client.get("/clade/999999999/breakdown/quality?rank=order").status_code == 404
+
+
+def test_breakdown_quality_covers_only_the_breakdown(client):
+    """Quality is computed for the clades the breakdown returns with the same
+    parameters, so it never outgrows `limit`, even for every species in Eukaryota."""
+    params = {"rank": "species", "sort": "s_ass", "exclude_empty": "false", "limit": 5}
+    quality = client.get("/clade/2759/breakdown/quality", params=params).json()
+    bd = client.get("/clade/2759/breakdown", params=params).json()
+    assert quality, "the species with the most assemblies carry records"
+    assert len(quality) <= 5
+    assert {b["taxid"] for b in quality} <= {it["taxid"] for it in bd["items"]}
+
+
+def test_breakdown_quality_matches_each_clade(client):
+    quality = client.get("/clade/40674/breakdown/quality", params={"rank": "order"}).json()[:3]
+    compared = client.get(
+        "/compare", params={"taxids": ",".join(str(b["taxid"]) for b in quality)}
+    ).json()["groups"]
+    assert [b["stats"] for b in quality] == [g["quality"] for g in compared]

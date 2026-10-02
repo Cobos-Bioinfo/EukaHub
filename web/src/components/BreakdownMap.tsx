@@ -240,12 +240,13 @@ export default function BreakdownMap({
   const rootRanks = useMemo(() => (rootLineage ?? []).map((t) => t.rank), [rootLineage]);
   const targetRank = targetRankFor(focus, rootRanks);
 
+  const params = targetRank && { rank: targetRank, sort: "n_rows" as const, exclude_empty: false, limit: 250 };
   const bd = useAsync(
-    () => (targetRank && !resolving ? getBreakdown(focus.taxid, { rank: targetRank, sort: "n_rows", exclude_empty: false, limit: 250 }) : Promise.resolve(null)),
+    () => (params && !resolving ? getBreakdown(focus.taxid, params) : Promise.resolve(null)),
     [focus.taxid, targetRank, resolving],
   );
   const quality = useAsync(
-    () => (targetRank && !resolving ? getBreakdownQuality(focus.taxid, targetRank) : Promise.resolve(null)),
+    () => (params && !resolving ? getBreakdownQuality(focus.taxid, params) : Promise.resolve(null)),
     [focus.taxid, targetRank, resolving],
   );
   const qmap = useMemo(() => {

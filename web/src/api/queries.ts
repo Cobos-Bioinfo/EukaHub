@@ -185,15 +185,16 @@ export const getBreakdown = async (
     }),
   );
 
-// Per-bucket quality stats (BUSCO / median genes / genome size / N50) for a rank
-// breakdown — the data map's quality lenses. Merged into the breakdown by taxid.
+// Per-bucket quality stats (BUSCO / median genes / genome size / N50) for the
+// clades a breakdown with the same params returns — the data map's quality
+// lenses. Merged into the breakdown by taxid.
 export const getBreakdownQuality = async (
   taxid: number,
-  rank: TargetRank,
+  params: BreakdownParams,
 ): Promise<BucketQuality[]> =>
   unwrap(
     await api.GET("/clade/{taxid}/breakdown/quality", {
-      params: { path: { taxid }, query: { rank } },
+      params: { path: { taxid }, query: params },
     }),
   );
 

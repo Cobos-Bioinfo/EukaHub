@@ -20,6 +20,10 @@ _CALLS = {
         None, root_taxid=2759, rank="phylum", sort=HOSTILE, filter_keys=[],
         logic=FilterLogic.AND, exclude_empty=False, limit=1,
     ),
+    "breakdown quality sort": lambda: queries.fetch_breakdown_quality(
+        None, root_taxid=2759, rank="phylum", sort=HOSTILE, filter_keys=[],
+        logic=FilterLogic.AND, exclude_empty=False, limit=1,
+    ),
     "breakdown filter": lambda: queries._breakdown_where(
         "2759", "phylum", False, [HOSTILE], FilterLogic.AND
     ),

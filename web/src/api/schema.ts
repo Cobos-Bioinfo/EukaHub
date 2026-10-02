@@ -38,9 +38,9 @@ export interface paths {
         /**
          * Clade Breakdown Quality
          * @description Per-bucket distribution stats (BUSCO / median genes / genome size / N50)
-         *     for a rank breakdown — the quality lenses of the "data map". One grouped
-         *     `ltree` query per source table attributes every record under the root to its
-         *     rank-`rank` ancestor, then aggregates. Merge into `breakdown` by taxid.
+         *     for a rank breakdown — the quality lenses of the "data map". Covers the clades
+         *     `breakdown` returns for the same parameters (so at most `limit`); merge into
+         *     it by taxid. Clades without records are absent.
          */
         get: operations["clade_breakdown_quality_clade__taxid__breakdown_quality_get"];
         put?: never;
@@ -1079,6 +1079,12 @@ export interface operations {
             query: {
                 /** @description Rank the root is broken down by. */
                 rank: components["schemas"]["TargetRank"];
+                sort?: components["schemas"]["SortColumn"];
+                /** @description Keep only taxa with data for these resource(s). */
+                filter?: components["schemas"]["MetricFilter"][] | null;
+                logic?: components["schemas"]["FilterLogic"];
+                exclude_empty?: boolean;
+                limit?: number;
             };
             header?: never;
             path: {

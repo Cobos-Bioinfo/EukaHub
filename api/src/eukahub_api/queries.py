@@ -311,6 +311,13 @@ def _secondary_sort_key(sort_by_key: str) -> str:
     return "c_ass"
 
 
+def _breakdown_order(sort: str) -> str:
+    """ORDER BY for a breakdown sorted by ``sort`` (a SortColumn value). The taxid
+    makes it a total order, so a LIMIT picks the same clades on every query."""
+    sort = _identifier(sort, _FEATURE_COLS)
+    return f"ORDER BY f.{sort} DESC, f.{_secondary_sort_key(sort)} DESC, t.taxid"
+
+
 def _breakdown_where(
     root_path: str,
     rank: str,
@@ -358,11 +365,10 @@ def fetch_breakdown(
     ``sort``/``filter_keys`` are interpolated into SQL as identifiers and must be
     SortColumn / MetricFilter values.
     """
-    sort = _identifier(sort, _FEATURE_COLS)
+    order = _breakdown_order(sort)
     root_name, root_rank, root_path = fetch_root(conn, root_taxid)
     where, params = _breakdown_where(root_path, rank, exclude_empty, filter_keys, logic)
 
-    secondary = _secondary_sort_key(sort)
     feature_cols = ", ".join(f"f.{c}" for c in _FEATURE_COLS)
     # COUNT(*) OVER () rides along, so total-before-limit costs no extra query.
     sql = (
@@ -370,7 +376,7 @@ def fetch_breakdown(
         "FROM taxon t "
         "JOIN clade_features f USING (taxid) "
         f"WHERE {' AND '.join(where)} "
-        f"ORDER BY f.{sort} DESC, f.{secondary} DESC "
+        f"{order} "
         "LIMIT %s"
     )
     params.append(limit)
@@ -476,15 +482,14 @@ def iter_export_tsv(
     >700k rows) never materializes in memory. ``sort``/``filter_keys`` must be
     SortColumn / MetricFilter values; ``root_path`` comes from ``fetch_root``.
     """
-    sort = _identifier(sort, _FEATURE_COLS)
+    order = _breakdown_order(sort)
     where, params = _breakdown_where(root_path, rank, exclude_empty, filter_keys, logic)
-    secondary = _secondary_sort_key(sort)
     sql = (
         f"SELECT {_EXPORT_COLS} "
         "FROM taxon t "
         "JOIN clade_features f USING (taxid) "
         f"WHERE {' AND '.join(where)} "
-        f"ORDER BY f.{sort} DESC, f.{secondary} DESC"
+        f"{order}"
     )
 
     yield "\t".join(EXPORT_HEADER) + "\n"
@@ -673,15 +678,32 @@ def _quality_by_bucket(
 
 
 def fetch_breakdown_quality(
-    conn: psycopg.Connection, *, root_taxid: int, rank: str
+    conn: psycopg.Connection,
+    *,
+    root_taxid: int,
+    rank: str,
+    sort: str,
+    filter_keys: list[str],
+    logic: FilterLogic,
+    exclude_empty: bool,
+    limit: int,
 ) -> dict[int, dict[str, float | None]]:
-    """Per-bucket QUALITY_STATS for the rank-``rank`` descendants of a root, keyed
-    by bucket taxid (buckets without records are absent). Raises ``TaxonNotFound``
+    """Per-bucket QUALITY_STATS for the clades ``fetch_breakdown`` returns with the
+    same arguments, keyed by bucket taxid (buckets without records are absent), so
+    the result never outgrows the breakdown's ``limit``. Raises ``TaxonNotFound``
     for an unknown root."""
+    order = _breakdown_order(sort)
     _root_name, _root_rank, root_path = fetch_root(conn, root_taxid)
-    return _quality_by_bucket(
-        conn, "b.rank = %s AND b.path <@ %s::ltree", (rank, root_path)
-    )
+    where, params = _breakdown_where(root_path, rank, exclude_empty, filter_keys, logic)
+    taxids = [
+        row[0]
+        for row in conn.execute(
+            "SELECT t.taxid FROM taxon t JOIN clade_features f USING (taxid) "
+            f"WHERE {' AND '.join(where)} {order} LIMIT %s",
+            [*params, limit],
+        ).fetchall()
+    ]
+    return _quality_by_bucket(conn, "b.taxid = ANY(%s)", (taxids,))
 
 
 def fetch_quality_for_taxids(

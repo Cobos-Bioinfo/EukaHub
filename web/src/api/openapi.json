@@ -1535,7 +1535,7 @@
     },
     "/clade/{taxid}/breakdown/quality": {
       "get": {
-        "description": "Per-bucket distribution stats (BUSCO / median genes / genome size / N50)\nfor a rank breakdown \u2014 the quality lenses of the \"data map\". One grouped\n`ltree` query per source table attributes every record under the root to its\nrank-`rank` ancestor, then aggregates. Merge into `breakdown` by taxid.",
+        "description": "Per-bucket distribution stats (BUSCO / median genes / genome size / N50)\nfor a rank breakdown \u2014 the quality lenses of the \"data map\". Covers the clades\n`breakdown` returns for the same parameters (so at most `limit`); merge into\nit by taxid. Clades without records are absent.",
         "operationId": "clade_breakdown_quality_clade__taxid__breakdown_quality_get",
         "parameters": [
           {
@@ -1555,6 +1555,67 @@
             "schema": {
               "$ref": "#/components/schemas/TargetRank",
               "description": "Rank the root is broken down by."
+            }
+          },
+          {
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/SortColumn",
+              "default": "n_rows"
+            }
+          },
+          {
+            "description": "Keep only taxa with data for these resource(s).",
+            "in": "query",
+            "name": "filter",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "$ref": "#/components/schemas/MetricFilter"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Keep only taxa with data for these resource(s).",
+              "title": "Filter"
+            }
+          },
+          {
+            "in": "query",
+            "name": "logic",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/FilterLogic",
+              "default": "AND"
+            }
+          },
+          {
+            "in": "query",
+            "name": "exclude_empty",
+            "required": false,
+            "schema": {
+              "default": true,
+              "title": "Exclude Empty",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 25,
+              "maximum": 1000,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
             }
           }
         ],
