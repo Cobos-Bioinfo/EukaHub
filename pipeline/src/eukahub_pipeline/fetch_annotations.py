@@ -15,6 +15,7 @@ assembly count still comes from ``fetch_assemblies`` (NCBI datasets).
 
 from __future__ import annotations
 
+import itertools
 import json
 import logging
 from collections.abc import Iterator
@@ -166,8 +167,5 @@ if __name__ == "__main__":
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
         datefmt="%H:%M:%S",
     )
-    n = 0
-    for n, row in enumerate(fetch_annotations(), 1):
-        if n <= 5:
-            log.info("%s", row)
-    log.info("Fetched %d annotations", n)
+    for row in itertools.islice(fetch_annotations(), 5):
+        log.info("%s", row)
