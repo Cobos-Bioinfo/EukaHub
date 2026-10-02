@@ -2,11 +2,18 @@
 
 The parsers (``parse_assembly_record`` / ``parse_report_row``) are pure,
 so we exercise them on captured real-shaped records — no datasets CLI, no
-Annotrieve. The ENA fetch runs against a stubbed ``_post``. The live fetch
-wrappers are covered by manual smoke runs, not CI.
+Annotrieve. The ENA fetch runs against a stubbed ``_post`` and the Annotrieve
+fetch against stubbed report lines. The live fetch wrappers are covered by manual
+smoke runs, not CI.
 """
 
 from __future__ import annotations
+
+import itertools
+import json
+import os
+from collections.abc import Iterator
+from typing import Self
 
 import polars as pl
 import pytest
@@ -19,6 +26,7 @@ from eukahub_pipeline.fetch_annotations import (
 from eukahub_pipeline.fetch_assemblies import (
     ASSEMBLY_COLUMNS,
     drop_duplicate_assemblies,
+    fetch_assemblies,
     parse_assembly_record,
 )
 from eukahub_pipeline.sources import ENA
@@ -62,6 +70,19 @@ REPORT_LINE = (
     '{"chromosome":20,"gene":22685,"pseudogene":6269}\t20589'
 )
 ANNOTATION_ROW = dict(zip(REPORT_HEADER.split("\t"), REPORT_LINE.split("\t")))
+
+
+def test_stopping_the_assembly_fetch_early_stops_the_cli(tmp_path):
+    """A caller that reads only a few rows must not leave ``datasets`` running."""
+    record = json.dumps(ASSEMBLY_RECORD).replace("'", "")
+    fake = tmp_path / "datasets"
+    fake.write_text(f"#!/bin/sh\necho $$ > {tmp_path}/pid\nwhile true; do echo '{record}'; done\n")
+    fake.chmod(0o755)
+    rows = fetch_assemblies(datasets_bin=str(fake))
+    assert [r["taxid"] for r in itertools.islice(rows, 2)] == [7227, 7227]
+    rows.close()
+    with pytest.raises(ProcessLookupError):
+        os.kill(int((tmp_path / "pid").read_text()), 0)
 
 
 def test_parse_assembly_record_full():
@@ -141,8 +162,12 @@ def test_parse_report_row_missing_id_or_taxid_is_dropped():
     assert parse_report_row({**ANNOTATION_ROW, "taxid": ""}) is None
 
 
+def _report(monkeypatch, text: str) -> None:
+    monkeypatch.setattr(fa, "_report_lines", lambda source: iter(text.splitlines()))
+
+
 def test_fetch_annotations_reads_the_report(monkeypatch):
-    monkeypatch.setattr(fa, "_get_report", lambda base: f"{REPORT_HEADER}\n{REPORT_LINE}\n")
+    _report(monkeypatch, f"{REPORT_HEADER}\n{REPORT_LINE}\n")
     rows = list(fa.fetch_annotations())
     assert [r["annotation_id"] for r in rows] == ["f628158077010762f66c13935b5630a3"]
 
@@ -157,7 +182,7 @@ def test_fetch_annotations_reads_the_report(monkeypatch):
 )
 def test_fetch_annotations_fails_on_an_unusable_report(monkeypatch, report):
     """A changed or truncated report must fail the build, not ship no annotations."""
-    monkeypatch.setattr(fa, "_get_report", lambda base: report)
+    _report(monkeypatch, report)
     with pytest.raises(RuntimeError):
         list(fa.fetch_annotations())
 
@@ -180,49 +205,80 @@ def test_drop_duplicate_assemblies_keeps_one_row_per_assembly():
 
 
 class _Reply:
-    def __init__(self, text: str = "", rows: list | None = None) -> None:
+    """A stubbed ENA response: the count endpoint's text, or a TSV body."""
+
+    def __init__(self, text: str = "", tsv: str = "") -> None:
         self.text = text
-        self._rows = rows
+        self._tsv = tsv.encode()
 
-    def json(self) -> list:
-        return self._rows
+    def __enter__(self) -> Self:
+        return self
+
+    def __exit__(self, *exc) -> None:
+        pass
+
+    def iter_lines(self, chunk_size: int) -> Iterator[bytes]:
+        return iter(self._tsv.splitlines())
 
 
-def _ena(monkeypatch, expected: int, rows: list) -> None:
-    def post(source, endpoint, **fields):
-        return _Reply(text=f"count\n{expected}\n") if endpoint == "count" else _Reply(rows=rows)
+def _tsv(taxids: list[int]) -> str:
+    return "run_accession\ttax_id\n" + "".join(f"ERR{i}\t{t}\n" for i, t in enumerate(taxids))
+
+
+def _ena(monkeypatch, bodies: dict[str, list[str]], expected: dict[str, int]) -> None:
+    """Stub ENA: ``bodies`` and ``expected`` are keyed by "short" / "long", and each
+    search answers with the next body for its query."""
+    queue = {kind: iter(b) for kind, b in bodies.items()}
+
+    def post(source, endpoint, query, *, stream=False, **fields):
+        kind = "long" if query == fr._LONG_QUERY else "short"
+        assert fields.get("format", "tsv") == "tsv"
+        if endpoint == "count":
+            return _Reply(text=f"count\n{expected[kind]}\n")
+        return _Reply(tsv=next(queue[kind]))
 
     monkeypatch.setattr(fr, "_post", post)
 
 
-_RUNS = [
-    {"tax_id": "9606", "instrument_platform": "ILLUMINA"},
-    {"tax_id": "9606", "instrument_platform": "OXFORD_NANOPORE"},
-    {"tax_id": "10090", "instrument_platform": "ILLUMINA"},
-]
-
-
 def test_fetch_reads_counts_runs_per_taxon(monkeypatch):
-    _ena(monkeypatch, expected=3, rows=_RUNS)
+    _ena(
+        monkeypatch,
+        bodies={"short": [_tsv([9606, 10090])], "long": [_tsv([9606])]},
+        expected={"short": 2, "long": 1},
+    )
     rows = {r["taxid"]: r for r in fr.fetch_reads()}
     assert rows[9606] == {"taxid": 9606, "short": 1, "long": 1}
     assert rows[10090] == {"taxid": 10090, "short": 1, "long": 0}
 
 
-@pytest.mark.parametrize("rows", [_RUNS[:1], []])
-def test_fetch_reads_rejects_an_incomplete_download(monkeypatch, rows):
-    """ENA can end a response early with a valid but shorter payload."""
-    _ena(monkeypatch, expected=3, rows=rows)
-    once = fr._query_ena.retry_with(stop=stop_after_attempt(1))
-    with pytest.raises(RuntimeError, match="of 3 runs"):
-        once(ENA)
+@pytest.mark.parametrize(
+    "body",
+    [
+        _tsv([9606]),  # ended early with a clean, shorter body
+        _tsv([9606]) + "Request execution cancelled\n",  # an error message mid-stream
+        "",  # empty
+    ],
+)
+def test_fetch_reads_rejects_an_incomplete_download(monkeypatch, body):
+    """ENA can end a response early; the count endpoint tells."""
+    _ena(monkeypatch, bodies={"short": [body]}, expected={"short": 3})
+    once = fr._runs_per_taxon.retry_with(stop=stop_after_attempt(1))
+    with pytest.raises(RuntimeError, match="of 3 runs|unexpected ENA header"):
+        once(ENA, fr._SHORT_QUERY)
 
 
 def test_fetch_reads_retries_until_the_download_is_complete(monkeypatch):
-    downloads = iter([_RUNS[:1], _RUNS])
+    _ena(
+        monkeypatch,
+        bodies={"short": [_tsv([9606]), _tsv([9606, 9606, 10090])]},
+        expected={"short": 3},
+    )
+    counts = fr._runs_per_taxon.retry_with(wait=wait_none())(ENA, fr._SHORT_QUERY)
+    assert counts == {9606: 2, 10090: 1}
 
-    def post(source, endpoint, **fields):
-        return _Reply(text="count\n3\n") if endpoint == "count" else _Reply(rows=next(downloads))
 
-    monkeypatch.setattr(fr, "_post", post)
-    assert fr._query_ena.retry_with(wait=wait_none())(ENA) == _RUNS
+def test_the_two_queries_split_rna_seq_by_platform():
+    assert fr._RNA_SEQ in fr._LONG_QUERY and fr._RNA_SEQ in fr._SHORT_QUERY
+    for platform in ("OXFORD_NANOPORE", "PACBIO_SMRT"):
+        assert f'instrument_platform="{platform}"' in fr._LONG_QUERY
+        assert f'instrument_platform!="{platform}"' in fr._SHORT_QUERY

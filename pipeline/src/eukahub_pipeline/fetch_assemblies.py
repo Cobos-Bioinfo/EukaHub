@@ -13,6 +13,7 @@ richness on the annotated subset separately (``fetch_annotations``).
 
 from __future__ import annotations
 
+import itertools
 import json
 import logging
 import subprocess
@@ -153,20 +154,25 @@ def fetch_assemblies(
         ) from e
 
     n_seen = n_kept = 0
-    for raw in proc.stdout:  # type: ignore[union-attr]
-        raw = raw.strip()
-        if not raw:
-            continue
-        try:
-            record = json.loads(raw)
-        except json.JSONDecodeError as e:
-            log.warning("Skipping malformed assembly record: %s", e)
-            continue
-        n_seen += 1
-        row = parse_assembly_record(record)
-        if row is not None:
-            n_kept += 1
-            yield row
+    try:
+        for raw in proc.stdout:  # type: ignore[union-attr]
+            raw = raw.strip()
+            if not raw:
+                continue
+            try:
+                record = json.loads(raw)
+            except json.JSONDecodeError as e:
+                log.warning("Skipping malformed assembly record: %s", e)
+                continue
+            n_seen += 1
+            row = parse_assembly_record(record)
+            if row is not None:
+                n_kept += 1
+                yield row
+    except GeneratorExit:  # the caller stopped reading early
+        proc.kill()
+        proc.wait()
+        raise
 
     proc.wait()
     if proc.returncode != 0:
@@ -184,7 +190,5 @@ if __name__ == "__main__":
     import sys
 
     root = int(sys.argv[1]) if len(sys.argv) > 1 else EUKARYOTA_TAXID
-    rows = list(fetch_assemblies(root))
-    log.info("Fetched %d assemblies under taxon %d", len(rows), root)
-    for row in rows[:5]:
+    for row in itertools.islice(fetch_assemblies(root), 5):
         log.info("%s", row)

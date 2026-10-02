@@ -15,6 +15,7 @@ assembly count still comes from ``fetch_assemblies`` (NCBI datasets).
 
 from __future__ import annotations
 
+import itertools
 import json
 import logging
 from collections.abc import Iterator
@@ -113,40 +114,51 @@ def parse_report_row(row: dict[str, str]) -> dict | None:
 
 
 @retry(stop=stop_after_attempt(5), wait=wait_exponential(multiplier=1, min=2, max=60))
-def _get_report(source: Source) -> str:
-    """The TSV report of every annotation, retried with backoff on transient errors."""
+def _get_report(source: Source) -> requests.Response:
+    """The streamed TSV report of every annotation, retried with backoff on
+    transient errors before the body starts."""
     resp = requests.get(
         f"{source.url}/annotations/report",
         params={"selected_fields": ",".join(REPORT_FIELDS)},
         timeout=source.timeout,
+        stream=True,
     )
     resp.raise_for_status()
-    return resp.text
+    return resp
+
+
+def _report_lines(source: Source) -> Iterator[str]:
+    """The report's lines as they arrive."""
+    with _get_report(source) as resp:
+        for line in resp.iter_lines(chunk_size=1 << 16):
+            yield line.decode("utf-8")
 
 
 def fetch_annotations(source: Source = ANNOTRIEVE) -> Iterator[dict]:
-    """Download Annotrieve's annotation report and yield normalized rows.
+    """Stream Annotrieve's annotation report and yield normalized rows.
 
     Raises ``RuntimeError`` if the report lacks a column we need or has no rows,
     so a changed or truncated response fails the build instead of shipping a
     dataset without annotations.
     """
-    lines = _get_report(source).splitlines()
-    header = lines[0].split("\t") if lines else []
+    lines = _report_lines(source)
+    header = next(lines, "").split("\t")
     missing = _REQUIRED_HEADER - set(header)
     if missing:
         raise RuntimeError(f"Annotrieve report is missing columns: {sorted(missing)}")
-    if len(lines) < 2:
-        raise RuntimeError("Annotrieve report has no rows")
-    log.info("Annotrieve report has %d annotations", len(lines) - 1)
 
-    n_kept = 0
-    for line in lines[1:]:
+    n_rows = n_kept = 0
+    for line in lines:
+        if not line:
+            continue
+        n_rows += 1
         row = parse_report_row(dict(zip(header, line.split("\t"))))
         if row is not None:
             n_kept += 1
             yield row
-    log.info("Fetched %d annotation rows", n_kept)
+    if not n_rows:
+        raise RuntimeError("Annotrieve report has no rows")
+    log.info("Annotrieve report has %d annotations; kept %d", n_rows, n_kept)
 
 
 if __name__ == "__main__":
@@ -155,7 +167,5 @@ if __name__ == "__main__":
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
         datefmt="%H:%M:%S",
     )
-    rows = list(fetch_annotations())
-    log.info("Fetched %d annotations", len(rows))
-    for row in rows[:5]:
+    for row in itertools.islice(fetch_annotations(), 5):
         log.info("%s", row)

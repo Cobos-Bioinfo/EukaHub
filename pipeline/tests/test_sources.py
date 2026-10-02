@@ -68,7 +68,7 @@ def test_fetch_reads_uses_the_configured_source(monkeypatch):
         return _Reply()
 
     monkeypatch.setattr(fr.requests, "post", post)
-    assert fr._expected_runs(Source("https://ena.example.org/api", 12)) == 0
+    assert fr._expected_runs(Source("https://ena.example.org/api", 12), fr._SHORT_QUERY) == 0
     assert calls == [("https://ena.example.org/api/count", 12)]
 
 
