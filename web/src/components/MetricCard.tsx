@@ -41,6 +41,22 @@ export default function MetricCard({
     </header>
   );
 
+  const empty = mode === "count" ? value.total === 0 : value.covered === 0;
+  if (empty) {
+    return (
+      <article
+        className="card card--empty"
+        style={{ "--metric-color": config.color } as CSSProperties}
+      >
+        {head}
+        <p className="card__empty">{config.empty_text}</p>
+        <p className="card__caption">
+          {config.external_source_name} has none for this {mode === "count" ? "taxon" : "group"}.
+        </p>
+      </article>
+    );
+  }
+
   if (mode === "count") {
     return (
       <article className="card" style={{ "--metric-color": config.color } as CSSProperties}>

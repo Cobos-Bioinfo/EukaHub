@@ -990,6 +990,10 @@
             "title": "Coverage Column",
             "type": "string"
           },
+          "empty_text": {
+            "title": "Empty Text",
+            "type": "string"
+          },
           "external_source_name": {
             "title": "External Source Name",
             "type": "string"
@@ -1050,6 +1054,7 @@
           "species_help",
           "total_label",
           "total_help",
+          "empty_text",
           "color",
           "external_source_name",
           "external_url_template",

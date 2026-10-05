@@ -3611,3 +3611,49 @@ button.tree-outline__name:hover {
     display: none;
   }
 }
+
+/* ---- No data yet ------------------------------------------------------- */
+.card__empty {
+  margin: 0.35rem 0 0;
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--ink-2);
+}
+.nodata {
+  display: grid;
+  gap: 0.5rem;
+  padding: 1.25rem 1.4rem;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--link);
+  border-radius: var(--radius);
+}
+.nodata__title {
+  margin: 0;
+  font-size: 1.2rem;
+}
+.nodata__text {
+  margin: 0;
+  max-width: var(--measure);
+  color: var(--ink-2);
+}
+.nodata__link {
+  font-weight: 600;
+  justify-self: start;
+}
+.nodata__list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr));
+  gap: 0.4rem 1.5rem;
+  margin: 0.75rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+.nodata__meta,
+.nodata__more {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+.nodata__more {
+  margin: 0.75rem 0 0;
+}

@@ -886,6 +886,8 @@ export interface components {
             color: string;
             /** Coverage Column */
             coverage_column: string;
+            /** Empty Text */
+            empty_text: string;
             /** External Source Name */
             external_source_name: string;
             /** External Url Template */

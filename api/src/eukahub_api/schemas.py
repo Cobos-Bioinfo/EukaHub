@@ -39,6 +39,7 @@ class MetricConfig(BaseModel):
     species_help: str
     total_label: str
     total_help: str
+    empty_text: str  # shown instead of a zero count
     color: str
     external_source_name: str
     external_url_template: str  # contains "{taxid}"; the client substitutes
@@ -65,6 +66,7 @@ class MetricConfig(BaseModel):
             species_help=m.species_help,
             total_label=m.total_label,
             total_help=m.total_help,
+            empty_text=m.empty_text,
             color=m.color,
             external_source_name=m.external_source_name,
             external_url_template=external_url_template,

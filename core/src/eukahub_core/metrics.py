@@ -44,7 +44,8 @@ class Metric:
     - filter / sort controls: ``filter_label``, ``sort_count_label``,
       ``sort_total_label``.
     - summary card: ``card_title``, ``card_title_help``, ``species_help``,
-      ``total_label``, ``total_help``, ``external_source_name``,
+      ``total_label``, ``total_help``, ``empty_text`` (shown instead of a zero),
+      ``external_source_name``,
       ``external_url_template`` (the default; a deployment can override it, see
       ``eukahub_api.settings``).
     - TSV export: ``tsv_count_column``, ``tsv_total_column`` — the
@@ -67,6 +68,7 @@ class Metric:
     external_url_template: str
     tsv_count_column: str
     tsv_total_column: str
+    empty_text: str
     # Optional — only `lng` carries a tooltip on the card title today.
     card_title_help: str | None = None
 
@@ -101,6 +103,7 @@ METRICS: tuple[Metric, ...] = (
         external_url_template="https://www.ncbi.nlm.nih.gov/datasets/genome/?taxon={taxid}",
         tsv_count_column="species_with_assemblies",
         tsv_total_column="total_assemblies",
+        empty_text="No genome assemblies yet",
     ),
     Metric(
         key="ann",
@@ -119,6 +122,7 @@ METRICS: tuple[Metric, ...] = (
         external_url_template="https://genome.crg.es/annotrieve/annotations/?taxids={taxid}",
         tsv_count_column="species_with_annotations",
         tsv_total_column="total_annotations",
+        empty_text="No functional annotations yet",
     ),
     Metric(
         key="rna",
@@ -142,6 +146,7 @@ METRICS: tuple[Metric, ...] = (
         ),
         tsv_count_column="species_with_rna_seq",
         tsv_total_column="total_rna_seq",
+        empty_text="No RNA-Seq runs yet",
     ),
     Metric(
         key="lng",
@@ -167,6 +172,7 @@ METRICS: tuple[Metric, ...] = (
         ),
         tsv_count_column="species_with_long_read_rna_seq",
         tsv_total_column="total_long_read_rna_seq",
+        empty_text="No long-read RNA-Seq runs yet",
     ),
 )
 
