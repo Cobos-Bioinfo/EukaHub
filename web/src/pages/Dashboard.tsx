@@ -10,6 +10,7 @@ import {
 import AboutCard from "../components/AboutCard";
 import Breadcrumb from "../components/Breadcrumb";
 import BreakdownMap from "../components/BreakdownMap";
+import { TaxonError } from "../components/ErrorPage";
 import MetricCard from "../components/MetricCard";
 import NoDataNotice from "../components/NoDataNotice";
 import QualitySection from "../components/QualitySection";
@@ -35,8 +36,20 @@ export default function Dashboard() {
   // resolves to a summary, its error deliberately ignored.
   const about = useAsync(() => getAbout(taxid), [taxid]);
 
-  if (!validId) return <p className="notice notice--error">Invalid taxon id.</p>;
-  if (summary.error) return <p className="notice notice--error">{summary.error}</p>;
+  if (!validId) return <TaxonError taxid={taxidParam} />;
+  if (summary.error) {
+    return (
+      <TaxonError
+        taxid={taxidParam}
+        status={summary.status}
+        message={summary.error}
+        retry={summary.reload}
+      />
+    );
+  }
+  if (metrics.error) {
+    return <TaxonError taxid={taxidParam} message={metrics.error} retry={metrics.reload} />;
+  }
   if (summary.loading || metrics.loading || !summary.data || !metrics.data) {
     return <p className="notice">Loading…</p>;
   }

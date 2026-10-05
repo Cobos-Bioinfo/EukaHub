@@ -3657,3 +3657,41 @@ button.tree-outline__name:hover {
 .nodata__more {
   margin: 0.75rem 0 0;
 }
+
+/* ---- Error pages -------------------------------------------------------- */
+.errpage {
+  display: grid;
+  gap: 0.9rem;
+  max-width: 40rem;
+  margin: 3rem auto;
+}
+.errpage__title {
+  margin: 0;
+  font-size: 1.8rem;
+}
+.errpage__text {
+  margin: 0;
+  color: var(--ink-2);
+}
+.errpage__text p {
+  margin: 0;
+}
+.errpage__search .picker {
+  width: 100%;
+  margin: 0;
+}
+.errpage__home {
+  justify-self: start;
+  font-weight: 600;
+}
+.errpage__retry {
+  justify-self: start;
+  padding: 0.5rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--card);
+  color: var(--ink);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}

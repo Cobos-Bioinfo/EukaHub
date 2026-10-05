@@ -41,9 +41,20 @@ function extractDetail(error: unknown): string | undefined {
   return undefined;
 }
 
+/** A failed API request; ``status`` tells a missing taxon (404) from a busy server. */
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
+  }
+}
+
 function unwrap<T>(res: { data?: T; error?: unknown; response: Response }): T {
   if (res.error !== undefined || res.data === undefined) {
-    throw new Error(extractDetail(res.error) ?? `Request failed (${res.response.status})`);
+    const status = res.response.status;
+    throw new ApiError(extractDetail(res.error) ?? `Request failed (${status})`, status);
   }
   return res.data;
 }

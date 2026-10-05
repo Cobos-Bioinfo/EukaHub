@@ -4,6 +4,7 @@ import { useNavigate, useParams } from "react-router";
 import { getLineage, getMetricsConfig } from "../api/queries";
 import type { TaxonRef } from "../api/types";
 import Breadcrumb from "../components/Breadcrumb";
+import { TaxonError } from "../components/ErrorPage";
 import RadialTree from "../components/RadialTree";
 import RootPicker from "../components/RootPicker";
 import TreeOutline from "../components/TreeOutline";
@@ -69,9 +70,18 @@ export default function TreePage() {
     }
   };
 
-  if (!validId) return <p className="notice notice--error">Invalid taxon id.</p>;
-  if (lineage.error) return <p className="notice notice--error">{lineage.error}</p>;
-  if (tree.error) return <p className="notice notice--error">{tree.error}</p>;
+  if (!validId) return <TaxonError taxid={taxidParam} />;
+  if (lineage.error) {
+    return (
+      <TaxonError
+        taxid={taxidParam}
+        status={lineage.status}
+        message={lineage.error}
+        retry={lineage.reload}
+      />
+    );
+  }
+  if (tree.error) return <TaxonError taxid={taxidParam} message={tree.error} />;
 
   return (
     <section className="tree-page">
@@ -114,6 +124,13 @@ export default function TreePage() {
           focus={focus}
           onOpen={(t) => navigate(`/clade/${t}`)}
         />
+      ) : metrics.error ? (
+        <p className="notice notice--error" role="alert">
+          Could not load the tree: {metrics.error}{" "}
+          <button type="button" className="link-btn" onClick={metrics.reload}>
+            Try again
+          </button>
+        </p>
       ) : (
         <p className="notice">Loading…</p>
       )}

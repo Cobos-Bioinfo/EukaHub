@@ -3,6 +3,7 @@ import { Link, Route, Routes, useLocation } from "react-router";
 import { getMeta } from "./api/queries";
 import HeaderMenu from "./components/HeaderMenu";
 import RandomCladeButton from "./components/RandomCladeButton";
+import { NotFound } from "./components/ErrorPage";
 import RootPicker from "./components/RootPicker";
 import ThemeToggle from "./components/ThemeToggle";
 import { RandomIcon } from "./components/icons";
@@ -93,7 +94,7 @@ export default function App() {
           <Route path="/compare" element={<ComparePage />} />
           <Route path="/faq" element={<Faq />} />
           <Route path="/privacy" element={<Privacy />} />
-          <Route path="*" element={<p className="notice notice--error">Page not found.</p>} />
+          <Route path="*" element={<NotFound />} />
         </Routes>
       </main>
 

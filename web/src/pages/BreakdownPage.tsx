@@ -2,6 +2,7 @@ import { useParams } from "react-router";
 
 import { getLineage } from "../api/queries";
 import BreakdownMap from "../components/BreakdownMap";
+import { TaxonError } from "../components/ErrorPage";
 import ViewSwitcher from "../components/ViewSwitcher";
 import { useAsync } from "../hooks/useAsync";
 
@@ -14,8 +15,17 @@ export default function BreakdownPage() {
   const lineage = useAsync(() => getLineage(id), [id]);
 
   if (!Number.isInteger(id) || id <= 0)
-    return <p className="notice notice--error">Invalid taxon id.</p>;
-  if (lineage.error) return <p className="notice notice--error">{lineage.error}</p>;
+    return <TaxonError taxid={taxidParam} />;
+  if (lineage.error) {
+    return (
+      <TaxonError
+        taxid={taxidParam}
+        status={lineage.status}
+        message={lineage.error}
+        retry={lineage.reload}
+      />
+    );
+  }
   if (!lineage.data) return <p className="notice">Loading…</p>;
 
   const root = { taxid: lineage.data.taxid, name: lineage.data.name, rank: lineage.data.rank };
