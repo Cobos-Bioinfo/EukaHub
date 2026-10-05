@@ -1,6 +1,56 @@
 {
   "components": {
     "schemas": {
+      "Aggregate": {
+        "description": "Species count, per-resource coverage and quality stats for a set of clades\n(served by ``/aggregate``): a taxon is in the set when the nearest listed\nclade above it (or the taxon itself) is in ``include``.",
+        "properties": {
+          "composition": {
+            "$ref": "#/components/schemas/AssemblyComposition"
+          },
+          "exclude": {
+            "items": {
+              "$ref": "#/components/schemas/TaxonRef"
+            },
+            "title": "Exclude",
+            "type": "array"
+          },
+          "include": {
+            "items": {
+              "$ref": "#/components/schemas/TaxonRef"
+            },
+            "title": "Include",
+            "type": "array"
+          },
+          "n_rows": {
+            "title": "N Rows",
+            "type": "integer"
+          },
+          "quality": {
+            "items": {
+              "$ref": "#/components/schemas/QualityStatValue"
+            },
+            "title": "Quality",
+            "type": "array"
+          },
+          "resources": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/ResourceSummary"
+            },
+            "title": "Resources",
+            "type": "object"
+          }
+        },
+        "required": [
+          "include",
+          "exclude",
+          "n_rows",
+          "resources",
+          "composition",
+          "quality"
+        ],
+        "title": "Aggregate",
+        "type": "object"
+      },
       "AnnotationList": {
         "description": "Annotations under a taxon: live annotation-quality stats + a paginated list.",
         "properties": {
@@ -647,6 +697,75 @@
           "quality"
         ],
         "title": "CompareGroup",
+        "type": "object"
+      },
+      "CustomGroupItem": {
+        "description": "One custom group from the groups file. ``include`` and ``exclude`` are the\nclades it is made of, worked out from the parent's other groups for a\n``rest`` group, so they can be passed to ``/aggregate`` as they are. A rest\ngroup with nothing left lists no clades.",
+        "properties": {
+          "exclude": {
+            "items": {
+              "$ref": "#/components/schemas/TaxonRef"
+            },
+            "title": "Exclude",
+            "type": "array"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "include": {
+            "items": {
+              "$ref": "#/components/schemas/TaxonRef"
+            },
+            "title": "Include",
+            "type": "array"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "parent": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent"
+          },
+          "rest": {
+            "title": "Rest",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "parent",
+          "rest",
+          "include",
+          "exclude"
+        ],
+        "title": "CustomGroupItem",
+        "type": "object"
+      },
+      "CustomGroups": {
+        "description": "The deployment's custom groups, in groups-file order (served by\n``/custom-groups``). A group that doesn't fit the current taxonomy is left out.",
+        "properties": {
+          "groups": {
+            "items": {
+              "$ref": "#/components/schemas/CustomGroupItem"
+            },
+            "title": "Groups",
+            "type": "array"
+          }
+        },
+        "required": [
+          "groups"
+        ],
+        "title": "CustomGroups",
         "type": "object"
       },
       "DatasetMeta": {
@@ -1422,6 +1541,60 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/aggregate": {
+      "get": {
+        "description": "Species count, per-resource coverage and quality stats for a set of clades:\nthe clades in ``include`` minus the clades inside them in ``exclude`` (e.g.\nfish as Vertebrata minus Tetrapoda). A clade inside an excluded one can be\nincluded again. Counts are sums and differences of the clades' rollups;\nquality stats are computed from the records in the set.",
+        "operationId": "aggregate_aggregate_get",
+        "parameters": [
+          {
+            "description": "Comma-separated taxids of the clades to add up (1-20, e.g. 7742).",
+            "in": "query",
+            "name": "include",
+            "required": true,
+            "schema": {
+              "description": "Comma-separated taxids of the clades to add up (1-20, e.g. 7742).",
+              "title": "Include",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Comma-separated taxids of clades inside them to leave out (e.g. 32523).",
+            "in": "query",
+            "name": "exclude",
+            "required": false,
+            "schema": {
+              "default": "",
+              "description": "Comma-separated taxids of clades inside them to leave out (e.g. 32523).",
+              "title": "Exclude",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Aggregate"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Aggregate"
+      }
+    },
     "/clade/{taxid}/breakdown": {
       "get": {
         "description": "How a clade's data is distributed at a lower rank (Q2).\n\nDescendants of `taxid` at `rank`, with filter/sort/limit pushed into a\nsingle indexed `ltree` query. Defaults mirror Euka-Survey: sort by species\ncount, exclude empty taxa, AND-combine filters, top 25.",
@@ -1823,6 +1996,25 @@
           }
         },
         "summary": "Compare"
+      }
+    },
+    "/custom-groups": {
+      "get": {
+        "description": "The custom groups from the deployment's groups file, in file order, each\nwith the clades it is made of (pass them to ``/aggregate`` for its data). A\ngroup that doesn't fit the current taxonomy is left out and logged.",
+        "operationId": "custom_groups_custom_groups_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomGroups"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Custom Groups"
       }
     },
     "/gaps": {

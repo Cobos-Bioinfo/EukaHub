@@ -4,6 +4,30 @@
  */
 
 export interface paths {
+    "/aggregate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Aggregate
+         * @description Species count, per-resource coverage and quality stats for a set of clades:
+         *     the clades in ``include`` minus the clades inside them in ``exclude`` (e.g.
+         *     fish as Vertebrata minus Tetrapoda). A clade inside an excluded one can be
+         *     included again. Counts are sums and differences of the clades' rollups;
+         *     quality stats are computed from the records in the set.
+         */
+        get: operations["aggregate_aggregate_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/clade/{taxid}/breakdown": {
         parameters: {
             query?: never;
@@ -112,6 +136,28 @@ export interface paths {
          *     ``_COMPARE_MAX_GROUPS`` are honoured.
          */
         get: operations["compare_compare_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/custom-groups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Custom Groups
+         * @description The custom groups from the deployment's groups file, in file order, each
+         *     with the clades it is made of (pass them to ``/aggregate`` for its data). A
+         *     group that doesn't fit the current taxonomy is left out and logged.
+         */
+        get: operations["custom_groups_custom_groups_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -446,6 +492,27 @@ export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
         /**
+         * Aggregate
+         * @description Species count, per-resource coverage and quality stats for a set of clades
+         *     (served by ``/aggregate``): a taxon is in the set when the nearest listed
+         *     clade above it (or the taxon itself) is in ``include``.
+         */
+        Aggregate: {
+            composition: components["schemas"]["AssemblyComposition"];
+            /** Exclude */
+            exclude: components["schemas"]["TaxonRef"][];
+            /** Include */
+            include: components["schemas"]["TaxonRef"][];
+            /** N Rows */
+            n_rows: number;
+            /** Quality */
+            quality: components["schemas"]["QualityStatValue"][];
+            /** Resources */
+            resources: {
+                [key: string]: components["schemas"]["ResourceSummary"];
+            };
+        };
+        /**
          * AnnotationList
          * @description Annotations under a taxon: live annotation-quality stats + a paginated list.
          */
@@ -677,6 +744,36 @@ export interface components {
             };
             /** Taxid */
             taxid: number;
+        };
+        /**
+         * CustomGroupItem
+         * @description One custom group from the groups file. ``include`` and ``exclude`` are the
+         *     clades it is made of, worked out from the parent's other groups for a
+         *     ``rest`` group, so they can be passed to ``/aggregate`` as they are. A rest
+         *     group with nothing left lists no clades.
+         */
+        CustomGroupItem: {
+            /** Exclude */
+            exclude: components["schemas"]["TaxonRef"][];
+            /** Id */
+            id: string;
+            /** Include */
+            include: components["schemas"]["TaxonRef"][];
+            /** Label */
+            label: string;
+            /** Parent */
+            parent: string | null;
+            /** Rest */
+            rest: boolean;
+        };
+        /**
+         * CustomGroups
+         * @description The deployment's custom groups, in groups-file order (served by
+         *     ``/custom-groups``). A group that doesn't fit the current taxonomy is left out.
+         */
+        CustomGroups: {
+            /** Groups */
+            groups: components["schemas"]["CustomGroupItem"][];
         };
         /**
          * DatasetMeta
@@ -1034,6 +1131,40 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    aggregate_aggregate_get: {
+        parameters: {
+            query: {
+                /** @description Comma-separated taxids of the clades to add up (1-20, e.g. 7742). */
+                include: string;
+                /** @description Comma-separated taxids of clades inside them to leave out (e.g. 32523). */
+                exclude?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Aggregate"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     clade_breakdown_clade__taxid__breakdown_get: {
         parameters: {
             query: {
@@ -1211,6 +1342,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    custom_groups_custom_groups_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CustomGroups"];
                 };
             };
         };
