@@ -18,13 +18,13 @@ import type {
   MetricFilter,
   Overview,
   QualityStatConfig,
+  SearchHit,
   SiteConfig,
   SortColumn,
   TargetRank,
   TaxonAbout,
   TaxonChildren,
   TaxonLineage,
-  TaxonRef,
 } from "./types";
 
 function extractDetail(error: unknown): string | undefined {
@@ -118,7 +118,7 @@ export const getAbout = async (taxid: number): Promise<TaxonAbout | null> => {
   return data ?? null;
 };
 
-export const searchTaxa = async (q: string, limit = 10): Promise<TaxonRef[]> =>
+export const searchTaxa = async (q: string, limit = 10): Promise<SearchHit[]> =>
   unwrap(await api.GET("/search", { params: { query: { q, limit } } }));
 
 // The annotation/assembly-quality stat chrome (BUSCO, genes, genome size, N50) —

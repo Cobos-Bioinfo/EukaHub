@@ -333,8 +333,9 @@ export interface paths {
         };
         /**
          * Search
-         * @description Case-insensitive taxon-name search for the root picker. Substring match,
-         *     prefix-matches first (served by the `pg_trgm` GIN index on `taxon.name`).
+         * @description Case-insensitive taxon-name search for the search box. Names starting with
+         *     the query come first, the best-covered taxa ahead; then names containing it.
+         *     When no name contains it, close spellings are returned with `similar` set.
          */
         get: operations["search_search_get"];
         put?: never;
@@ -994,6 +995,33 @@ export interface components {
             total: number;
         };
         /**
+         * SearchHit
+         * @description A name-search result, with what the picker needs to tell look-alike names apart.
+         */
+        SearchHit: {
+            /**
+             * Context
+             * @description Nearest class, phylum or kingdom above the taxon, to tell homonyms apart.
+             */
+            context: string | null;
+            /**
+             * Has Data
+             * @description Whether any assembly, annotation or RNA-Seq run sits on the taxon or below it.
+             */
+            has_data: boolean;
+            /** Name */
+            name: string;
+            /** Rank */
+            rank: string;
+            /**
+             * Similar
+             * @description True when no name contains the query and this is a close spelling instead.
+             */
+            similar: boolean;
+            /** Taxid */
+            taxid: number;
+        };
+        /**
          * SiteConfig
          * @description Deployment settings the web app reads once per page load (served by
          *     ``/site-config``).
@@ -1548,7 +1576,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["TaxonRef"][];
+                    "application/json": components["schemas"]["SearchHit"][];
                 };
             };
             /** @description Validation Error */

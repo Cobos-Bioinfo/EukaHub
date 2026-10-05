@@ -17,6 +17,7 @@ export type CladeGroup = components["schemas"]["CladeGroup"];
 export type Gaps = components["schemas"]["Gaps"];
 export type GapItem = components["schemas"]["GapItem"];
 export type TaxonRef = components["schemas"]["TaxonRef"];
+export type SearchHit = components["schemas"]["SearchHit"];
 export type TaxonLineage = components["schemas"]["TaxonLineage"];
 export type TaxonAbout = components["schemas"]["TaxonAbout"];
 export type TaxonNode = components["schemas"]["TaxonNode"];

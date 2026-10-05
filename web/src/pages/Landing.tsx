@@ -31,7 +31,7 @@ export default function Landing() {
         </p>
 
         <div className="hero__search">
-          <RootPicker />
+          <RootPicker placeholder="Search by name or TaxID, e.g. Primates or 9606" />
         </div>
 
         <div className="hero__cta">

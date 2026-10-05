@@ -96,6 +96,7 @@ from eukahub_api.schemas import (
     QualityStatConfig,
     QualityStatValue,
     ResourceSummary,
+    SearchHit,
     SiteConfig,
     TaxonAbout,
     TaxonChildren,
@@ -845,14 +846,16 @@ def clade_export(
     )
 
 
-@app.get("/search", response_model=list[TaxonRef])
+@app.get("/search", response_model=list[SearchHit])
 def search(
     conn: Conn,
     q: Annotated[str, Query(min_length=3, max_length=100, description="Name query.")],
     limit: Annotated[int, Query(ge=1, le=50)] = 20,
-) -> list[TaxonRef]:
-    """Case-insensitive taxon-name search for the root picker. Substring match,
-    prefix-matches first (served by the `pg_trgm` GIN index on `taxon.name`)."""
+) -> list[SearchHit]:
+    """Case-insensitive taxon-name search for the search box. Names starting with
+    the query come first, the best-covered taxa ahead; then names containing it.
+    When no name contains it, close spellings are returned with `similar` set."""
     if "\x00" in q:
         raise HTTPException(status_code=422, detail="the query contains a NUL character")
-    return [TaxonRef(taxid=t, name=n, rank=r) for t, n, r in search_taxa(conn, q, limit)]
+    hits, similar = search_taxa(conn, q, limit)
+    return [SearchHit(**h, similar=similar) for h in hits]

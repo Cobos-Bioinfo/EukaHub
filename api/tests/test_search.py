@@ -20,6 +20,34 @@ def test_search_prefix_matches_rank_first(client):
     assert body[0]["name"].lower().startswith("homo")
 
 
+def test_search_puts_the_exact_name_first(client):
+    body = client.get("/search", params={"q": "homo sapiens", "limit": 50}).json()
+    assert body[0]["taxid"] == 9606
+
+
+def test_search_hits_name_their_nearest_major_rank(client):
+    body = client.get("/search", params={"q": "Homo", "limit": 5}).json()
+    for hit in body:
+        lineage = client.get(f"/taxon/{hit['taxid']}").json()["lineage"]
+        above = [a for a in lineage[:-1] if a["rank"] in ("class", "phylum", "kingdom")]
+        assert hit["context"] == (above[-1]["name"] if above else None)
+
+
+def test_search_data_flag_matches_the_summary(client):
+    body = client.get("/search", params={"q": "Homo", "limit": 5}).json()
+    for hit in body:
+        summary = client.get(f"/clade/{hit['taxid']}/summary").json()
+        totals = [r["total"] for r in summary["resources"].values()]
+        assert hit["has_data"] == any(t > 0 for t in totals)
+        assert hit["similar"] is False
+
+
+def test_search_suggests_close_spellings_when_nothing_matches(client):
+    body = client.get("/search", params={"q": "Homo sapeins"}).json()
+    assert body[0]["taxid"] == 9606
+    assert all(hit["similar"] for hit in body)
+
+
 def test_search_respects_limit(client):
     body = client.get("/search", params={"q": "homo", "limit": 2}).json()
     assert len(body) == 2

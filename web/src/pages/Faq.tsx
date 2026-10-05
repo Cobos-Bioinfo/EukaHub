@@ -80,8 +80,9 @@ export default function Faq() {
       <div className="faq__item">
         <h2 className="faq__q">How do I find a specific organism?</h2>
         <p className="faq__a">
-          Use the search box at the top. Type a name (like "Primates" or "Fungi") or an NCBI
-          TaxID (like 9606 for humans).
+          Use the search box at the top. Type a scientific name (like "Primates" or "Fungi"), part
+          of one, or an NCBI TaxID (like 9606 for humans). Common names such as "human" are not
+          searchable yet. If no name matches, the search suggests the closest spellings.
         </p>
       </div>
 

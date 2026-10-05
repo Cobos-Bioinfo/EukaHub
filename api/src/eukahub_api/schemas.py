@@ -266,6 +266,20 @@ class TaxonRef(BaseModel):
     rank: str
 
 
+class SearchHit(TaxonRef):
+    """A name-search result, with what the picker needs to tell look-alike names apart."""
+
+    context: str | None = Field(
+        description="Nearest class, phylum or kingdom above the taxon, to tell homonyms apart."
+    )
+    has_data: bool = Field(
+        description="Whether any assembly, annotation or RNA-Seq run sits on the taxon or below it."
+    )
+    similar: bool = Field(
+        description="True when no name contains the query and this is a close spelling instead."
+    )
+
+
 class TaxonLineage(BaseModel):
     """A taxon plus its root→node lineage (for the header breadcrumb)."""
 

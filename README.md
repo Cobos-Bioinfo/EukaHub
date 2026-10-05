@@ -51,8 +51,9 @@ production-grade stack (PostgreSQL + FastAPI + a React/TypeScript SPA).
   species and the least data, surfacing the project's core question directly.
 - **Per-record drill-down**: browse the actual assemblies and annotations behind
   the numbers, with deep links out to NCBI and the source GFF files.
-- **Wikipedia "About" cards**, a name/TaxID search scoped to Eukaryota, full
-  **light and dark themes**, and a responsive layout down to mobile.
+- **Wikipedia "About" cards**, a name/TaxID search scoped to Eukaryota that puts
+  the best-covered groups first and suggests close spellings, full **light and
+  dark themes**, and a responsive layout down to mobile.
 
 ## Data sources
 

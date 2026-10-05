@@ -503,25 +503,87 @@ def iter_export_tsv(
             yield "".join("\t".join(_tsv_cell(v) for v in row) + "\n" for row in rows)
 
 
-def search_taxa(
-    conn: psycopg.Connection, query: str, limit: int
-) -> list[tuple[int, str, str]]:
-    """Case-insensitive name search → ``(taxid, name, rank)`` rows.
+# Ranks named beside a search hit so that homonyms (the insect and the fungus
+# genus Drosophila) can be told apart: the nearest one above the hit.
+_CONTEXT_RANKS = ("class", "phylum", "kingdom")
+# Below this length a misspelling has too few trigrams to match anything useful.
+_SIMILAR_MIN_LENGTH = 4
 
-    Substring match (``ILIKE %q%``, served by the ``pg_trgm`` GIN index on
-    ``name``), ordered prefix-matches-first, then shortest, then alphabetical —
-    the useful order for a root picker. Wildcards in ``query`` are escaped so
-    they match literally.
+
+def search_taxa(conn: psycopg.Connection, query: str, limit: int) -> tuple[list[dict], bool]:
+    """Case-insensitive name search for the picker → ``(hits, similar)``.
+
+    Names starting with the query come first: an exact name, then the taxa with
+    the most records, then the most species. Only those are ranked by data, since
+    a short query can match tens of thousands of names mid-word. Free slots go to
+    mid-word matches, shortest first. When nothing matches, close spellings are
+    returned instead and ``similar`` is True. Each hit carries ``context`` (its
+    nearest class, phylum or kingdom) and ``has_data``. Wildcards in ``query``
+    are escaped so they match literally.
     """
     escaped = query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-    rows = conn.execute(
-        "SELECT taxid, name, rank FROM taxon "
-        "WHERE name ILIKE %(sub)s AND taxid <> ALL(%(spine)s) "
-        "ORDER BY (name ILIKE %(pre)s) DESC, length(name), name "
-        "LIMIT %(lim)s",
-        {"sub": f"%{escaped}%", "pre": f"{escaped}%", "lim": limit, "spine": list(SPINE_TAXIDS)},
-    ).fetchall()
-    return rows
+    params = {
+        "q": query,
+        "pre": f"{escaped}%",
+        "sub": f"%{escaped}%",
+        "lim": limit,
+        "spine": list(SPINE_TAXIDS),
+    }
+    taxids = [
+        r[0]
+        for r in conn.execute(
+            "SELECT t.taxid FROM taxon t LEFT JOIN clade_features f USING (taxid) "
+            "WHERE t.name ILIKE %(pre)s AND t.taxid <> ALL(%(spine)s) "
+            "ORDER BY lower(t.name) = lower(%(q)s) DESC, "
+            "COALESCE(f.s_ass, 0) + COALESCE(f.s_ann, 0) + COALESCE(f.s_rna, 0) DESC, "
+            "COALESCE(f.n_rows, 0) DESC, length(t.name), t.name "
+            "LIMIT %(lim)s",
+            params,
+        )
+    ]
+    if len(taxids) < limit:
+        params["lim"] = limit - len(taxids)
+        taxids += [
+            r[0]
+            for r in conn.execute(
+                "SELECT taxid FROM taxon "
+                "WHERE name ILIKE %(sub)s AND name NOT ILIKE %(pre)s "
+                "AND taxid <> ALL(%(spine)s) "
+                "ORDER BY length(name), name LIMIT %(lim)s",
+                params,
+            )
+        ]
+    similar = not taxids and len(query) >= _SIMILAR_MIN_LENGTH
+    if similar:
+        taxids = [
+            r[0]
+            for r in conn.execute(
+                "SELECT taxid FROM taxon WHERE name %% %(q)s AND taxid <> ALL(%(spine)s) "
+                "ORDER BY similarity(name, %(q)s) DESC, length(name), name LIMIT %(lim)s",
+                params,
+            )
+        ]
+    return _search_hits(conn, taxids), similar
+
+
+def _search_hits(conn: psycopg.Connection, taxids: list[int]) -> list[dict]:
+    """Search hits for ``taxids``, in that order, with their context and data flag.
+    The context comes from the path labels, so it costs one primary-key lookup
+    per ancestor of at most ``limit`` hits."""
+    if not taxids:
+        return []
+    with conn.cursor(row_factory=dict_row) as cur:
+        rows = cur.execute(
+            "SELECT t.taxid, t.name, t.rank, "
+            "COALESCE(f.s_ass, 0) + COALESCE(f.s_ann, 0) + COALESCE(f.s_rna, 0) > 0 AS has_data, "
+            "(SELECT a.name FROM taxon a "
+            " WHERE a.taxid = ANY(string_to_array(ltree2text(subpath(t.path, 0, -1)), '.')::int[]) "
+            " AND a.rank = ANY(%(ranks)s) ORDER BY nlevel(a.path) DESC LIMIT 1) AS context "
+            "FROM taxon t LEFT JOIN clade_features f USING (taxid) WHERE t.taxid = ANY(%(ids)s)",
+            {"ids": taxids, "ranks": list(_CONTEXT_RANKS)},
+        ).fetchall()
+    by_taxid = {r["taxid"]: r for r in rows}
+    return [by_taxid[t] for t in taxids]
 
 
 # --- Per-record drill-down (assemblies / annotations) -----------------------
