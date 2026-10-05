@@ -91,7 +91,7 @@ export default function TreePage() {
       <header className="tree-page__head">
         <div className="tree-page__topline">
           <h1 className="tree-page__title">
-            Tree of Life{node ? <> — <em>{node.name}</em></> : null}
+            Tree of Life{node ? <> from <em>{node.name}</em></> : null}
           </h1>
           <div className="tree-search">
             <RootPicker onPick={locate} placeholder="Find a group in this tree" />

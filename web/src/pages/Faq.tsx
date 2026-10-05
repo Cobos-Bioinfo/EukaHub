@@ -89,8 +89,9 @@ export default function Faq() {
       <div className="faq__item">
         <h2 className="faq__q">Can I download the data?</h2>
         <p className="faq__a">
-          Yes. The breakdown on each dashboard has two downloads: the rows you're looking at,
-          and the full breakdown as a TSV file.
+          Yes. "Download TSV" in a dashboard's breakdown saves one row per group at the rank shown,
+          with its species count and coverage for each resource. Each assembly and annotation in
+          the record list links to its files at the source.
         </p>
       </div>
 
