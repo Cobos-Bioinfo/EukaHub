@@ -45,6 +45,11 @@ export function rampRgb(pct: number, ramp: RGB[]): RGB {
 }
 
 /** Relative luminance (sRGB approximation) — for picking ink that reads on a fill. */
-export function luminance([r, g, b]: RGB): number {
-  return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+/** WCAG relative luminance (0 black to 1 white), the input to contrast ratios. */
+export function luminance(rgb: RGB): number {
+  const [r, g, b] = rgb.map((c) => {
+    const v = c / 255;
+    return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+  });
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
 }

@@ -308,7 +308,8 @@ export default function BreakdownMap({
         node,
         x0: l.x0 ?? 0, y0: l.y0 ?? 0, x1: l.x1 ?? 0, y1: l.y1 ?? 0,
         fill: rgb ? rgbStr(rgb) : noData,
-        ink: luminance(rgb ?? (dark ? [51, 58, 68] : [211, 216, 223])) < 0.55 ? "#fff" : "#0b0b0b",
+        // White text where it out-contrasts near-black (relative luminance under ~0.18).
+        ink: luminance(rgb ?? (dark ? [51, 58, 68] : [211, 216, 223])) < 0.18 ? "#fff" : "#0b0b0b",
       };
     });
     return { tiles, maxRaw };
