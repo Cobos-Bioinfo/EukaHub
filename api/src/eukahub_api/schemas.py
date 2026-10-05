@@ -411,7 +411,7 @@ class QualityStatConfig(BaseModel):
     help: str
     unit: str | None  # "%", "bp", "genes", ...
     fmt: str  # "percent" | "integer" | "basepairs" — how the frontend renders it
-    headline: bool  # True for the surfaced annotation-quality figures
+    headline: bool  # True for the figures shown beside each group on the Gaps page
 
     @classmethod
     def from_stat(cls, q: QualityStat) -> QualityStatConfig:

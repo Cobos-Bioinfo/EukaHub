@@ -249,7 +249,7 @@ function GapRow({
                 </span>
               ))
             ) : (
-              <span className="gaps-row__qstat gaps-row__qstat--none">No annotated genomes yet</span>
+              <span className="gaps-row__qstat gaps-row__qstat--none">No genomes yet</span>
             )}
           </div>
         )}

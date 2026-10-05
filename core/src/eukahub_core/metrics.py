@@ -242,8 +242,9 @@ class QualityStat:
     - ``source`` + ``column`` locate the value in a per-record table.
     - ``agg`` is how it is summarized across a clade's subtree records.
     - ``fmt`` tells the frontend how to render the number.
-    - ``headline`` marks the surfaced *annotation-quality* figures (BUSCO, gene
-      count) versus secondary assembly-quality figures (genome size, N50).
+    - ``headline`` marks the figures shown beside each group on the Gaps page:
+      medians, which compare across groups (the best BUSCO is 100% almost
+      everywhere).
     """
 
     key: str
@@ -265,9 +266,8 @@ QUALITY_STATS: tuple[QualityStat, ...] = (
         agg="max",  # the clade's best-annotated genome
         unit="%",
         fmt="percent",
-        card_title="BUSCO completeness",
+        card_title="Best BUSCO completeness",
         help="Best BUSCO complete % among this clade's functional annotations",
-        headline=True,
     ),
     QualityStat(
         key="genes",
@@ -276,7 +276,7 @@ QUALITY_STATS: tuple[QualityStat, ...] = (
         agg="median",
         unit="genes",
         fmt="integer",
-        card_title="Protein-coding genes",
+        card_title="Median protein-coding genes",
         help="Median protein-coding gene count across this clade's annotations",
         headline=True,
     ),
@@ -287,8 +287,9 @@ QUALITY_STATS: tuple[QualityStat, ...] = (
         agg="median",
         unit="bp",
         fmt="basepairs",
-        card_title="Genome size",
+        card_title="Median genome size",
         help="Median assembly length across this clade's genome assemblies",
+        headline=True,
     ),
     QualityStat(
         key="contig_n50",
@@ -297,7 +298,7 @@ QUALITY_STATS: tuple[QualityStat, ...] = (
         agg="median",
         unit="bp",
         fmt="basepairs",
-        card_title="Contig N50",
+        card_title="Median contig N50",
         help="Median contig N50 across this clade's genome assemblies",
     ),
 )

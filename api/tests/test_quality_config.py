@@ -14,7 +14,9 @@ def test_quality_config(client):
         assert q["help"]
         assert q["source"] in {"assembly", "annotation"}
         assert q["fmt"] in {"percent", "integer", "basepairs"}
-    # BUSCO + protein-coding genes are the surfaced (headline) annotation stats.
+    # The headline stats compare groups on the Gaps page, so they are medians, and
+    # every label says which summary it shows.
     headline = {q["key"] for q in body if q["headline"]}
-    assert headline == {"busco", "genes"}
-    assert all(q["source"] == "annotation" for q in body if q["key"] in headline)
+    assert headline == {"genes", "genome_size"}
+    for q in body:
+        assert q["card_title"].startswith("Median" if q["key"] != "busco" else "Best")
