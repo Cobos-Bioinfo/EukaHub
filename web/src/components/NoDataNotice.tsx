@@ -79,7 +79,7 @@ function ChildList({ taxid, name }: { taxid: number; name: string }) {
         Inside {name}
       </h2>
       <ul className="nodata__list">
-        {data.items.map((c) => (
+        {data.results.map((c) => (
           <li key={c.taxid}>
             <Link to={`/clade/${c.taxid}`}>{c.name}</Link>{" "}
             <span className="nodata__meta">
@@ -89,9 +89,9 @@ function ChildList({ taxid, name }: { taxid: number; name: string }) {
           </li>
         ))}
       </ul>
-      {data.total > data.items.length && (
+      {data.total > data.results.length && (
         <p className="nodata__more">
-          {fmt(data.total - data.items.length)} more in the{" "}
+          {fmt(data.total - data.results.length)} more in the{" "}
           <Link to={`/tree/${taxid}`}>Tree of Life</Link>.
         </p>
       )}

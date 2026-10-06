@@ -1,26 +1,23 @@
 """EukaHub API — read-only serving of the genomic-resource dataset.
 
-Phase 2 read endpoints:
+Resources:
 
-- ``GET /overview``                    — landing-page totals + featured groups.
-- ``GET /compare``                     — several groups lined up side by side.
-- ``GET /aggregate``                   — data for a set of clades (include minus exclude).
-- ``GET /custom-groups``               — the deployment's custom groups and their clades.
-- ``GET /gaps``                        — the biggest under-sequenced groups.
-- ``GET /clade/{taxid}/summary``       — the Genomic Resource Summary (Q1).
-- ``GET /clade/{taxid}/breakdown``     — descendants at a target rank (Q2).
-- ``GET /clade/{taxid}/export.tsv``    — the full breakdown as a TSV download.
-- ``GET /taxon/{taxid}``               — the root→node lineage breadcrumb.
-- ``GET /taxon/{taxid}/children``      — direct children for the interactive tree.
-- ``GET /taxon/{taxid}/assemblies``    — genome assemblies in the subtree (+ stats).
-- ``GET /taxon/{taxid}/annotations``   — annotations in the subtree (+ BUSCO stats).
-- ``GET /taxon/{taxid}/about``         — Wikipedia "About" summary (decorative).
-- ``GET /search``                      — name search for the root picker.
+- ``GET /config``                      — what a client reads once: dataset stamp, measure
+  chrome, deployment links and groups.
+- ``GET /taxons``                      — taxa by name, parent, rank under a taxon or taxid,
+  with their counts; sorted, filtered and paged.
+- ``GET /taxons/stats``                — the quality stats of the same taxa, page for page.
+- ``GET /taxons/report``               — every taxon the same list would page through, as TSV.
+- ``GET /taxons/aggregates``           — data for a set of clades (include minus exclude).
+- ``GET /taxons/{taxid}``              — one taxon, the same object ``/taxons`` lists.
+- ``GET /taxons/{taxid}/ancestors``    — the root down to the taxon, as taxa.
+- ``GET /taxons/{taxid}/stats``        — the quality stats of one taxon.
+- ``GET /assemblies``                  — genome assemblies, optionally under a taxon.
+- ``GET /annotations``                 — gene annotations, optionally under a taxon.
 
-``/health`` (liveness) + ``/health/ready`` (DB readiness), ``/metrics-config``,
-``/quality-config``, ``/site-config`` (deployment links and curated groups), and
-``/meta`` (dataset provenance: the "Data updated" stamp) round out the service. Every request is logged as one structured JSON line (see
-``logging_config``).
+Lists page with an opaque cursor (see ``pagination``). ``/health`` (liveness) and
+``/health/ready`` (DB readiness) round out the service. Every request is logged as
+one structured JSON line (see ``logging_config``).
 """
 
 import hashlib
@@ -28,13 +25,13 @@ import itertools
 import logging
 import os
 import time
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Mapping, Sequence
 from contextlib import asynccontextmanager
 from typing import Annotated
 
+import psycopg
 from eukahub_core.metrics import METRICS, QUALITY_STATS
-from eukahub_core.taxonomy import EUKARYOTA_TAXID, UNIT_RANKS
-from fastapi import FastAPI, HTTPException, Query, Request, Response
+from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from psycopg.errors import QueryCanceled
@@ -44,68 +41,56 @@ from eukahub_api.clade_sets import SetTaxon, clade_set, resolve_groups, set_meta
 from eukahub_api.db import Conn
 from eukahub_api.db import lifespan as db_lifespan
 from eukahub_api.logging_config import configure_logging
+from eukahub_api.pagination import InvalidCursor, Page
 from eukahub_api.queries import (
+    MAX_PAGE,
     AnnotationSort,
     AssemblySort,
     FilterLogic,
     MetricFilter,
-    SortColumn,
+    SortOrder,
     TargetRank,
+    TaxonFilter,
+    TaxonListRow,
     TaxonNotFound,
-    fetch_annotation_records,
-    fetch_assembly_records,
-    fetch_breakdown,
-    fetch_breakdown_quality,
-    fetch_children,
-    fetch_compare,
+    TaxonSort,
+    fetch_ancestors,
     fetch_dataset_meta,
-    fetch_direct_totals,
-    fetch_gaps,
-    fetch_lineage,
-    fetch_overview,
     fetch_quality_for_taxids,
     fetch_root,
     fetch_set_quality,
     fetch_set_taxa,
-    fetch_summary,
-    iter_export_tsv,
-    search_taxa,
+    fetch_taxon,
+    fetch_taxon_stats,
+    iter_report_tsv,
+    list_records,
+    list_taxa,
 )
 from eukahub_api.schemas import (
     MAX_CLADES_PER_GROUP,
     Aggregate,
-    AnnotationList,
+    AggregatePage,
+    AnnotationPage,
     AnnotationRecord,
+    AppConfig,
     AssemblyComposition,
-    AssemblyList,
+    AssemblyPage,
     AssemblyRecord,
-    Breakdown,
-    BucketQuality,
     CladeSummary,
-    Compare,
-    CompareGroup,
+    CustomGroup,
     CustomGroupItem,
-    CustomGroups,
     DatasetMeta,
-    FeaturedClade,
-    GapItem,
-    Gaps,
     MetricConfig,
-    Overview,
-    OverviewTotals,
     QualityStatConfig,
     QualityStatValue,
     ResourceSummary,
-    SearchHit,
-    SiteConfig,
-    TaxonAbout,
-    TaxonChildren,
-    TaxonLineage,
-    TaxonNode,
+    Taxon,
+    TaxonPage,
     TaxonRef,
+    TaxonStats,
+    TaxonStatsPage,
 )
 from eukahub_api.settings import get_settings
-from eukahub_api.wikipedia import fetch_about
 
 log = logging.getLogger("eukahub.api")
 
@@ -151,24 +136,6 @@ def _if_none_match(header: str | None, etag: str) -> bool:
 # point so the docs at `/api/docs` reference `/api/openapi.json` correctly.
 # Override with API_ROOT_PATH="" to serve the docs when hitting uvicorn directly.
 _ROOT_PATH = os.environ.get("API_ROOT_PATH", "/api")
-
-# Upper bound on groups in a single /compare request — the chart + table stay
-# legible up to a handful, and it bounds the per-request query fan-out.
-_COMPARE_MAX_GROUPS = 6
-
-
-def _parse_taxids(raw: str) -> list[int]:
-    """The distinct taxids in a comma-separated list, in order, at most
-    ``_COMPARE_MAX_GROUPS``. Anything but a plain ASCII number is skipped."""
-    ids: list[int] = []
-    for part in raw.split(","):
-        part = part.strip()
-        if part.isascii() and part.isdigit() and len(part) <= 10 and int(part) not in ids:
-            ids.append(int(part))
-            if len(ids) == _COMPARE_MAX_GROUPS:
-                break
-    return ids
-
 
 def cors_allow_origins() -> list[str]:
     raw = os.environ.get("CORS_ALLOW_ORIGINS", _DEFAULT_CORS_ORIGINS)
@@ -305,120 +272,64 @@ def readiness(request: Request, response: Response) -> dict[str, str]:
     return {"status": "ready", "database": "ok"}
 
 
-@app.get("/metrics-config", response_model=list[MetricConfig])
-def metrics_config() -> list[MetricConfig]:
-    """The tracked metrics — static card chrome the frontend renders once,
-    keyed by the same metric keys the per-clade payloads use."""
-    templates = get_settings().link_templates
-    return [MetricConfig.from_metric(m, templates[m.key]) for m in METRICS]
-
-
-@app.get("/quality-config", response_model=list[QualityStatConfig])
-def quality_config() -> list[QualityStatConfig]:
-    """The annotation/assembly-quality stats — static card chrome rendered once,
-    keyed by the stat keys the per-taxon quality values use (BUSCO, gene count,
-    genome size, N50). The analogue of ``/metrics-config`` for the new dimension."""
-    return [QualityStatConfig.from_stat(q) for q in QUALITY_STATS]
-
-
-@app.get("/site-config", response_model=SiteConfig)
-def site_config() -> SiteConfig:
-    """Deployment settings for the web app: the feedback, source code and privacy
-    contact links, and the curated groups (friendly labels, the "Surprise me"
-    pool, and the landing-page cards, flagged ``featured``)."""
+@app.get("/config", response_model=AppConfig)
+def config(conn: Conn) -> AppConfig:
+    """What a client reads once before showing any data: the dataset being served
+    (``built_at`` is ``null`` before the first build has stamped the database), the
+    presentation of each measure and quality stat, and the deployment's links,
+    Wikipedia summary endpoint, curated groups and custom groups. Pass a custom
+    group's clades to ``/taxons/aggregates`` for its data."""
     settings = get_settings()
-    return SiteConfig(
+    row = fetch_dataset_meta(conn)
+    dataset = (
+        DatasetMeta(
+            built_at=None, taxon_count=0, assembly_count=0, annotation_count=0, clade_count=0
+        )
+        if row is None
+        else DatasetMeta(
+            built_at=row[0],
+            taxon_count=row[1],
+            assembly_count=row[2],
+            annotation_count=row[3],
+            clade_count=row[4],
+        )
+    )
+    return AppConfig(
+        dataset=dataset,
+        metrics=[MetricConfig.from_metric(m, settings.link_templates[m.key]) for m in METRICS],
+        quality_stats=[QualityStatConfig.from_stat(q) for q in QUALITY_STATS],
         feedback_url=settings.feedback_url,
         source_code_url=settings.source_code_url,
         privacy_contact_email=settings.privacy_contact_email,
+        wikipedia_summary_url=settings.wikipedia_summary_url,
         groups=list(settings.groups),
+        custom_groups=_custom_groups(conn, settings.custom_groups),
     )
 
 
-@app.get("/meta", response_model=DatasetMeta)
-def meta(conn: Conn) -> DatasetMeta:
-    """Dataset provenance for the "Data updated" stamp: when the served dataset was
-    built (UTC) and its record counts. One tiny indexed lookup on ``dataset_meta``;
-    ``built_at`` is ``null`` before the first build has stamped the DB."""
-    row = fetch_dataset_meta(conn)
-    if row is None:
-        return DatasetMeta(
-            built_at=None, taxon_count=0, assembly_count=0, annotation_count=0, clade_count=0
+def _custom_groups(
+    conn: psycopg.Connection, groups: Sequence[CustomGroup]
+) -> list[CustomGroupItem]:
+    """The custom groups that fit the current taxonomy, each with its clades. A
+    group that doesn't fit is left out and logged."""
+    if not groups:
+        return []
+    order = dict.fromkeys(t for g in groups for t in g.include + g.exclude)
+    taxa = fetch_set_taxa(conn, order)
+    return [
+        CustomGroupItem(
+            id=r.group.id,
+            label=r.group.label,
+            parent=r.group.parent,
+            rest=r.group.rest,
+            include=_taxon_refs((t for t in order if r.marks.get(t) is True), taxa),
+            exclude=_taxon_refs((t for t in order if r.marks.get(t) is False), taxa),
         )
-    built_at, taxon_count, assembly_count, annotation_count, clade_count = row
-    return DatasetMeta(
-        built_at=built_at,
-        taxon_count=taxon_count,
-        assembly_count=assembly_count,
-        annotation_count=annotation_count,
-        clade_count=clade_count,
-    )
+        for r in resolve_groups(groups, taxa)
+    ]
 
 
-@app.get("/overview", response_model=Overview)
-def overview(conn: Conn) -> Overview:
-    """Landing-page "at a glance": global totals across the eukaryotic tree plus
-    a few featured groups with their assembly/annotation coverage — one cacheable
-    request so the hero can render live headline numbers + coverage cards."""
-    totals, featured = fetch_overview(conn, get_settings().featured_taxids)
-    return Overview(
-        totals=OverviewTotals(
-            species=totals.n_rows,
-            assemblies=totals.s_ass,
-            annotations=totals.s_ann,
-            rna_seq=totals.s_rna,
-            long_read=totals.s_lng,
-            reference_genomes=totals.n_reference,
-        ),
-        featured=[
-            FeaturedClade(
-                taxid=taxid,
-                name=name,
-                species=n_rows,
-                assemblies=s_ass,
-                assembly_percent=round(c_ass / n_rows * 100, 2) if n_rows else 0.0,
-                annotation_percent=round(c_ann / n_rows * 100, 2) if n_rows else 0.0,
-            )
-            for taxid, name, n_rows, s_ass, c_ass, c_ann in featured
-        ],
-    )
-
-
-@app.get("/compare", response_model=Compare)
-def compare(
-    conn: Conn,
-    taxids: Annotated[
-        str, Query(description="Comma-separated taxids to compare (2-6, e.g. 40674,8782).")
-    ],
-) -> Compare:
-    """Line several groups up side by side: each group's species count,
-    per-resource coverage, and live quality stats (BUSCO / genes / genome size /
-    N50) in one cacheable request. Unknown taxids are dropped; at most
-    ``_COMPARE_MAX_GROUPS`` are honoured."""
-    ids = _parse_taxids(taxids)
-    if not ids:
-        raise HTTPException(status_code=422, detail="no valid taxids to compare")
-
-    groups = []
-    for taxid, name, rank, meta, quality in fetch_compare(conn, ids):
-        summary = CladeSummary.from_metadata(name, rank, meta)
-        groups.append(
-            CompareGroup(
-                taxid=taxid,
-                name=name,
-                rank=rank,
-                n_rows=meta.n_rows,
-                resources=summary.resources,
-                quality=[
-                    QualityStatValue(key=q.key, value=quality.get(q.key))
-                    for q in QUALITY_STATS
-                ],
-            )
-        )
-    return Compare(groups=groups)
-
-
-def _parse_clades(raw: str, name: str) -> list[int]:
+def _parse_taxids(raw: str, name: str, cap: int) -> list[int]:
     """The distinct taxids in a comma-separated list, or a 422 naming the problem.
     Stops at the first taxid over the cap, so a long list costs nothing."""
     ids: dict[int, None] = {}
@@ -426,10 +337,8 @@ def _parse_clades(raw: str, name: str) -> list[int]:
         if not (part.isascii() and part.isdigit() and len(part) <= 10):
             raise HTTPException(status_code=422, detail=f"{name}: {part!r} is not a taxid")
         ids[int(part)] = None
-        if len(ids) > MAX_CLADES_PER_GROUP:
-            raise HTTPException(
-                status_code=422, detail=f"{name}: at most {MAX_CLADES_PER_GROUP} taxids"
-            )
+        if len(ids) > cap:
+            raise HTTPException(status_code=422, detail=f"{name}: at most {cap} taxids")
     return list(ids)
 
 
@@ -437,7 +346,226 @@ def _taxon_refs(taxids: Iterable[int], taxa: Mapping[int, SetTaxon]) -> list[Tax
     return [TaxonRef(taxid=t, name=taxa[t].name, rank=taxa[t].rank) for t in taxids]
 
 
-@app.get("/aggregate", response_model=Aggregate)
+def _within_path(conn: psycopg.Connection, taxid: int | None) -> str | None:
+    """The path of the ``within`` taxon, or a 404 when it is unknown."""
+    if taxid is None:
+        return None
+    try:
+        return fetch_root(conn, taxid)[2]
+    except TaxonNotFound:
+        raise HTTPException(status_code=404, detail=f"taxon {taxid} not found")
+
+
+_Within = Annotated[
+    int | None,
+    Query(description="Only rows on this taxon or below it (e.g. 40674 for mammals)."),
+]
+_Cursor = Annotated[
+    str | None,
+    Query(
+        max_length=1000,
+        description="``next`` or ``previous`` from a page with the same sort, for the "
+        "page after or before it.",
+    ),
+]
+
+
+def _list_records(conn: psycopg.Connection, source: str, **kwargs) -> tuple[int, Page[dict]]:
+    try:
+        return list_records(conn, source=source, **kwargs)
+    except InvalidCursor as e:
+        raise HTTPException(status_code=422, detail=f"cursor: {e}")
+
+
+# Most taxids one /taxons request may name.
+MAX_TAXIDS = 100
+
+
+def taxon_filter(
+    conn: Conn,
+    q: Annotated[
+        str | None,
+        Query(
+            min_length=3,
+            max_length=100,
+            description="Only taxa whose name contains this text, ignoring case (or is "
+            "spelled like it, with `fuzzy`). The root and 'cellular organisms' are left out.",
+        ),
+    ] = None,
+    fuzzy: Annotated[
+        bool, Query(description="Match `q` by spelling instead, for a misspelt name.")
+    ] = False,
+    parent: Annotated[
+        int | None, Query(description="Only the direct children of this taxon.")
+    ] = None,
+    within: _Within = None,
+    rank: Annotated[TargetRank | None, Query(description="Only taxa of this rank.")] = None,
+    taxids: Annotated[
+        str | None,
+        Query(description=f"Only these taxa: comma-separated taxids, at most {MAX_TAXIDS}."),
+    ] = None,
+    filter: Annotated[
+        list[MetricFilter] | None,
+        Query(description="Only taxa with data for these resources."),
+    ] = None,
+    logic: Annotated[
+        FilterLogic, Query(description="Whether `filter` needs every resource (AND) or any (OR).")
+    ] = FilterLogic.AND,
+    exclude_empty: Annotated[
+        bool, Query(description="Only taxa with data for at least one resource.")
+    ] = False,
+) -> TaxonFilter:
+    """The /taxons filters, checked: an unknown ``parent`` or ``within`` taxon is a
+    404, anything malformed a 422."""
+    if q is not None and "\x00" in q:
+        raise HTTPException(status_code=422, detail="q: contains a NUL character")
+    if fuzzy and q is None:
+        raise HTTPException(status_code=422, detail="fuzzy: needs q")
+    if parent is not None:
+        _within_path(conn, parent)
+    return TaxonFilter(
+        q=q,
+        fuzzy=fuzzy,
+        parent=parent,
+        within=within,
+        within_path=_within_path(conn, within),
+        rank=rank.value if rank else None,
+        taxids=_parse_taxids(taxids, "taxids", MAX_TAXIDS) if taxids is not None else (),
+        filter_keys=[f.value for f in filter or ()],
+        logic=logic,
+        exclude_empty=exclude_empty,
+    )
+
+
+_TaxonFilter = Annotated[TaxonFilter, Depends(taxon_filter)]
+_TaxonSortBy = Annotated[
+    TaxonSort | None,
+    Query(
+        description="A count column, `gap_<resource>` (species without that resource) or "
+        "`name`. Without it: relevance for `q`, else species count (`n_rows`)."
+    ),
+]
+
+
+_Limit = Annotated[int, Query(ge=1, le=MAX_PAGE)]
+
+
+def _taxon(r: TaxonListRow) -> Taxon:
+    summary = CladeSummary.from_metadata(r.name, r.rank, r.meta, r.is_infraspecific)
+    summary.direct = r.direct
+    return Taxon(**summary.model_dump(), context=r.context, has_children=r.has_children)
+
+
+def _taxa_page(
+    conn: psycopg.Connection,
+    f: TaxonFilter,
+    sort_by: TaxonSort | None,
+    sort_order: SortOrder,
+    limit: int,
+    cursor: str | None,
+) -> tuple[int, Page[TaxonListRow]]:
+    try:
+        return list_taxa(
+            conn,
+            f,
+            sort=sort_by.value if sort_by else None,
+            descending=sort_order is SortOrder.desc,
+            limit=limit,
+            cursor=cursor,
+        )
+    except InvalidCursor as e:
+        raise HTTPException(status_code=422, detail=f"cursor: {e}")
+
+
+@app.get("/taxons", response_model=TaxonPage)
+def taxons(
+    conn: Conn,
+    f: _TaxonFilter,
+    sort_by: _TaxonSortBy = None,
+    sort_order: SortOrder = SortOrder.desc,
+    limit: _Limit = 25,
+    cursor: _Cursor = None,
+) -> TaxonPage:
+    """Taxa with their counts: a name search (``q``), a taxon's children
+    (``parent``), every taxon of a rank under a taxon (``within`` and ``rank``), or
+    chosen taxa (``taxids``), narrowed by the data they have. Sort by
+    ``gap_<resource>`` for the groups with the most species still missing it. Their
+    quality stats are in ``/taxons/stats``."""
+    total, result = _taxa_page(conn, f, sort_by, sort_order, limit, cursor)
+    return TaxonPage(
+        total=total,
+        limit=limit,
+        next=result.next,
+        previous=result.previous,
+        results=list(map(_taxon, result.rows)),
+    )
+
+
+@app.get("/taxons/stats", response_model=TaxonStatsPage)
+def taxons_stats(
+    conn: Conn,
+    f: _TaxonFilter,
+    sort_by: _TaxonSortBy = None,
+    sort_order: SortOrder = SortOrder.desc,
+    limit: _Limit = 25,
+    cursor: _Cursor = None,
+) -> TaxonStatsPage:
+    """The quality stats (best BUSCO, median genes, genome size and N50) of the taxa
+    ``/taxons`` lists for the same parameters, page for page and with the same
+    cursors, each computed from the records on or below the taxon. Slower than
+    ``/taxons``: about half a second for any page on the full dataset."""
+    total, result = _taxa_page(conn, f, sort_by, sort_order, limit, cursor)
+    quality = fetch_quality_for_taxids(conn, [r.meta.taxid for r in result.rows])
+    return TaxonStatsPage(
+        total=total,
+        limit=limit,
+        next=result.next,
+        previous=result.previous,
+        results=[
+            TaxonStats(
+                taxid=r.meta.taxid,
+                name=r.name,
+                stats=[
+                    QualityStatValue(key=k, value=v) for k, v in quality[r.meta.taxid].items()
+                ],
+            )
+            for r in result.rows
+        ],
+    )
+
+
+@app.get("/taxons/report")
+def taxons_report(
+    conn: Conn,
+    request: Request,
+    f: _TaxonFilter,
+    sort_by: _TaxonSortBy = None,
+    sort_order: SortOrder = SortOrder.desc,
+) -> StreamingResponse:
+    """Every taxon ``/taxons`` lists for the same filters and sort, as a streamed
+    TSV download: taxid, name, species count, then the species with each resource
+    and the total of each resource."""
+    rows = iter_report_tsv(
+        request.app.state.pool,
+        f,
+        sort=sort_by.value if sort_by else None,
+        descending=sort_order is SortOrder.desc,
+        batch_rows=get_settings().export_batch_rows,
+    )
+    # Pull the header and first batch of rows now: that runs the query (its sort
+    # is the expensive part) before any byte is sent, so a statement timeout on a
+    # huge report is a clean 504 instead of a 200 that stops mid-download.
+    head = list(itertools.islice(rows, 2))
+    name = fetch_root(conn, f.within)[0] if f.within is not None else "taxa"
+    filename = f"{name.replace(' ', '_')}_{f.rank or 'all'}_data.tsv"
+    return StreamingResponse(
+        itertools.chain(head, rows),
+        media_type="text/tab-separated-values",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@app.get("/taxons/aggregates", response_model=AggregatePage)
 def aggregate(
     conn: Conn,
     include: Annotated[
@@ -447,13 +575,15 @@ def aggregate(
         str,
         Query(description="Comma-separated taxids of clades inside them to leave out (e.g. 32523)."),
     ] = "",
-) -> Aggregate:
+) -> AggregatePage:
     """Species count, per-resource coverage and quality stats for a set of clades:
     the clades in ``include`` minus the clades inside them in ``exclude`` (e.g.
     fish as Vertebrata minus Tetrapoda). A clade inside an excluded one can be
     included again. Counts are sums and differences of the clades' rollups;
-    quality stats are computed from the records in the set."""
-    inc, exc = _parse_clades(include, "include"), _parse_clades(exclude, "exclude")
+    quality stats are computed from the records in the set. A list, like every
+    collection, holding the one set asked for."""
+    inc = _parse_taxids(include, "include", MAX_CLADES_PER_GROUP)
+    exc = _parse_taxids(exclude, "exclude", MAX_CLADES_PER_GROUP)
     if not inc:
         raise HTTPException(status_code=422, detail="include: at least one taxid")
     if set(inc) & set(exc):
@@ -468,394 +598,94 @@ def aggregate(
         [(path[i], [path[o] for o in outside]) for i, outside in set_pieces(marks, taxa)],
     )
     meta = set_metadata(marks, taxa)
-    return Aggregate(
+    aggregate = Aggregate(
         include=_taxon_refs((t for t in inc if marks.get(t) is True), taxa),
         exclude=_taxon_refs((t for t in exc if marks.get(t) is False), taxa),
         n_rows=meta.n_rows,
         resources=ResourceSummary.by_metric(meta),
         composition=AssemblyComposition.from_metadata(meta),
-        quality=[QualityStatValue(key=q.key, value=quality[q.key]) for q in QUALITY_STATS],
+        stats=[QualityStatValue(key=q.key, value=quality[q.key]) for q in QUALITY_STATS],
     )
+    return AggregatePage(total=1, limit=1, next=None, previous=None, results=[aggregate])
 
 
-@app.get("/custom-groups", response_model=CustomGroups)
-def custom_groups(conn: Conn) -> CustomGroups:
-    """The custom groups from the deployment's groups file, in file order, each
-    with the clades it is made of (pass them to ``/aggregate`` for its data). A
-    group that doesn't fit the current taxonomy is left out and logged."""
-    groups = get_settings().custom_groups
-    if not groups:
-        return CustomGroups(groups=[])
-    order = dict.fromkeys(t for g in groups for t in g.include + g.exclude)
-    taxa = fetch_set_taxa(conn, order)
-    return CustomGroups(
-        groups=[
-            CustomGroupItem(
-                id=r.group.id,
-                label=r.group.label,
-                parent=r.group.parent,
-                rest=r.group.rest,
-                include=_taxon_refs((t for t in order if r.marks.get(t) is True), taxa),
-                exclude=_taxon_refs((t for t in order if r.marks.get(t) is False), taxa),
-            )
-            for r in resolve_groups(groups, taxa)
-        ]
-    )
-
-
-@app.get("/gaps", response_model=Gaps)
-def gaps(
-    conn: Conn,
-    root: Annotated[
-        int, Query(description="Root taxon to search under (default Eukaryota).")
-    ] = EUKARYOTA_TAXID,
-    rank: Annotated[
-        TargetRank, Query(description="Rank of the groups to rank by gap.")
-    ] = TargetRank.order,
-    resource: Annotated[
-        MetricFilter, Query(description="Resource whose coverage gap to measure.")
-    ] = MetricFilter.ass,
-    limit: Annotated[int, Query(ge=1, le=200)] = 25,
-    include_quality: Annotated[
-        bool,
-        Query(
-            description="Attach per-clade quality stats (best BUSCO / median "
-            "coding genes / genome size / N50) for the covered subset. Off for "
-            "lightweight callers like the landing teaser."
-        ),
-    ] = True,
-) -> Gaps:
-    """The biggest under-sequenced groups: the app's thesis surfaced directly.
-
-    Ranks ``root``'s descendant clades at ``rank`` by the number of species with
-    no ``resource`` data (``n_rows - covered``), largest gap first — so the huge,
-    barely-sequenced clades (e.g. insect orders with a genome for <1% of species)
-    rise to the top without any navigating. One indexed ``ltree`` subtree query;
-    fully-covered clades are omitted. Defaults: Eukaryota, order level,
-    assemblies, top 25. ``include_quality`` adds the quality of the data that
-    *does* exist per clade (a second, small subtree query over the shown clades).
-    """
+@app.get("/taxons/{taxid}", response_model=Taxon)
+def taxon(taxid: int, conn: Conn) -> Taxon:
+    """One taxon, the same object ``/taxons`` lists: species count, per-resource
+    coverage and assembly composition. A species, an informal species or a finer
+    taxon also has ``direct``: its records attached to the taxon itself rather than
+    to a finer taxon below it."""
     try:
-        root_ref, items, total = fetch_gaps(
-            conn, root_taxid=root, rank=rank.value, resource=resource.value, limit=limit
-        )
-    except TaxonNotFound:
-        raise HTTPException(status_code=404, detail=f"taxon {root} not found")
-
-    # The quality of the data that *does* exist, alongside the missing-species
-    # gap: best BUSCO / median coding genes / genome size / N50 per gap clade.
-    # Scoped to just the returned clades, so the extra query stays cheap; skipped
-    # entirely (empty stats) when the caller doesn't need it.
-    quality: dict[int, dict[str, float | None]] = {}
-    if include_quality:
-        quality = fetch_quality_for_taxids(conn, [meta.taxid for _, _, meta in items])
-
-    r_taxid, r_name, r_rank = root_ref
-    return Gaps(
-        root=TaxonRef(taxid=r_taxid, name=r_name, rank=r_rank),
-        rank=rank.value,
-        resource=resource.value,
-        total_matches=total,
-        returned=len(items),
-        items=[
-            GapItem(
-                taxid=meta.taxid,
-                name=name,
-                rank=rk,
-                n_rows=meta.n_rows,
-                covered=getattr(meta, f"c_{resource.value}"),
-                percent=round(meta.percent(resource.value), 2),
-                gap=meta.n_rows - getattr(meta, f"c_{resource.value}"),
-                stats=[
-                    QualityStatValue(key=q.key, value=quality[meta.taxid][q.key])
-                    for q in QUALITY_STATS
-                ]
-                if include_quality
-                else [],
-            )
-            for name, rk, meta in items
-        ],
-    )
-
-
-@app.get("/clade/{taxid}/summary", response_model=CladeSummary)
-def clade_summary(taxid: int, conn: Conn) -> CladeSummary:
-    """Genomic Resource Summary for one taxon: species count + per-resource
-    coverage/total/percent. For a species or a finer taxon, also the records
-    attached to the taxon itself rather than to a finer taxon below it."""
-    try:
-        name, rank, meta, is_infraspecific = fetch_summary(conn, taxid)
-    except TaxonNotFound:
-        raise HTTPException(status_code=404, detail=f"taxon {taxid} not found")
-    summary = CladeSummary.from_metadata(name, rank, meta, is_infraspecific)
-    if is_infraspecific or rank in UNIT_RANKS:
-        summary.direct = fetch_direct_totals(conn, taxid, meta)
-    return summary
-
-
-@app.get("/clade/{taxid}/breakdown", response_model=Breakdown)
-def clade_breakdown(
-    taxid: int,
-    conn: Conn,
-    rank: Annotated[TargetRank, Query(description="Rank to break the root down by.")],
-    sort: SortColumn = SortColumn.n_rows,
-    filter: Annotated[
-        list[MetricFilter] | None,
-        Query(description="Keep only taxa with data for these resource(s)."),
-    ] = None,
-    logic: FilterLogic = FilterLogic.AND,
-    exclude_empty: bool = True,
-    limit: Annotated[int, Query(ge=1, le=1000)] = 25,
-) -> Breakdown:
-    """How a clade's data is distributed at a lower rank (Q2).
-
-    Descendants of `taxid` at `rank`, with filter/sort/limit pushed into a
-    single indexed `ltree` query. Defaults mirror Euka-Survey: sort by species
-    count, exclude empty taxa, AND-combine filters, top 25.
-    """
-    filter_keys = [f.value for f in (filter or [])]
-    try:
-        root_ref, items, total = fetch_breakdown(
-            conn,
-            root_taxid=taxid,
-            rank=rank.value,
-            sort=sort.value,
-            filter_keys=filter_keys,
-            logic=logic,
-            exclude_empty=exclude_empty,
-            limit=limit,
-        )
+        return _taxon(fetch_taxon(conn, taxid))
     except TaxonNotFound:
         raise HTTPException(status_code=404, detail=f"taxon {taxid} not found")
 
-    root_taxid, root_name, root_rank = root_ref
-    return Breakdown(
-        root=TaxonRef(taxid=root_taxid, name=root_name, rank=root_rank),
-        rank=rank.value,
-        total_matches=total,
-        returned=len(items),
-        items=[CladeSummary.from_metadata(name, rk, meta) for name, rk, meta in items],
+
+@app.get("/taxons/{taxid}/ancestors", response_model=TaxonPage)
+def taxon_ancestors(taxid: int, conn: Conn) -> TaxonPage:
+    """The root, every taxon below it down to this one, and this one, in that order,
+    as the same objects ``/taxons`` lists. One page: a lineage is at most a few
+    dozen taxa."""
+    try:
+        rows = fetch_ancestors(conn, taxid)
+    except TaxonNotFound:
+        raise HTTPException(status_code=404, detail=f"taxon {taxid} not found")
+    return TaxonPage(
+        total=len(rows), limit=len(rows), next=None, previous=None, results=list(map(_taxon, rows))
     )
 
 
-@app.get("/clade/{taxid}/breakdown/quality", response_model=list[BucketQuality])
-def clade_breakdown_quality(
-    taxid: int,
-    conn: Conn,
-    rank: Annotated[TargetRank, Query(description="Rank the root is broken down by.")],
-    sort: SortColumn = SortColumn.n_rows,
-    filter: Annotated[
-        list[MetricFilter] | None,
-        Query(description="Keep only taxa with data for these resource(s)."),
-    ] = None,
-    logic: FilterLogic = FilterLogic.AND,
-    exclude_empty: bool = True,
-    limit: Annotated[int, Query(ge=1, le=1000)] = 25,
-) -> list[BucketQuality]:
-    """Per-bucket distribution stats (BUSCO / median genes / genome size / N50)
-    for a rank breakdown — the quality lenses of the "data map". Covers the clades
-    `breakdown` returns for the same parameters (so at most `limit`); merge into
-    it by taxid. Clades without records are absent."""
+@app.get("/taxons/{taxid}/stats", response_model=TaxonStats)
+def taxon_stats(taxid: int, conn: Conn) -> TaxonStats:
+    """The quality stats (best BUSCO, median genes, genome size and N50) of the
+    records on or below one taxon, the same object ``/taxons/stats`` lists. From a
+    few milliseconds for a genus to about 0.3 s for Eukaryota."""
     try:
-        buckets = fetch_breakdown_quality(
-            conn,
-            root_taxid=taxid,
-            rank=rank.value,
-            sort=sort.value,
-            filter_keys=[f.value for f in (filter or [])],
-            logic=logic,
-            exclude_empty=exclude_empty,
-            limit=limit,
-        )
+        name, stats = fetch_taxon_stats(conn, taxid)
     except TaxonNotFound:
         raise HTTPException(status_code=404, detail=f"taxon {taxid} not found")
-    return [
-        BucketQuality(
-            taxid=t, stats=[QualityStatValue(key=k, value=v) for k, v in stats.items()]
-        )
-        for t, stats in buckets.items()
-    ]
-
-
-@app.get("/taxon/{taxid}", response_model=TaxonLineage)
-def taxon_lineage(taxid: int, conn: Conn) -> TaxonLineage:
-    """The taxon and its root→node lineage (breadcrumb). One indexed `ltree`
-    ancestor query on the materialized path."""
-    try:
-        rows = fetch_lineage(conn, taxid)
-    except TaxonNotFound:
-        raise HTTPException(status_code=404, detail=f"taxon {taxid} not found")
-    lineage = [TaxonRef(taxid=t, name=n, rank=r) for t, n, r in rows]
-    node = lineage[-1]  # deepest = the requested taxon
-    return TaxonLineage(taxid=node.taxid, name=node.name, rank=node.rank, lineage=lineage)
-
-
-@app.get("/taxon/{taxid}/children", response_model=TaxonChildren)
-def taxon_children(
-    taxid: int,
-    conn: Conn,
-    sort: SortColumn = SortColumn.n_rows,
-    limit: Annotated[int, Query(ge=1, le=500)] = 10,
-    offset: Annotated[int, Query(ge=0)] = 0,
-) -> TaxonChildren:
-    """A taxon's direct children (adjacency), for lazy-expanding the tree.
-
-    One indexed `parent_id` lookup, sorted by species count by default (biggest
-    clades first) and paginated via limit/offset so a node with tens of
-    thousands of children loads a screenful at a time. Each child carries a
-    `has_children` flag. 404 if the taxid is unknown; a childless taxon (e.g. a
-    species leaf) returns an empty list.
-    """
-    try:
-        parent_ref, items, total = fetch_children(
-            conn, taxid=taxid, sort=sort.value, limit=limit, offset=offset
-        )
-    except TaxonNotFound:
-        raise HTTPException(status_code=404, detail=f"taxon {taxid} not found")
-
-    p_taxid, p_name, p_rank = parent_ref
-    return TaxonChildren(
-        parent=TaxonRef(taxid=p_taxid, name=p_name, rank=p_rank),
-        total=total,
-        returned=len(items),
-        items=[
-            TaxonNode.from_child(name, rank, meta, has_children, is_infraspecific)
-            for name, rank, meta, has_children, is_infraspecific in items
-        ],
+    return TaxonStats(
+        taxid=taxid, name=name, stats=[QualityStatValue(key=k, value=v) for k, v in stats.items()]
     )
 
 
-@app.get("/taxon/{taxid}/assemblies", response_model=AssemblyList)
-def taxon_assemblies(
-    taxid: int,
+@app.get("/assemblies", response_model=AssemblyPage)
+def assemblies(
     conn: Conn,
-    sort: AssemblySort = AssemblySort.release_date,
+    within: _Within = None,
+    sort_by: AssemblySort = AssemblySort.release_date,
+    sort_order: SortOrder = SortOrder.desc,
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
-    offset: Annotated[int, Query(ge=0)] = 0,
-) -> AssemblyList:
-    """Genome assemblies anywhere under a taxon (the whole subtree), for the
-    drill-down list + the live assembly-quality stats (median genome size /
-    contig N50). One indexed `ltree` subtree join to the small `assembly` table,
-    paginated. 404 if the taxid is unknown; an empty subtree returns `[]`."""
-    try:
-        root_ref, total, stats, records = fetch_assembly_records(
-            conn, taxid=taxid, sort=sort.value, limit=limit, offset=offset
-        )
-    except TaxonNotFound:
-        raise HTTPException(status_code=404, detail=f"taxon {taxid} not found")
-    r_taxid, r_name, r_rank = root_ref
-    return AssemblyList(
-        root=TaxonRef(taxid=r_taxid, name=r_name, rank=r_rank),
-        total=total,
-        returned=len(records),
-        stats=[QualityStatValue(key=k, value=v) for k, v in stats.items()],
-        items=[AssemblyRecord(**r) for r in records],
+    cursor: _Cursor = None,
+) -> AssemblyPage:
+    """Genome assemblies, newest first by default; records missing the sort field
+    come last. The quality stats of a taxon's assemblies are in ``/taxons/{taxid}``."""
+    total, result = _list_records(
+        conn, "assembly", within_path=_within_path(conn, within), sort=sort_by.value,
+        descending=sort_order is SortOrder.desc, limit=limit, cursor=cursor,
+    )
+    return AssemblyPage(
+        total=total, limit=limit, next=result.next, previous=result.previous,
+        results=[AssemblyRecord(**r) for r in result.rows],
     )
 
 
-@app.get("/taxon/{taxid}/annotations", response_model=AnnotationList)
-def taxon_annotations(
-    taxid: int,
+@app.get("/annotations", response_model=AnnotationPage)
+def annotations(
     conn: Conn,
-    sort: AnnotationSort = AnnotationSort.busco_complete,
+    within: _Within = None,
+    sort_by: AnnotationSort = AnnotationSort.busco_complete,
+    sort_order: SortOrder = SortOrder.desc,
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
-    offset: Annotated[int, Query(ge=0)] = 0,
-) -> AnnotationList:
-    """Functional annotations anywhere under a taxon, for the drill-down list +
-    the live annotation-quality stats (best BUSCO, median protein-coding gene
-    count). Subtree join to the `annotation` table; default sort surfaces the
-    best-annotated genomes first. 404 if the taxid is unknown."""
-    try:
-        root_ref, total, stats, records = fetch_annotation_records(
-            conn, taxid=taxid, sort=sort.value, limit=limit, offset=offset
-        )
-    except TaxonNotFound:
-        raise HTTPException(status_code=404, detail=f"taxon {taxid} not found")
-    r_taxid, r_name, r_rank = root_ref
-    return AnnotationList(
-        root=TaxonRef(taxid=r_taxid, name=r_name, rank=r_rank),
-        total=total,
-        returned=len(records),
-        stats=[QualityStatValue(key=k, value=v) for k, v in stats.items()],
-        items=[AnnotationRecord(**r) for r in records],
+    cursor: _Cursor = None,
+) -> AnnotationPage:
+    """Gene annotations, best BUSCO first by default; records missing the sort field
+    come last. The quality stats of a taxon's annotations are in ``/taxons/{taxid}``."""
+    total, result = _list_records(
+        conn, "annotation", within_path=_within_path(conn, within), sort=sort_by.value,
+        descending=sort_order is SortOrder.desc, limit=limit, cursor=cursor,
     )
-
-
-@app.get("/taxon/{taxid}/about", response_model=TaxonAbout | None)
-def taxon_about(taxid: int, conn: Conn) -> TaxonAbout | None:
-    """A Wikipedia "About" summary for the taxon — the decorative dashboard card.
-
-    Resolves the taxon's scientific name, then does one cached, server-side GET
-    against Wikipedia's REST summary endpoint (so we can send the User-Agent
-    Wikipedia's policy wants and cache across viewers). ``404`` if the taxid is
-    unknown; otherwise the summary, or ``null`` when there's no usable article —
-    the frontend omits the card either way. The ``null`` result caches as a
-    normal 200, so taxa without a page don't re-hit the network downstream.
-    """
-    try:
-        name, _rank, _path = fetch_root(conn, taxid)
-    except TaxonNotFound:
-        raise HTTPException(status_code=404, detail=f"taxon {taxid} not found")
-    return fetch_about(name)
-
-
-@app.get("/clade/{taxid}/export.tsv")
-def clade_export(
-    taxid: int,
-    conn: Conn,
-    request: Request,
-    rank: Annotated[TargetRank, Query(description="Rank to break the root down by.")],
-    sort: SortColumn = SortColumn.n_rows,
-    filter: Annotated[list[MetricFilter] | None, Query()] = None,
-    logic: FilterLogic = FilterLogic.AND,
-    exclude_empty: bool = False,
-) -> StreamingResponse:
-    """The full breakdown at `rank` as a streamed TSV download.
-
-    Same subtree query as `breakdown` but unlimited and streamed via a
-    server-side cursor. Defaults to the complete breakdown (empties included);
-    pass filter/exclude_empty/sort to export exactly what the table shows.
-    """
-    # Resolve the root first so a bad taxid is a clean 404 (can't change the
-    # status once the stream has started) and to name the download.
-    try:
-        root_name, _root_rank, root_path = fetch_root(conn, taxid)
-    except TaxonNotFound:
-        raise HTTPException(status_code=404, detail=f"taxon {taxid} not found")
-
-    filter_keys = [f.value for f in (filter or [])]
-    rows = iter_export_tsv(
-        request.app.state.pool,
-        root_path=root_path,
-        rank=rank.value,
-        sort=sort.value,
-        filter_keys=filter_keys,
-        logic=logic,
-        exclude_empty=exclude_empty,
-        batch_rows=get_settings().export_batch_rows,
+    return AnnotationPage(
+        total=total, limit=limit, next=result.next, previous=result.previous,
+        results=[AnnotationRecord(**r) for r in result.rows],
     )
-    # Pull the header and first batch of rows now: that runs the query (its sort
-    # is the expensive part) before any byte is sent, so a statement timeout on a
-    # huge export is a clean 504 instead of a 200 that stops mid-download.
-    head = list(itertools.islice(rows, 2))
-    filename = f"{root_name.replace(' ', '_')}_{rank.value}_data.tsv"
-    return StreamingResponse(
-        itertools.chain(head, rows),
-        media_type="text/tab-separated-values",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
-    )
-
-
-@app.get("/search", response_model=list[SearchHit])
-def search(
-    conn: Conn,
-    q: Annotated[str, Query(min_length=3, max_length=100, description="Name query.")],
-    limit: Annotated[int, Query(ge=1, le=50)] = 20,
-) -> list[SearchHit]:
-    """Case-insensitive taxon-name search for the search box. Names starting with
-    the query come first, the best-covered taxa ahead; then names containing it.
-    When no name contains it, close spellings are returned with `similar` set."""
-    if "\x00" in q:
-        raise HTTPException(status_code=422, detail="the query contains a NUL character")
-    hits, similar = search_taxa(conn, q, limit)
-    return [SearchHit(**h, similar=similar) for h in hits]

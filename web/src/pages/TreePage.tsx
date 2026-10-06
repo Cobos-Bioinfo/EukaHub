@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 
-import { getLineage, getMetricsConfig } from "../api/queries";
+import { getTaxon, getMetricsConfig } from "../api/queries";
 import type { TaxonRef } from "../api/types";
 import Breadcrumb from "../components/Breadcrumb";
 import { TaxonError } from "../components/ErrorPage";
@@ -20,7 +20,7 @@ export default function TreePage() {
   const navigate = useNavigate();
 
   const metrics = useAsync(() => getMetricsConfig(), []);
-  const lineage = useAsync(() => getLineage(taxid), [taxid]);
+  const lineage = useAsync(() => getTaxon(taxid), [taxid]);
   const tree = useTree(taxid);
 
   // Search-to-locate: pan/highlight a taxon within the current tree, expanding
@@ -45,7 +45,7 @@ export default function TreePage() {
     }
     setLocating(true);
     try {
-      const target = await getLineage(picked.taxid);
+      const target = await getTaxon(picked.taxid);
       const idx = target.lineage.findIndex((a) => a.taxid === taxid);
       if (idx === -1) {
         setLocateMsg({

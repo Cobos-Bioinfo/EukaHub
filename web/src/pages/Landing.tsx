@@ -1,7 +1,6 @@
 import { Link } from "react-router";
 
-import { getGaps, getOverview } from "../api/queries";
-import type { FeaturedClade, GapItem } from "../api/types";
+import { getGaps, getOverview, type FeaturedClade, type GapItem } from "../api/queries";
 import RandomCladeButton from "../components/RandomCladeButton";
 import RootPicker from "../components/RootPicker";
 import { RandomIcon, SearchIcon, TreeIcon } from "../components/icons";

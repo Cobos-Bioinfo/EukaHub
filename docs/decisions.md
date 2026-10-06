@@ -93,12 +93,12 @@ Streamlit app that answered the same questions but was slow to build and to serv
   four-connection pool, no parallel query workers, and an nginx response cache keep
   one expensive request from taking the server down.
 - **Deployment settings are configuration, not code.** Links, the privacy contact,
-  the Wikipedia lookup and the curated groups are read by the API at startup (from
-  `infra/.env` and an optional `infra/config/groups.json`), and the web app gets them
-  from `/api/site-config`, so changing one needs a restart, not a new image. Only the
-  API container reads the groups file, which also feeds the landing-page numbers.
-  Every setting has a default, and an invalid one is logged and replaced by its
-  default, because a typo should not take an unattended site down. The pipeline's
+  the Wikipedia summary endpoint and the curated groups are read by the API at
+  startup (from `infra/.env` and an optional `infra/config/groups.json`), and the web
+  app gets them from `/api/config`, so changing one needs a restart, not a new image.
+  Only the API container reads the groups file, which also feeds the landing-page
+  numbers. Every setting has a default, and an invalid one is logged and replaced by
+  its default, because a typo should not take an unattended site down. The pipeline's
   source addresses are GitHub Actions repository variables instead, since the
   pipeline runs there; there an invalid value stops the build, because a build
   against a source nobody chose must not publish.
@@ -106,16 +106,45 @@ Streamlit app that answered the same questions but was slow to build and to serv
   included, minus clades inside them excluded, so its counts are sums and differences
   of `clade_features` rows. Its quality stats are medians and maxima, which cannot be
   subtracted, so they come from the records in the set. The API keeps the two
-  concerns apart: `/custom-groups` lists the deployment's groups and their clades,
-  and `/aggregate` computes any set. Nothing is precomputed, so a deployment changes
-  its groups with a restart, not a rebuild. Groups under one parent may not overlap,
-  so that they and the parent's "rest" group always add up to the parent.
+  concerns apart: `/config` lists the deployment's groups and their clades, and
+  `/taxons/aggregates` computes any set. Nothing is precomputed, so a deployment
+  changes its groups with a restart, not a rebuild. Groups under one parent may not
+  overlap, so that they and the parent's "rest" group always add up to the parent.
+- **The API has one main resource, taxons, named like Annotrieve's.** A taxon is
+  one object everywhere: `/taxons/{taxid}` returns it, `/taxons` lists it, and
+  `/taxons/{taxid}/ancestors` gives the lineage as the same objects, root first.
+  `/taxons` lists taxa by name, parent, rank under a taxon or taxid, sorted by any
+  count or by the species still missing a resource (`gap_<key>`). Search, the tree's
+  children, the data map, the gaps list, compare and the landing numbers are that
+  one list with different filters, so each page's request is cached on its own and
+  nothing is computed twice. Quality stats are a resource of their own,
+  `/taxons/{taxid}/stats` and `/taxons/stats` (paged with the same parameters and
+  cursors as `/taxons`): a page of them costs about half a second whatever its size
+  (search takes 7 ms without them), so a list that does not show them never pays
+  for them, and no parameter changes a response's shape. Records are their own
+  collections (`/assemblies`, `/annotations`), filtered by `within`, and
+  `/taxons/report` is the whole list as TSV. Names follow Annotrieve's API
+  (`/taxons`, `/ancestors`, `sort_by`, `sort_order`, `results`, `/report`), which the
+  same people maintain and use.
+- **Lists page with a cursor, not an offset.** Each list sorts on keys that end in
+  a unique one (the taxid or the record's accession), and a page's `next` and
+  `previous` cursors hold the key values of its last and first rows. The next query
+  filters on those values instead of skipping `offset` rows, which Postgres reads
+  and throws away, so a deep page costs what the first does and an indexed sort
+  can start where the cursor points. The cursor is opaque base64url JSON naming its
+  sort order; one from another order is refused with a 422. Records missing the
+  sort field come last in either direction. Lists still report `total`; each filter
+  set is counted once per dataset build and kept in a small in-process cache (about
+  2 MB at most), since the data only changes when a new build is installed.
 - **The root taxids stay in code**, in one constant per side
   (`eukahub_core.taxonomy` and `web/src/lib/taxonomy.ts`). The dataset is built and
   validated for Eukaryota, so another root needs a rebuild and new checks anyway.
-- **Wikipedia summaries go through the API**, not the browser: Wikipedia asks for a
-  descriptive User-Agent, which browsers cannot set, and the API can cache each
-  summary. A failure just hides the card.
+- **The browser fetches Wikipedia summaries itself**, from the endpoint `/api/config`
+  names. Wikipedia allows cross-origin requests and asks browsers to identify the tool
+  with an `Api-User-Agent` header. Proxying them through the API held a database
+  connection while Wikipedia answered and put an external service in the request
+  path; the browser already loaded the thumbnails from Wikimedia anyway. A failure
+  just hides the card.
 
 ## Interface
 

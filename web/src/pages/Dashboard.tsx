@@ -2,10 +2,10 @@ import { Link, useParams } from "react-router";
 
 import {
   getAbout,
-  getLineage,
   getMetricsConfig,
   getQualityConfig,
-  getSummary,
+  getTaxon,
+  getTaxonStats,
 } from "../api/queries";
 import AboutCard from "../components/AboutCard";
 import Breadcrumb from "../components/Breadcrumb";
@@ -28,13 +28,14 @@ export default function Dashboard() {
   const taxid = Number(taxidParam);
   const validId = Number.isInteger(taxid) && taxid > 0;
 
-  const summary = useAsync(() => getSummary(taxid), [taxid]);
-  const lineage = useAsync(() => getLineage(taxid), [taxid]);
+  const summary = useAsync(() => getTaxon(taxid), [taxid]);
+  const stats = useAsync(() => getTaxonStats(taxid), [taxid]);
   const metrics = useAsync(() => getMetricsConfig(), []);
   const quality = useAsync(() => getQualityConfig(), []);
   // Decorative Wikipedia context — never gates the page; rendered only if it
   // resolves to a summary, its error deliberately ignored.
-  const about = useAsync(() => getAbout(taxid), [taxid]);
+  const name = summary.data?.name;
+  const about = useAsync(() => getAbout(name), [name]);
 
   if (!validId) return <TaxonError taxid={taxidParam} />;
   if (summary.error) {
@@ -70,7 +71,7 @@ export default function Dashboard() {
 
   return (
     <section className="dashboard">
-      {lineage.data && <Breadcrumb lineage={lineage.data.lineage} currentTaxid={taxid} />}
+      <Breadcrumb lineage={s.lineage} currentTaxid={taxid} />
 
       <div className="dashboard__body">
         <aside className="dashboard__side">
@@ -133,14 +134,23 @@ export default function Dashboard() {
           )}
 
           {quality.data && !noData && (
-            <QualitySection taxid={taxid} quality={quality.data} composition={s.composition} />
+            <QualitySection
+              quality={quality.data}
+              stats={stats.data?.stats}
+              loading={stats.loading}
+              error={stats.error}
+              retry={stats.reload}
+              assemblies={s.resources.ass.total}
+              annotations={s.resources.ann.total}
+              composition={s.composition}
+            />
           )}
 
-          {!isUnit && !noData && !lineage.loading && (
+          {!isUnit && !noData && (
             <BreakdownMap
               key={`bmap-${taxid}`}
               root={{ taxid, name: s.name, rank: s.rank }}
-              rootLineage={lineage.data?.lineage}
+              rootLineage={s.lineage}
               heading="Breakdown"
               variant="embed"
             />

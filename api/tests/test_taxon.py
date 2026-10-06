@@ -1,4 +1,4 @@
-"""Tests for GET /clade/{taxid}/summary.
+"""Tests for GET /taxons/{taxid}: one taxon, its lineage, counts and quality stats.
 
 DB-backed tests use the shared ``client`` fixture (see conftest.py), which
 skips when Postgres is down. The column-order guard needs no DB and always
@@ -15,17 +15,18 @@ from eukahub_api.db import database_url
 from eukahub_core.metrics import (
     COMPOSITION_COLUMNS,
     COVERAGE_KEYS,
+    QUALITY_KEYS,
     TOTAL_KEYS,
     CladeMetadata,
 )
 
 
-def test_summary_eukaryota(client):
+def test_taxon_eukaryota(client):
     """Eukaryota's summary: stable taxonomy facts + structural invariants that
     survive a data rebuild. Exact counts change on every refresh, so we assert
     relationships (covered <= species, total >= covered, percent math) rather
     than frozen numbers."""
-    body = client.get("/clade/2759/summary").json()
+    body = client.get("/taxons/2759").json()
     assert body["taxid"] == 2759
     assert body["name"] == "Eukaryota"
     assert body["rank"] == "domain"
@@ -56,12 +57,12 @@ def test_summary_eukaryota(client):
     assert 0 <= comp["reference"] <= body["resources"]["ass"]["total"]
 
 
-def test_summary_not_found(client):
-    resp = client.get("/clade/999999999/summary")
+def test_taxon_not_found(client):
+    resp = client.get("/taxons/999999999")
     assert resp.status_code == 404
 
 
-def test_summary_zero_filled(client):
+def test_taxon_zero_filled(client):
     """A taxon present in `taxon` but absent from the rollup returns zeros."""
     with psycopg.connect(database_url()) as conn:
         row = conn.execute(
@@ -72,7 +73,7 @@ def test_summary_zero_filled(client):
     if row is None:
         pytest.skip("every taxon has a rollup row — nothing to zero-fill")
 
-    body = client.get(f"/clade/{row[0]}/summary").json()
+    body = client.get(f"/taxons/{row[0]}").json()
     assert body["n_rows"] == 0
     for key in ("ass", "ann", "rna", "lng"):
         assert body["resources"][key] == {"covered": 0, "total": 0, "percent": 0.0}
@@ -84,11 +85,11 @@ def _first(sql: str) -> tuple | None:
 
 
 def _children_totals(client, taxid: int) -> dict[str, int]:
-    items = client.get(f"/taxon/{taxid}/children", params={"limit": 500}).json()["items"]
+    items = client.get("/taxons", params={"parent": taxid, "limit": 1000}).json()["results"]
     return {k: sum(i["resources"][k]["total"] for i in items) for k in ("ass", "ann", "rna", "lng")}
 
 
-def test_summary_infraspecific(client):
+def test_taxon_infraspecific(client):
     """A below-species taxon reports is_infraspecific, n_rows==1, and its subtree
     totals (dynamically pick a data-carrying subspecies so the test doesn't pin
     to a specific taxid that could drift)."""
@@ -102,7 +103,7 @@ def test_summary_infraspecific(client):
         pytest.skip("no subspecies with assemblies in this dataset")
     taxid, s_ass = row
 
-    body = client.get(f"/clade/{taxid}/summary").json()
+    body = client.get(f"/taxons/{taxid}").json()
     assert body["is_infraspecific"] is True
     assert body["rank"] == "subspecies"
     assert body["n_rows"] == 1  # a leaf unit, not a clade of species
@@ -110,7 +111,7 @@ def test_summary_infraspecific(client):
     assert body["direct"] is not None
 
 
-def test_summary_species_includes_subspecies_data(client):
+def test_taxon_species_includes_subspecies_data(client):
     """A species with data on a subspecies counts that data: its totals equal the
     records under it, it stays one species, and its direct records plus its
     children's totals add up to its totals."""
@@ -123,11 +124,11 @@ def test_summary_species_includes_subspecies_data(client):
         pytest.skip("no subspecies with assemblies in this dataset")
     taxid = row[0]
 
-    body = client.get(f"/clade/{taxid}/summary").json()
+    body = client.get(f"/taxons/{taxid}").json()
     assert body["rank"] == "species"
     assert body["is_infraspecific"] is False
     assert body["n_rows"] == 1
-    assemblies = client.get(f"/taxon/{taxid}/assemblies", params={"limit": 1}).json()
+    assemblies = client.get("/assemblies", params={"within": taxid, "limit": 1}).json()
     assert body["resources"]["ass"]["total"] == assemblies["total"]
     assert body["resources"]["ass"]["covered"] == 1
 
@@ -137,7 +138,7 @@ def test_summary_species_includes_subspecies_data(client):
         assert body["direct"][key] + below[key] == value["total"]
 
 
-def test_summary_informal_species(client):
+def test_taxon_informal_species(client):
     """An informal species is one unit that is not a species: the clades above it
     count its records but not it."""
     row = _first(
@@ -148,12 +149,12 @@ def test_summary_informal_species(client):
         pytest.skip("no informal species with assemblies in this dataset")
     taxid, parent = row
 
-    body = client.get(f"/clade/{taxid}/summary").json()
+    body = client.get(f"/taxons/{taxid}").json()
     assert body["rank"] == "informal species"
     assert body["is_infraspecific"] is False
     assert body["n_rows"] == 1
     assert body["direct"] is not None
-    parent_body = client.get(f"/clade/{parent}/summary").json()
+    parent_body = client.get(f"/taxons/{parent}").json()
     species_below = _first(
         "SELECT count(*) FROM taxon WHERE rank = 'species' "
         f"AND path <@ (SELECT path FROM taxon WHERE taxid = {int(parent)})"
@@ -162,17 +163,65 @@ def test_summary_informal_species(client):
     assert parent_body["resources"]["ass"]["total"] >= body["resources"]["ass"]["total"]
 
 
-def test_summary_clade_totals_match_records(client):
+def test_taxon_clade_totals_match_records(client):
     """A clade's totals count every record under it, whatever rank it sits on."""
-    body = client.get("/clade/2759/summary").json()
+    body = client.get("/taxons/2759").json()
     assert body["direct"] is None
     for key, source in (("ass", "assemblies"), ("ann", "annotations")):
-        records = client.get(f"/taxon/2759/{source}", params={"limit": 1}).json()
+        records = client.get(f"/{source}", params={"within": 2759, "limit": 1}).json()
         assert body["resources"][key]["total"] == records["total"]
 
 
-def test_summary_clade_not_infraspecific(client):
-    assert client.get("/clade/2759/summary").json()["is_infraspecific"] is False
+def test_taxon_clade_not_infraspecific(client):
+    assert client.get("/taxons/2759").json()["is_infraspecific"] is False
+
+
+def test_taxon_is_the_object_the_list_returns(client):
+    """/taxons/{taxid} and /taxons share one schema and one builder."""
+    for taxid in (2759, 40674, 9606):
+        one = client.get(f"/taxons/{taxid}").json()
+        assert client.get("/taxons", params={"taxids": taxid}).json()["results"] == [one]
+
+
+def test_taxon_ancestors_homo_sapiens(client):
+    body = client.get("/taxons/9606/ancestors").json()
+    lin = body["results"]
+    assert body["total"] == len(lin) and body["next"] is None
+    assert lin[0]["taxid"] == 1  # root first
+    assert lin[-1] == client.get("/taxons/9606").json()  # the taxon itself last
+    assert any(a["taxid"] == 2759 and a["name"] == "Eukaryota" for a in lin)
+    taxids = [a["taxid"] for a in lin]
+    assert len(taxids) == len(set(taxids))
+    # Every ancestor contains the next, so species counts never grow downwards.
+    counts = [a["n_rows"] for a in lin]
+    assert counts == sorted(counts, reverse=True)
+
+
+def test_taxon_ancestors_of_the_root(client):
+    assert [a["taxid"] for a in client.get("/taxons/1/ancestors").json()["results"]] == [1]
+
+
+def test_taxon_stats(client):
+    """The stats cover every record under the taxon: one per QUALITY_STATS key,
+    with BUSCO a percentage."""
+    body = client.get("/taxons/9606/stats").json()
+    assert body["taxid"] == 9606 and body["name"] == "Homo sapiens"
+    assert [s["key"] for s in body["stats"]] == list(QUALITY_KEYS)
+    stats = {s["key"]: s["value"] for s in body["stats"]}
+    assert stats["genome_size"] > 0 and stats["contig_n50"] > 0  # human has genomes
+    assert 0.0 <= stats["busco"] <= 100.0
+
+
+def test_taxon_sub_resources_of_an_unknown_taxon(client):
+    assert client.get("/taxons/999999999/ancestors").status_code == 404
+    assert client.get("/taxons/999999999/stats").status_code == 404
+
+
+def test_taxon_has_children(client):
+    assert client.get("/taxons/9605").json()["has_children"] is True  # Homo -> species
+    kids = client.get("/taxons", params={"parent": 9606}).json()["results"]
+    leaf = next(k for k in kids if not k["has_children"])
+    assert client.get(f"/taxons/{leaf['taxid']}").json()["has_children"] is False
 
 
 def test_clade_metadata_field_order():

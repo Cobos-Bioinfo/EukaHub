@@ -87,8 +87,9 @@ export default function Privacy() {
           service's own privacy policy applies.
         </p>
         <p>
-          The short "About" summaries shown for some groups come from Wikipedia. EukaHub fetches
-          them on the server, so your browser does not contact Wikipedia directly when you view them.
+          The short "About" summaries and pictures shown for some groups come from Wikipedia. Your
+          browser fetches them from Wikipedia directly, so Wikipedia's privacy policy applies to
+          those requests.
         </p>
       </div>
 

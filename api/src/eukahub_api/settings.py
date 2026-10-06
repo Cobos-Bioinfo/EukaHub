@@ -1,5 +1,5 @@
-"""Deployment settings: external links, the Wikipedia lookup, the curated groups
-and the custom groups, read once from the environment and the optional groups file.
+"""Deployment settings: external links, the Wikipedia summary endpoint, the curated
+groups and the custom groups, read once from the environment and the optional groups file.
 
 Every setting has a default, so an empty environment serves the upstream
 values. An invalid value is logged and replaced by its default rather than
@@ -17,7 +17,7 @@ from functools import cache
 from pathlib import Path
 from typing import Annotated
 
-from eukahub_core.config import check_https_url, check_seconds
+from eukahub_core.config import check_https_url
 from eukahub_core.metrics import METRICS
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
@@ -39,9 +39,6 @@ DEFAULT_FEEDBACK_URL = (
 DEFAULT_SOURCE_CODE_URL = "https://github.com/Cobos-Bioinfo/EukaHub"
 DEFAULT_PRIVACY_CONTACT_EMAIL = "placeholder@crg.eu"
 DEFAULT_WIKIPEDIA_SUMMARY_URL = "https://en.wikipedia.org/api/rest_v1/page/summary/{title}"
-DEFAULT_WIKIPEDIA_TIMEOUT_SECONDS = 6.0
-# A lookup holds a pooled database connection while it waits.
-MAX_WIKIPEDIA_TIMEOUT_SECONDS = 30.0
 # Rows per TSV export chunk. A batch costs about 1 MB of API memory per 1,000
 # rows, for each export running at once.
 DEFAULT_EXPORT_BATCH_ROWS = 5000
@@ -139,8 +136,6 @@ class Settings:
     source_code_url: str
     privacy_contact_email: str
     wikipedia_summary_url: str  # URL template with {title}
-    wikipedia_user_agent: str
-    wikipedia_timeout_seconds: float
     export_batch_rows: int
     groups: tuple[CladeGroup, ...]
     custom_groups: tuple[CustomGroup, ...]
@@ -161,12 +156,6 @@ def _check_batch_rows(value: str) -> int:
     if not value.isdigit() or not low <= int(value) <= high:
         raise ValueError(f"must be a whole number from {low} to {high}")
     return int(value)
-
-
-def _check_user_agent(value: str) -> str:
-    if len(value) > 200 or not all(" " <= c <= "~" for c in value):
-        raise ValueError("must be at most 200 printable ASCII characters")
-    return value
 
 
 def _setting[T](
@@ -216,7 +205,6 @@ def _url_check(placeholder: str | None = None) -> Callable[[str], str]:
 
 def load_settings(environ: Mapping[str, str]) -> Settings:
     """Read every setting from ``environ`` and the groups file it names."""
-    source_code_url = _setting(environ, "SOURCE_CODE_URL", DEFAULT_SOURCE_CODE_URL, _url_check())
     groups, custom_groups = _load_groups(environ.get("GROUPS_FILE", "").strip())
     return Settings(
         link_templates={
@@ -226,22 +214,14 @@ def load_settings(environ: Mapping[str, str]) -> Settings:
             for m in METRICS
         },
         feedback_url=_setting(environ, "FEEDBACK_URL", DEFAULT_FEEDBACK_URL, _url_check()),
-        source_code_url=source_code_url,
+        source_code_url=_setting(
+            environ, "SOURCE_CODE_URL", DEFAULT_SOURCE_CODE_URL, _url_check()
+        ),
         privacy_contact_email=_setting(
             environ, "PRIVACY_CONTACT_EMAIL", DEFAULT_PRIVACY_CONTACT_EMAIL, _check_email
         ),
         wikipedia_summary_url=_setting(
             environ, "WIKIPEDIA_SUMMARY_URL", DEFAULT_WIKIPEDIA_SUMMARY_URL, _url_check("{title}")
-        ),
-        # Wikipedia asks for a User-Agent that says how to reach the operator.
-        wikipedia_user_agent=_setting(
-            environ, "WIKIPEDIA_USER_AGENT", f"EukaHub/1.0 ({source_code_url})", _check_user_agent
-        ),
-        wikipedia_timeout_seconds=_setting(
-            environ,
-            "WIKIPEDIA_TIMEOUT_SECONDS",
-            DEFAULT_WIKIPEDIA_TIMEOUT_SECONDS,
-            lambda v: check_seconds(v, maximum=MAX_WIKIPEDIA_TIMEOUT_SECONDS),
         ),
         export_batch_rows=_setting(
             environ, "EXPORT_BATCH_ROWS", DEFAULT_EXPORT_BATCH_ROWS, _check_batch_rows

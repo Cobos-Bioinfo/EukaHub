@@ -45,5 +45,8 @@ line-length = 100
 # importlib mode + no __init__.py in test dirs lets same-named test packages
 # (core/api/pipeline each have a `tests/`) coexist when the whole workspace
 # suite is collected from the repo root.
-addopts = "--import-mode=importlib"
+addopts = "--import-mode=importlib -m 'not ram'"
+markers = [
+    "ram: memory of every API query on a large synthetic dataset (slow; run with -m ram)",
+]
 testpaths = ["core", "api", "pipeline"]

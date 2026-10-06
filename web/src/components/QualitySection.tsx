@@ -1,6 +1,4 @@
-import { getAnnotations, getAssemblies } from "../api/queries";
-import type { AssemblyComposition, QualityStatConfig } from "../api/types";
-import { useAsync } from "../hooks/useAsync";
+import type { AssemblyComposition, QualityStatConfig, QualityStatValue } from "../api/types";
 import { fmt, fmtPct, fmtQuality } from "../lib/format";
 
 // The four assembly levels, best-to-worst by contiguity. Colour comes from an
@@ -13,45 +11,34 @@ const LEVELS = [
   { key: "contig", label: "Contig", help: "Contig-level" },
 ] as const;
 
-/** The enrichment "Data quality" band for a taxon: live distribution stats
- *  (BUSCO, gene count, genome size, N50) as stat tiles, plus an assembly
- *  contiguity bar from the additive composition counts. Shown on every
- *  dashboard (clade / species / leaf). Fetches the two per-record endpoints
- *  with limit=1 — it needs only their subtree stats + totals, not records; the
- *  full lists live in the drill-down browser below. */
+/** The enrichment "Data quality" band for a taxon: its quality stats (BUSCO,
+ *  gene count, genome size, N50) as stat tiles, plus an assembly contiguity bar
+ *  from the additive composition counts. Shown on every dashboard (clade /
+ *  species / leaf); the full record lists live in the drill-down browser below.
+ *  The counts arrive with the taxon; the stats are a slower request of their own. */
 export default function QualitySection({
-  taxid,
   quality,
+  stats,
+  loading,
+  error,
+  retry,
+  assemblies,
+  annotations,
   composition,
 }: {
-  taxid: number;
   quality: QualityStatConfig[];
+  stats: QualityStatValue[] | undefined;
+  loading: boolean;
+  error?: string;
+  retry: () => void;
+  assemblies: number;
+  annotations: number;
   composition: AssemblyComposition;
 }) {
-  const assemblies = useAsync(() => getAssemblies(taxid, { limit: 1 }), [taxid]);
-  const annotations = useAsync(() => getAnnotations(taxid, { limit: 1 }), [taxid]);
-
-  // Merge the live stat values from both endpoints into one key -> value map.
-  const values = new Map<string, number | null>();
-  for (const s of assemblies.data?.stats ?? []) values.set(s.key, s.value);
-  for (const s of annotations.data?.stats ?? []) values.set(s.key, s.value);
-
-  const assemblyTotal = assemblies.data?.total ?? 0;
-  const annotationTotal = annotations.data?.total ?? 0;
-  const bothLoaded = !assemblies.loading && !annotations.loading;
-  const error = assemblies.error ?? annotations.error;
-
   // Nothing to show for a clade with no assemblies and no annotations.
-  if (bothLoaded && !error && assemblyTotal === 0 && annotationTotal === 0) return null;
+  if (assemblies === 0 && annotations === 0) return null;
 
-  const stateFor = (source: string) => (source === "annotation" ? annotations : assemblies);
-  const totalFor = (source: string) =>
-    source === "annotation" ? annotationTotal : assemblyTotal;
-  const retry = () => {
-    if (assemblies.error) assemblies.reload();
-    if (annotations.error) annotations.reload();
-  };
-
+  const values = new Map((stats ?? []).map((s) => [s.key, s.value]));
   return (
     <section className="quality" aria-labelledby="quality-title">
       <header className="quality__head">
@@ -78,9 +65,8 @@ export default function QualitySection({
             key={q.key}
             config={q}
             value={values.get(q.key) ?? null}
-            total={totalFor(q.source)}
-            loaded={!stateFor(q.source).loading}
-            failed={Boolean(stateFor(q.source).error)}
+            total={q.source === "annotation" ? annotations : assemblies}
+            state={loading ? "loading" : error ? "failed" : "ready"}
           />
         ))}
       </div>
@@ -90,30 +76,34 @@ export default function QualitySection({
   );
 }
 
-/** One quality stat tile: label, the live value (median/best), and a caption
+/** One quality stat tile: label, the value (median/best), and a caption
  *  naming the record set it was computed over. */
 function QualityTile({
   config,
   value,
   total,
-  loaded,
-  failed,
+  state,
 }: {
   config: QualityStatConfig;
   value: number | null;
   total: number;
-  loaded: boolean;
-  failed: boolean;
+  state: "loading" | "failed" | "ready";
 }) {
   const noun = config.source === "annotation" ? "annotation" : "assembly";
   const nouns = config.source === "annotation" ? "annotations" : "assemblies";
-  const valueStr = !loaded ? "…" : failed ? "—" : fmtQuality(value, config.fmt);
-  const has = loaded && !failed && value !== null;
-  const caption = failed ? "unavailable" : total > 0 ? `over ${fmt(total)} ${total === 1 ? noun : nouns}` : `no ${nouns} yet`;
+  const has = state === "ready" && value !== null;
+  const shown =
+    state === "loading" ? "…" : state === "failed" ? "—" : fmtQuality(value, config.fmt);
+  const caption =
+    state === "failed"
+      ? "unavailable"
+      : total > 0
+        ? `over ${fmt(total)} ${total === 1 ? noun : nouns}`
+        : `no ${nouns} yet`;
   return (
     <article className="qtile" title={config.help}>
       <span className="qtile__label">{config.card_title}</span>
-      <span className={`qtile__value${has ? "" : " qtile__value--empty"}`}>{valueStr}</span>
+      <span className={`qtile__value${has ? "" : " qtile__value--empty"}`}>{shown}</span>
       <span className="qtile__cap">{caption}</span>
     </article>
   );

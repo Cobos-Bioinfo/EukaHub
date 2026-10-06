@@ -9,7 +9,8 @@ field order, guarded by a test.
 
 from __future__ import annotations
 
-from collections.abc import Collection, Iterator, Sequence
+from collections.abc import Collection, Iterator, Mapping, Sequence
+from dataclasses import dataclass
 from enum import Enum
 
 import psycopg
@@ -22,11 +23,14 @@ from eukahub_core.metrics import (
     TOTAL_KEYS,
     CladeMetadata,
 )
-from eukahub_core.taxonomy import EUKARYOTA_TAXID, SPINE_TAXIDS, UNIT_RANKS
+from eukahub_core.taxonomy import SPINE_TAXIDS, UNIT_RANKS
 from psycopg.rows import dict_row
 from psycopg_pool import ConnectionPool
 
 from eukahub_api.clade_sets import SetTaxon
+from eukahub_api.pagination import Key, Page, beyond, key_columns, order_by, page
+from eukahub_api.pagination import decode as decode_cursor
+from eukahub_api.totals import counts
 
 # n_rows, then c_* (COVERAGE_KEYS), then s_* (TOTAL_KEYS), then the additive
 # composition columns — the exact tail of CladeMetadata's constructor after
@@ -40,10 +44,21 @@ _FEATURE_COLS: tuple[str, ...] = (
 # types generated from it) can't drift from the tracked resources. They also
 # make the identifiers interpolated into SQL below a closed, safe set.
 
-# Valid sort columns: species count + every c_*/s_* feature column.
-SortColumn = Enum("SortColumn", {c: c for c in _FEATURE_COLS}, type=str)
 # Resource-presence filter keys ("ass", "ann", "rna", "lng").
 MetricFilter = Enum("MetricFilter", {k: k for k in METRIC_KEYS}, type=str)
+
+# /taxons sorts: any feature column, the species without each resource
+# ("gap_ass", ...), or the name.
+TaxonSort = Enum(
+    "TaxonSort",
+    {c: c for c in _FEATURE_COLS}
+    | {f"gap_{k}": f"gap_{k}" for k in METRIC_KEYS}
+    | {"name": "name"},
+    type=str,
+)
+
+# Most rows one page of a list may hold.
+MAX_PAGE = 1000
 
 # Ranks the breakdown can target (ported from Euka-Survey's ALLOWED_RANKS).
 ALLOWED_RANKS: tuple[str, ...] = ("phylum", "class", "order", "family", "genus", "species")
@@ -72,6 +87,11 @@ def _identifier(value: str, allowed: Collection[str]) -> str:
     return value
 
 
+class SortOrder(str, Enum):
+    asc = "asc"
+    desc = "desc"
+
+
 class FilterLogic(str, Enum):
     """How multiple resource-presence filters combine (ported verbatim)."""
 
@@ -87,18 +107,6 @@ _IS_INFRASPECIFIC = (
     "EXISTS (SELECT 1 FROM taxon a WHERE a.path @> {path} "
     f"AND a.rank IN ({_UNIT_RANKS_SQL}) AND a.taxid <> {{self}})"
 )
-
-# LEFT JOIN: a taxon may exist in `taxon` but have no rollup row (the rollup
-# covers the eukaryotic subtree only). Those come back with NULL features and
-# are zero-filled below.
-_SUMMARY_SQL = (
-    f"SELECT t.name, t.rank, {', '.join('f.' + c for c in _FEATURE_COLS)}, "
-    f"{_IS_INFRASPECIFIC.format(path='t.path', self='t.taxid')} AS is_infraspecific "
-    "FROM taxon t "
-    "LEFT JOIN clade_features f USING (taxid) "
-    "WHERE t.taxid = %s"
-)
-
 
 class TaxonNotFound(Exception):
     """Raised when a taxid is absent from the `taxon` table."""
@@ -121,66 +129,63 @@ def fetch_root(conn: psycopg.Connection, taxid: int) -> tuple[str, str, str]:
     return row
 
 
-def fetch_summary(
-    conn: psycopg.Connection, taxid: int
-) -> tuple[str, str, CladeMetadata, bool]:
-    """Return ``(name, rank, metadata, is_infraspecific)`` for one taxon.
-
-    Raises ``TaxonNotFound`` if the taxid is not in the taxonomy. A taxon with
-    no rollup row yields a zero-filled ``CladeMetadata``. ``is_infraspecific`` is
-    True for below-species taxa (subspecies/strains/...), each a single unit
-    (``n_rows == 1``) whose data also counts for its species.
-    """
-    row = conn.execute(_SUMMARY_SQL, (taxid,)).fetchone()
-    if row is None:
-        raise TaxonNotFound(taxid)
-
-    name, rank, *rest = row
-    is_infraspecific: bool = rest.pop()  # trailing EXISTS column
-    features = rest
-    if features[0] is None:  # LEFT JOIN produced NULLs — no clade_features row
-        return name, rank, CladeMetadata.zero(taxid), is_infraspecific
-    return name, rank, CladeMetadata(taxid, *features), is_infraspecific
-
-
-def fetch_direct_totals(
-    conn: psycopg.Connection, taxid: int, meta: CladeMetadata
-) -> dict[str, int]:
-    """Per-resource records attached to the taxon itself rather than to a finer
-    taxon below it: its subtree totals minus its children's."""
-    below = conn.execute(
-        f"SELECT {', '.join(f'COALESCE(sum(f.{c}), 0)' for c in TOTAL_KEYS)} "
-        "FROM taxon c JOIN clade_features f USING (taxid) "
-        "WHERE c.parent_id = %s AND c.taxid <> c.parent_id",
-        (taxid,),
-    ).fetchone()
+def _direct_totals(
+    conn: psycopg.Connection, units: Mapping[int, CladeMetadata]
+) -> dict[int, dict[str, int]]:
+    """Per-resource records attached to each of these taxa itself rather than to a
+    finer taxon below it: its totals minus its children's."""
+    if not units:
+        return {}
+    below = {
+        parent: sums
+        for parent, *sums in conn.execute(
+            f"SELECT c.parent_id, {', '.join(f'sum(f.{c})' for c in TOTAL_KEYS)} "
+            "FROM taxon c JOIN clade_features f USING (taxid) "
+            "WHERE c.parent_id = ANY(%s) AND c.taxid <> c.parent_id GROUP BY c.parent_id",
+            (list(units),),
+        ).fetchall()
+    }
     return {
-        key: getattr(meta, f"s_{key}") - int(n) for key, n in zip(METRIC_KEYS, below, strict=True)
+        taxid: {
+            key: getattr(meta, f"s_{key}") - int(n)
+            for key, n in zip(METRIC_KEYS, below.get(taxid, [0] * len(TOTAL_KEYS)), strict=True)
+        }
+        for taxid, meta in units.items()
     }
 
 
-def fetch_overview(
-    conn: psycopg.Connection, featured_taxids: Sequence[int]
-) -> tuple[CladeMetadata, list[tuple[int, str, int, int, int, int]]]:
-    """Landing-page "at a glance" data in one request.
+def fetch_taxon(conn: psycopg.Connection, taxid: int) -> TaxonListRow:
+    """One taxon, built exactly as ``list_taxa`` builds a list item. Raises
+    ``TaxonNotFound``."""
+    _total, result = list_taxa(
+        conn, TaxonFilter(taxids=[taxid]), sort=None, descending=True, limit=1, cursor=None
+    )
+    if not result.rows:
+        raise TaxonNotFound(taxid)
+    return result.rows[0]
 
-    Returns ``(eukaryota_metadata, featured)`` where ``featured`` is one tuple
-    ``(taxid, name, n_rows, s_ass, c_ass, c_ann)`` per featured group present in
-    the DB, in ``featured_taxids`` order. Two small indexed lookups: Eukaryota's
-    own rollup (the global totals) and the featured clades' rollups. A featured
-    taxid missing from ``clade_features`` (e.g. a sliced CI DB) is dropped, never
-    an error, so the section degrades gracefully."""
-    _name, _rank, totals, _inf = fetch_summary(conn, EUKARYOTA_TAXID)
 
-    rows = conn.execute(
-        "SELECT t.taxid, t.name, f.n_rows, f.s_ass, f.c_ass, f.c_ann "
-        "FROM taxon t JOIN clade_features f USING (taxid) "
-        "WHERE t.taxid = ANY(%s)",
-        (list(featured_taxids),),
-    ).fetchall()
-    by_id = {r[0]: r for r in rows}
-    featured = [by_id[t] for t in featured_taxids if t in by_id]
-    return totals, featured
+def fetch_ancestors(conn: psycopg.Connection, taxid: int) -> list[TaxonListRow]:
+    """The root, every taxon down to ``taxid``, and the taxon itself, in that order:
+    the labels of its path. Raises ``TaxonNotFound``."""
+    labels = [int(label) for label in fetch_root(conn, taxid)[2].split(".")]
+    _total, result = list_taxa(
+        conn, TaxonFilter(taxids=labels), sort=None, descending=True, limit=len(labels), cursor=None
+    )
+    depth = {t: i for i, t in enumerate(labels)}
+    return sorted(result.rows, key=lambda r: depth[r.meta.taxid])
+
+
+def fetch_taxon_stats(
+    conn: psycopg.Connection, taxid: int
+) -> tuple[str, dict[str, float | None]]:
+    """``(name, QUALITY_STATS)`` of one taxon over the records on or below it. Raises
+    ``TaxonNotFound``."""
+    name, _rank, path = fetch_root(conn, taxid)
+    stats: dict[str, float | None] = {}
+    for source in ("assembly", "annotation"):
+        stats |= _fetch_quality_stats(conn, source, path)[1]
+    return name, {q.key: stats[q.key] for q in QUALITY_STATS}
 
 
 def fetch_dataset_meta(
@@ -195,115 +200,6 @@ def fetch_dataset_meta(
     ).fetchone()
 
 
-def fetch_compare(
-    conn: psycopg.Connection, taxids: list[int]
-) -> list[tuple[int, str, str, CladeMetadata, dict[str, float | None]]]:
-    """Per-group data for the compare view — one entry per taxid, in input order.
-
-    Each entry is ``(taxid, name, rank, metadata, quality)`` where ``metadata`` is
-    the clade's rollup (species count + per-resource coverage/total) and
-    ``quality`` merges the live assembly + annotation distribution stats (median
-    genome size / contig N50, best BUSCO, median genes) over the subtree — the
-    same stats the drill-down endpoints expose, computed once per group. An
-    unknown taxid is skipped (a stale shared link degrades gracefully rather than
-    404-ing the whole comparison)."""
-    groups: list[tuple[int, str, str, CladeMetadata, dict[str, float | None]]] = []
-    for taxid in taxids:
-        try:
-            name, rank, path = fetch_root(conn, taxid)
-        except TaxonNotFound:
-            continue
-        _n, _r, meta, _inf = fetch_summary(conn, taxid)
-        _ass_total, ass_stats = _fetch_quality_stats(conn, "assembly", path)
-        _ann_total, ann_stats = _fetch_quality_stats(conn, "annotation", path)
-        groups.append((taxid, name, rank, meta, {**ass_stats, **ann_stats}))
-    return groups
-
-
-def fetch_lineage(conn: psycopg.Connection, taxid: int) -> list[tuple[int, str, str]]:
-    """Return the root→taxon lineage as ``(taxid, name, rank)`` rows, inclusive
-    of the taxon itself, ordered root-first.
-
-    One indexed query: ``path @>`` selects the ancestors-or-self via the GiST
-    index, ``nlevel(path)`` orders them by depth. No recursion, no ETE3. Raises
-    ``TaxonNotFound`` if the taxid is absent (a present taxon always yields at
-    least its own row)."""
-    rows = conn.execute(
-        "SELECT t.taxid, t.name, t.rank FROM taxon t "
-        "WHERE t.path @> (SELECT path FROM taxon WHERE taxid = %s) "
-        "ORDER BY nlevel(t.path)",
-        (taxid,),
-    ).fetchall()
-    if not rows:
-        raise TaxonNotFound(taxid)
-    return rows
-
-
-def fetch_children(
-    conn: psycopg.Connection,
-    *,
-    taxid: int,
-    sort: str,
-    limit: int,
-    offset: int,
-) -> tuple[tuple[int, str, str], list[tuple[str, str, CladeMetadata, bool, bool]], int]:
-    """Direct children of ``taxid`` (adjacency via ``parent_id``) — the cheap
-    lookup the schema reserved for lazy-expanding the interactive tree.
-
-    Sorted by ``sort`` (species count by default, so the biggest clades surface
-    first) and paginated with ``limit``/``offset`` so a node with tens of
-    thousands of children loads a screenful at a time. Returns
-    ``((taxid, name, rank), [(name, rank, metadata, has_children), ...], total)``
-    where ``total`` is the child count *before* limit/offset. Raises
-    ``TaxonNotFound`` if ``taxid`` is absent; a present-but-childless taxon
-    (e.g. a species leaf) returns an empty list, not an error.
-
-    ``sort`` is interpolated as an identifier and must be a SortColumn value.
-    A LEFT JOIN keeps children that lack a rollup row (zero-filled), and each
-    child carries a ``has_children`` flag (one indexed EXISTS probe) so the UI
-    shows an expand affordance without another round-trip, plus an
-    ``is_infraspecific`` flag: a child is below-species iff the parent already
-    has a species in its path (child of a species, or of a subspecies), so one
-    probe on the parent settles it for the whole page.
-    """
-    sort = _identifier(sort, _FEATURE_COLS)
-    parent_name, parent_rank, parent_path = fetch_root(conn, taxid)
-    children_infraspecific: bool = conn.execute(
-        f"SELECT {_IS_INFRASPECIFIC.format(path='%s::ltree', self='0')}",
-        (parent_path,),
-    ).fetchone()[0]
-
-    feature_cols = ", ".join(f"f.{c}" for c in _FEATURE_COLS)
-    # COUNT(*) OVER () rides along for the total child count (before paging);
-    # `taxid <> parent_id` drops the root's self-parent when listing its children.
-    sql = (
-        f"SELECT t.taxid, t.name, t.rank, {feature_cols}, "
-        "EXISTS (SELECT 1 FROM taxon c WHERE c.parent_id = t.taxid) AS has_children, "
-        "COUNT(*) OVER () "
-        "FROM taxon t "
-        "LEFT JOIN clade_features f USING (taxid) "
-        "WHERE t.parent_id = %s AND t.taxid <> t.parent_id "
-        f"ORDER BY COALESCE(f.{sort}, 0) DESC, t.name "
-        "LIMIT %s OFFSET %s"
-    )
-    rows = conn.execute(sql, (taxid, limit, offset)).fetchall()
-
-    parent_ref = (taxid, parent_name, parent_rank)
-    if not rows:
-        return parent_ref, [], 0
-    total = rows[0][-1]
-    items: list[tuple[str, str, CladeMetadata, bool, bool]] = []
-    for taxid_, name, rank, *rest in rows:
-        *features, has_children, _row_total = rest
-        meta = (
-            CladeMetadata.zero(taxid_)  # LEFT JOIN NULLs — no clade_features row
-            if features[0] is None
-            else CladeMetadata(taxid_, *features)
-        )
-        items.append((name, rank, meta, has_children, children_infraspecific))
-    return parent_ref, items, total
-
-
 def _secondary_sort_key(sort_by_key: str) -> str:
     """Tiebreaker column for a primary sort column (ported verbatim from
     Euka-Survey): a ``c_*`` sort tie-breaks by its matching ``s_*``, anything
@@ -313,135 +209,205 @@ def _secondary_sort_key(sort_by_key: str) -> str:
     return "c_ass"
 
 
-def _breakdown_order(sort: str) -> str:
-    """ORDER BY for a breakdown sorted by ``sort`` (a SortColumn value). The taxid
-    makes it a total order, so a LIMIT picks the same clades on every query."""
-    sort = _identifier(sort, _FEATURE_COLS)
-    return f"ORDER BY f.{sort} DESC, f.{_secondary_sort_key(sort)} DESC, t.taxid"
+@dataclass(frozen=True, slots=True)
+class TaxonFilter:
+    """Which taxa ``/taxons`` lists; every field set narrows the list further."""
+
+    q: str | None = None  # name contains it, or with ``fuzzy`` is spelled like it
+    fuzzy: bool = False
+    parent: int | None = None  # direct children of this taxon
+    within: int | None = None  # this taxon and everything below it
+    within_path: str | None = None  # the path of ``within``
+    rank: str | None = None
+    taxids: Sequence[int] = ()
+    filter_keys: Sequence[str] = ()  # MetricFilter values: has data for these resources
+    logic: FilterLogic = FilterLogic.AND
+    exclude_empty: bool = False  # has data for any resource
 
 
-def _breakdown_where(
-    root_path: str,
-    rank: str,
-    exclude_empty: bool,
-    filter_keys: list[str],
-    logic: FilterLogic,
-) -> tuple[list[str], list]:
-    """Build the shared WHERE for the breakdown/export subtree query.
+def _escape_like(text: str) -> str:
+    return text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
-    ``path <@ root_path`` = the whole subtree; the rank filter picks the level
-    (both ride indexes: GiST on path, btree on rank). ``exclude_empty`` and the
-    resource filters push down as ``f.<col> > 0`` predicates; the filter keys
-    are interpolated and must be MetricFilter values.
-    """
-    where = ["t.path <@ %s::ltree", "t.rank = %s"]
-    params: list = [root_path, rank]
-    if exclude_empty:
+
+def _taxon_where(f: TaxonFilter) -> tuple[list[str], list[object]]:
+    where: list[str] = []
+    params: list[object] = []
+    if f.q is not None:
+        if f.fuzzy:
+            where.append("t.name %% %s")
+            params.append(f.q)
+        else:
+            where.append("t.name ILIKE %s")
+            params.append(f"%{_escape_like(f.q)}%")
+        # The root and "cellular organisms" are never what a name search is after.
+        where.append("t.taxid <> ALL(%s)")
+        params.append(list(SPINE_TAXIDS))
+    if f.parent is not None:
+        where.append("t.parent_id = %s AND t.taxid <> t.parent_id")
+        params.append(f.parent)
+    if f.within_path is not None:
+        where.append("t.path <@ %s::ltree")
+        params.append(f.within_path)
+    if f.rank is not None:
+        where.append("t.rank = %s")
+        params.append(f.rank)
+    if f.taxids:
+        where.append("t.taxid = ANY(%s)")
+        params.append(list(f.taxids))
+    if f.exclude_empty:
         where.append("(" + " OR ".join(f"f.{c} > 0" for c in COVERAGE_KEYS) + ")")
-    if filter_keys:
-        filter_keys = [_identifier(k, METRIC_KEYS) for k in filter_keys]
-        joiner = " AND " if logic is FilterLogic.AND else " OR "
-        where.append("(" + joiner.join(f"f.c_{k} > 0" for k in filter_keys) + ")")
+    if f.filter_keys:
+        keys = [_identifier(k, METRIC_KEYS) for k in f.filter_keys]
+        joiner = " AND " if f.logic is FilterLogic.AND else " OR "
+        where.append("(" + joiner.join(f"f.c_{k} > 0" for k in keys) + ")")
     return where, params
 
 
-def fetch_breakdown(
-    conn: psycopg.Connection,
-    *,
-    root_taxid: int,
-    rank: str,
-    sort: str,
-    filter_keys: list[str],
-    logic: FilterLogic,
-    exclude_empty: bool,
-    limit: int,
-) -> tuple[tuple[int, str, str], list[tuple[str, str, CladeMetadata]], int]:
-    """Descendants of ``root_taxid`` at ``rank``, with filter/sort/limit pushed
-    into one indexed ``ltree`` query — the replacement for the deleted
-    ``precomputed_taxa`` cache, correct for any root.
+_NAME_KEYS = [Key("t.name", "text"), Key("t.taxid", "integer")]
 
-    Returns ``((taxid, name, rank), [(name, rank, metadata), ...], total)``
-    where ``total`` is the match count *before* ``limit``. Raises
-    ``TaxonNotFound`` if the root taxid is absent.
 
-    ``sort``/``filter_keys`` are interpolated into SQL as identifiers and must be
-    SortColumn / MetricFilter values.
-    """
-    order = _breakdown_order(sort)
-    root_name, root_rank, root_path = fetch_root(conn, root_taxid)
-    where, params = _breakdown_where(root_path, rank, exclude_empty, filter_keys, logic)
-
-    feature_cols = ", ".join(f"f.{c}" for c in _FEATURE_COLS)
-    # COUNT(*) OVER () rides along, so total-before-limit costs no extra query.
-    sql = (
-        f"SELECT t.taxid, t.name, t.rank, {feature_cols}, COUNT(*) OVER () "
-        "FROM taxon t "
-        "JOIN clade_features f USING (taxid) "
-        f"WHERE {' AND '.join(where)} "
-        f"{order} "
-        "LIMIT %s"
+def _taxon_keys(
+    sort: str | None, descending: bool, f: TaxonFilter
+) -> tuple[str, list[Key], list[object]]:
+    """``(ordering name, keys, parameters of the keys' SQL)`` for a /taxons sort.
+    Without ``sort``, a name search is ordered by relevance (or by similarity when
+    fuzzy) and anything else by species count."""
+    if sort is None and f.q is not None and f.fuzzy:
+        return (
+            f"similar:{f.q}",
+            [
+                Key("similarity(t.name, %s)", "real", True),
+                Key("length(t.name)", "integer"),
+                *_NAME_KEYS,
+            ],
+            [f.q],
+        )
+    if sort is None and f.q is not None:
+        # An exact name first; then names starting with the query, those with the
+        # most records and species first; then the rest, shortest first. Only the
+        # prefix matches are ranked by data, read only for them.
+        prefix = "t.name ILIKE %s"
+        data = "(SELECT g.{} FROM clade_features g WHERE g.taxid = t.taxid)"
+        records = data.format("s_ass + g.s_ann + g.s_rna")
+        species = data.format("n_rows")
+        return (
+            f"relevance:{f.q}",
+            [
+                Key("lower(t.name) = lower(%s)", "boolean", True),
+                Key(prefix, "boolean", True),
+                Key(f"CASE WHEN {prefix} THEN COALESCE({records}, 0) ELSE 0 END", "integer", True),
+                Key(f"CASE WHEN {prefix} THEN COALESCE({species}, 0) ELSE 0 END", "integer", True),
+                Key("length(t.name)", "integer"),
+                *_NAME_KEYS,
+            ],
+            [f.q, *[f"{_escape_like(f.q)}%"] * 3],
+        )
+    sort = _identifier(sort or "n_rows", [t.value for t in TaxonSort])
+    order = "desc" if descending else "asc"
+    if sort == "name":
+        return f"name:{order}", [Key("t.name", "text", descending), Key("t.taxid", "integer")], []
+    if sort.startswith("gap_"):
+        key = _identifier(sort.removeprefix("gap_"), METRIC_KEYS)
+        primary = f"COALESCE(f.n_rows, 0) - COALESCE(f.c_{key}, 0)"
+        secondary = "COALESCE(f.n_rows, 0)"
+    else:
+        primary = f"COALESCE(f.{sort}, 0)"
+        secondary = f"COALESCE(f.{_secondary_sort_key(sort)}, 0)"
+    return (
+        f"{sort}:{order}",
+        [Key(primary, "integer", descending), Key(secondary, "integer", descending), *_NAME_KEYS],
+        [],
     )
-    params.append(limit)
-    rows = conn.execute(sql, params).fetchall()
-
-    root_ref = (root_taxid, root_name, root_rank)
-    if not rows:
-        return root_ref, [], 0
-    total = rows[0][-1]
-    items = [
-        (name, item_rank, CladeMetadata(taxid, *features))
-        for taxid, name, item_rank, *features in (row[:-1] for row in rows)
-    ]
-    return root_ref, items, total
 
 
-def fetch_gaps(
+# Ranks named beside a taxon so that homonyms (the insect and the fungus genus
+# Drosophila) can be told apart: the nearest one above it.
+_CONTEXT_RANKS = ("class", "phylum", "kingdom")
+_CONTEXT_RANKS_SQL = ", ".join(f"'{r}'" for r in _CONTEXT_RANKS)
+
+# Per listed taxon: its rollup, whether it has children, and from its ancestors
+# (the labels of its path, so primary-key lookups) whether it sits below a species
+# and its nearest class, phylum or kingdom.
+_TAXON_ITEM_SQL = (
+    f"t.taxid, t.name, t.rank, {', '.join('f.' + c for c in _FEATURE_COLS)}, "
+    "EXISTS (SELECT 1 FROM taxon c WHERE c.parent_id = t.taxid AND c.taxid <> t.taxid) "
+    "AS has_children, COALESCE(anc.infraspecific, false) AS is_infraspecific, anc.context "
+    "FROM p JOIN taxon t ON t.taxid = p.id LEFT JOIN clade_features f ON f.taxid = t.taxid "
+    "LEFT JOIN LATERAL ("
+    f"  SELECT bool_or(a.rank IN ({_UNIT_RANKS_SQL})) AS infraspecific,"
+    "   (array_agg(a.name ORDER BY nlevel(a.path) DESC)"
+    f"    FILTER (WHERE a.rank IN ({_CONTEXT_RANKS_SQL})))[1] AS context"
+    "   FROM taxon a"
+    "   WHERE a.taxid = ANY(string_to_array(ltree2text(subpath(t.path, 0, -1)), '.')::int[])"
+    ") anc ON true"
+)
+
+
+@dataclass(frozen=True, slots=True)
+class TaxonListRow:
+    meta: CladeMetadata
+    name: str
+    rank: str
+    context: str | None
+    is_infraspecific: bool
+    has_children: bool
+    direct: dict[str, int] | None  # species and finer taxa only
+
+
+def list_taxa(
     conn: psycopg.Connection,
+    f: TaxonFilter,
     *,
-    root_taxid: int,
-    rank: str,
-    resource: str,
+    sort: str | None,
+    descending: bool,
     limit: int,
-) -> tuple[tuple[int, str, str], list[tuple[str, str, CladeMetadata]], int]:
-    """The biggest under-sequenced groups: descendants of ``root_taxid`` at
-    ``rank`` ranked by the "gap" = species with no ``resource`` data
-    (``n_rows - c_<resource>``), largest first — the app's thesis surfaced
-    directly. Big clade + little coverage rises to the top; a fully-covered
-    clade (gap 0) is dropped since it isn't a gap.
-
-    Returns ``((taxid, name, rank), [(name, rank, metadata), ...], total)`` where
-    ``total`` is the count of clades with any gap (before ``limit``). One indexed
-    ``ltree`` subtree query — the same machinery as ``fetch_breakdown``, only the
-    ordering differs. ``resource`` is interpolated as an identifier and must be a
-    MetricFilter value. Raises ``TaxonNotFound`` if the root taxid is absent.
-    """
-    resource = _identifier(resource, METRIC_KEYS)
-    root_name, root_rank, root_path = fetch_root(conn, root_taxid)
-    # gap = species in the clade lacking this resource (c_<key> <= n_rows always,
-    # so it is >= 0). Ordered by the gap; species count breaks ties so among
-    # equal-gap clades the larger group leads.
-    gap = f"(f.n_rows - f.c_{resource})"
-    feature_cols = ", ".join(f"f.{c}" for c in _FEATURE_COLS)
-    sql = (
-        f"SELECT t.taxid, t.name, t.rank, {feature_cols}, COUNT(*) OVER () "
-        "FROM taxon t "
-        "JOIN clade_features f USING (taxid) "
-        "WHERE t.path <@ %s::ltree AND t.rank = %s "
-        f"AND {gap} > 0 "
-        f"ORDER BY {gap} DESC, f.n_rows DESC "
-        "LIMIT %s"
+    cursor: str | None,
+) -> tuple[int, Page[TaxonListRow]]:
+    """One page of the taxa matching ``f``, with the number of matches. ``sort`` is
+    a TaxonSort value or None for the default order. Raises ``InvalidCursor`` for a
+    cursor of another ordering."""
+    ordering, keys, key_params = _taxon_keys(sort, descending, f)
+    after = decode_cursor(cursor, ordering=ordering, keys=keys) if cursor else None
+    where, where_params = _taxon_where(f)
+    filters_need_features = f.exclude_empty or bool(f.filter_keys)
+    needs_features = filters_need_features or any("f." in k.sql for k in keys)
+    where_sql = f"WHERE {' AND '.join(where)}" if where else ""
+    total = counts.count(
+        conn,
+        "SELECT t.taxid FROM taxon t "
+        f"{'LEFT JOIN clade_features f USING (taxid) ' if filters_need_features else ''}{where_sql}",
+        where_params,
     )
-    rows = conn.execute(sql, (root_path, rank, limit)).fetchall()
-
-    root_ref = (root_taxid, root_name, root_rank)
-    if not rows:
-        return root_ref, [], 0
-    total = rows[0][-1]
-    items = [
-        (name, item_rank, CladeMetadata(taxid, *features))
-        for taxid, name, item_rank, *features in (row[:-1] for row in rows)
-    ]
-    return root_ref, items, total
+    matches = (
+        f"SELECT t.taxid AS id, {key_columns(keys)} FROM taxon t "
+        f"{'LEFT JOIN clade_features f USING (taxid) ' if needs_features else ''}{where_sql}"
+    )
+    beyond_sql, beyond_params = beyond(keys, after) if after else ("TRUE", [])
+    backward = after is not None and after.backward
+    # The page is the top `limit + 1` rows of a sort, so the database keeps only
+    # that many in memory; the details are read for those rows alone.
+    sql = (
+        f"WITH p AS (SELECT * FROM ({matches}) m WHERE {beyond_sql} "
+        f"ORDER BY {order_by(keys, backward=backward)} LIMIT %s) "
+        f"SELECT {', '.join(f'p.k{i}' for i in range(len(keys)))}, {_TAXON_ITEM_SQL} "
+        f"ORDER BY {order_by(keys, backward=backward, table='p')}"
+    )
+    rows = conn.execute(sql, [*key_params, *where_params, *beyond_params, limit + 1]).fetchall()
+    n_keys = len(keys)
+    keys_of = [list(row[:n_keys]) for row in rows]
+    parsed = []
+    for row in rows:
+        taxid, name, rank, *rest = row[n_keys:]
+        *features, has_children, is_infraspecific, context = rest
+        meta = (
+            CladeMetadata.zero(taxid) if features[0] is None else CladeMetadata(taxid, *features)
+        )
+        parsed.append((meta, name, rank, context, is_infraspecific, has_children))
+    direct = _direct_totals(
+        conn, {p[0].taxid: p[0] for p in parsed if p[4] or p[2] in UNIT_RANKS}
+    )
+    items = [TaxonListRow(*p, direct=direct.get(p[0].taxid)) for p in parsed]
+    return total, page(items, keys_of, limit=limit, cursor=after, ordering=ordering)
 
 
 # Public TSV schema (ported from Euka-Survey's generate_tsv): fixed prefix, then
@@ -454,9 +420,8 @@ EXPORT_HEADER: tuple[str, ...] = (
 )
 # SELECT columns matching EXPORT_HEADER position-for-position.
 _EXPORT_COLS: str = ", ".join(
-    ("t.taxid", "t.name", "f.n_rows")
-    + tuple(f"f.{c}" for c in COVERAGE_KEYS)
-    + tuple(f"f.{c}" for c in TOTAL_KEYS)
+    ("t.taxid", "t.name")
+    + tuple(f"COALESCE(f.{c}, 0)" for c in ("n_rows",) + COVERAGE_KEYS + TOTAL_KEYS)
 )
 
 
@@ -465,125 +430,37 @@ def _tsv_cell(value: object) -> str:
     return str(value).replace("\t", " ").replace("\n", " ").replace("\r", " ")
 
 
-def iter_export_tsv(
+def iter_report_tsv(
     pool: ConnectionPool,
+    f: TaxonFilter,
     *,
-    root_path: str,
-    rank: str,
-    sort: str,
-    filter_keys: list[str],
-    logic: FilterLogic,
-    exclude_empty: bool,
+    sort: str | None,
+    descending: bool,
     batch_rows: int,
 ) -> Iterator[str]:
-    """Stream the full breakdown at ``rank`` as TSV: the header, then one chunk
-    per ``batch_rows`` rows, each a single server-side FETCH (no limit).
+    """Stream every taxon matching ``f`` as TSV, in the order ``/taxons`` lists
+    them: the header, then one chunk per ``batch_rows`` rows, each a single
+    server-side FETCH.
 
     The generator owns its pooled connection and a **server-side** cursor for
-    the whole stream, so even a huge export (e.g. a big root at species rank,
-    >700k rows) never materializes in memory. ``sort``/``filter_keys`` must be
-    SortColumn / MetricFilter values; ``root_path`` comes from ``fetch_root``.
+    the whole stream, so even a huge report (every eukaryote species, >700k rows)
+    never materializes in memory.
     """
-    order = _breakdown_order(sort)
-    where, params = _breakdown_where(root_path, rank, exclude_empty, filter_keys, logic)
+    _ordering, keys, key_params = _taxon_keys(sort, descending, f)
+    where, where_params = _taxon_where(f)
+    order = ", ".join(f"{k.sql} {'DESC' if k.descending else 'ASC'}" for k in keys)
     sql = (
-        f"SELECT {_EXPORT_COLS} "
-        "FROM taxon t "
-        "JOIN clade_features f USING (taxid) "
-        f"WHERE {' AND '.join(where)} "
-        f"{order}"
+        f"SELECT {_EXPORT_COLS} FROM taxon t LEFT JOIN clade_features f USING (taxid) "
+        f"{'WHERE ' + ' AND '.join(where) if where else ''} ORDER BY {order}"
     )
 
     yield "\t".join(EXPORT_HEADER) + "\n"
-    with pool.connection() as conn, conn.cursor(name="export") as cur:
-        cur.execute(sql, params)
+    with pool.connection() as conn, conn.cursor(name="report") as cur:
+        cur.execute(sql, [*where_params, *key_params])
         # Each chunk costs a thread hop through the ASGI stack; one chunk per row
-        # would take ~40x longer than the query itself on a full-species export.
+        # would take ~40x longer than the query itself on a full-species report.
         while rows := cur.fetchmany(batch_rows):
             yield "".join("\t".join(_tsv_cell(v) for v in row) + "\n" for row in rows)
-
-
-# Ranks named beside a search hit so that homonyms (the insect and the fungus
-# genus Drosophila) can be told apart: the nearest one above the hit.
-_CONTEXT_RANKS = ("class", "phylum", "kingdom")
-# Below this length a misspelling has too few trigrams to match anything useful.
-_SIMILAR_MIN_LENGTH = 4
-
-
-def search_taxa(conn: psycopg.Connection, query: str, limit: int) -> tuple[list[dict], bool]:
-    """Case-insensitive name search for the picker → ``(hits, similar)``.
-
-    Names starting with the query come first: an exact name, then the taxa with
-    the most records, then the most species. Only those are ranked by data, since
-    a short query can match tens of thousands of names mid-word. Free slots go to
-    mid-word matches, shortest first. When nothing matches, close spellings are
-    returned instead and ``similar`` is True. Each hit carries ``context`` (its
-    nearest class, phylum or kingdom) and ``has_data``. Wildcards in ``query``
-    are escaped so they match literally.
-    """
-    escaped = query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-    params = {
-        "q": query,
-        "pre": f"{escaped}%",
-        "sub": f"%{escaped}%",
-        "lim": limit,
-        "spine": list(SPINE_TAXIDS),
-    }
-    taxids = [
-        r[0]
-        for r in conn.execute(
-            "SELECT t.taxid FROM taxon t LEFT JOIN clade_features f USING (taxid) "
-            "WHERE t.name ILIKE %(pre)s AND t.taxid <> ALL(%(spine)s) "
-            "ORDER BY lower(t.name) = lower(%(q)s) DESC, "
-            "COALESCE(f.s_ass, 0) + COALESCE(f.s_ann, 0) + COALESCE(f.s_rna, 0) DESC, "
-            "COALESCE(f.n_rows, 0) DESC, length(t.name), t.name "
-            "LIMIT %(lim)s",
-            params,
-        )
-    ]
-    if len(taxids) < limit:
-        params["lim"] = limit - len(taxids)
-        taxids += [
-            r[0]
-            for r in conn.execute(
-                "SELECT taxid FROM taxon "
-                "WHERE name ILIKE %(sub)s AND name NOT ILIKE %(pre)s "
-                "AND taxid <> ALL(%(spine)s) "
-                "ORDER BY length(name), name LIMIT %(lim)s",
-                params,
-            )
-        ]
-    similar = not taxids and len(query) >= _SIMILAR_MIN_LENGTH
-    if similar:
-        taxids = [
-            r[0]
-            for r in conn.execute(
-                "SELECT taxid FROM taxon WHERE name %% %(q)s AND taxid <> ALL(%(spine)s) "
-                "ORDER BY similarity(name, %(q)s) DESC, length(name), name LIMIT %(lim)s",
-                params,
-            )
-        ]
-    return _search_hits(conn, taxids), similar
-
-
-def _search_hits(conn: psycopg.Connection, taxids: list[int]) -> list[dict]:
-    """Search hits for ``taxids``, in that order, with their context and data flag.
-    The context comes from the path labels, so it costs one primary-key lookup
-    per ancestor of at most ``limit`` hits."""
-    if not taxids:
-        return []
-    with conn.cursor(row_factory=dict_row) as cur:
-        rows = cur.execute(
-            "SELECT t.taxid, t.name, t.rank, "
-            "COALESCE(f.s_ass, 0) + COALESCE(f.s_ann, 0) + COALESCE(f.s_rna, 0) > 0 AS has_data, "
-            "(SELECT a.name FROM taxon a "
-            " WHERE a.taxid = ANY(string_to_array(ltree2text(subpath(t.path, 0, -1)), '.')::int[]) "
-            " AND a.rank = ANY(%(ranks)s) ORDER BY nlevel(a.path) DESC LIMIT 1) AS context "
-            "FROM taxon t LEFT JOIN clade_features f USING (taxid) WHERE t.taxid = ANY(%(ids)s)",
-            {"ids": taxids, "ranks": list(_CONTEXT_RANKS)},
-        ).fetchall()
-    by_taxid = {r["taxid"]: r for r in rows}
-    return [by_taxid[t] for t in taxids]
 
 
 # --- Per-record drill-down (assemblies / annotations) -----------------------
@@ -644,63 +521,67 @@ def _fetch_quality_stats(
     return count, values
 
 
-def _fetch_records(
+# Primary key and the SQL type of each sort column, per record table.
+_RECORD_KEY: dict[str, str] = {"assembly": "assembly_accession", "annotation": "annotation_id"}
+_RECORD_SORT_TYPES: dict[str, str] = {
+    "release_date": "date",
+    "contig_n50": "bigint",
+    "total_sequence_length": "bigint",
+    "busco_complete": "real",
+    "protein_coding_count": "integer",
+}
+_RECORD_SELECT: dict[str, str] = {
+    "assembly": _ASSEMBLY_RECORD_SELECT,
+    "annotation": _ANNOTATION_RECORD_SELECT,
+}
+
+
+def _record_keys(source: str, sort: str, descending: bool) -> list[Key]:
+    """Records sort by ``sort`` with missing values last in either direction, then
+    by primary key. ``sort`` must be one of the source's sort columns."""
+    sort = _identifier(sort, _RECORD_SORTS[_identifier(source, _RECORD_SORTS)])
+    return [
+        Key(f"(r.{sort} IS NULL)", "boolean"),
+        Key(f"r.{sort}", _RECORD_SORT_TYPES[sort], descending),
+        Key(f"r.{_RECORD_KEY[source]}", "text"),
+    ]
+
+
+def list_records(
     conn: psycopg.Connection,
     *,
     source: str,
-    select: str,
-    key_col: str,
-    root_path: str,
+    within_path: str | None,
     sort: str,
+    descending: bool,
     limit: int,
-    offset: int,
-) -> list[dict]:
-    """Paginated per-record rows for a source over the subtree, as dicts keyed by
-    the aliased column names. ``sort`` must be one of the source's sort columns;
-    ``key_col`` is the table's primary key, appended as a unique tiebreaker so
-    limit/offset paging is a stable total order (``sort`` alone ties — many
-    records share a taxid)."""
-    sort = _identifier(sort, _RECORD_SORTS[_identifier(source, _RECORD_SORTS)])
+    cursor: str | None,
+) -> tuple[int, Page[dict]]:
+    """One page of a record table, optionally only the records on a taxon or below
+    it, as dicts keyed by the response-model fields, with the number of matching
+    records. Raises ``InvalidCursor`` for a cursor of another ordering."""
+    keys = _record_keys(source, sort, descending)
+    ordering = f"{source}:{sort}:{'desc' if descending else 'asc'}"
+    after = decode_cursor(cursor, ordering=ordering, keys=keys) if cursor else None
+    where, params = ("WHERE t.path <@ %s::ltree", [within_path]) if within_path else ("", [])
+    from_sql = f"FROM {source} r JOIN taxon t USING (taxid) {where}"
+    total = counts.count(conn, f"SELECT r.{_RECORD_KEY[source]} {from_sql}", params)
+    beyond_sql, beyond_params = beyond(keys, after) if after else ("TRUE", [])
+    backward = after is not None and after.backward
     sql = (
-        f"SELECT {select} FROM {source} a JOIN taxon t USING (taxid) "
-        "WHERE t.path <@ %s::ltree "
-        f"ORDER BY a.{sort} DESC NULLS LAST, a.{key_col} "
-        "LIMIT %s OFFSET %s"
+        f"WITH p AS (SELECT * FROM (SELECT r.{_RECORD_KEY[source]} AS id, "
+        f"{key_columns(keys)} {from_sql}) m WHERE {beyond_sql} "
+        f"ORDER BY {order_by(keys, backward=backward)} LIMIT %s) "
+        f"SELECT {_RECORD_SELECT[source]}, {', '.join(f'p.k{i}' for i in range(len(keys)))} "
+        f"FROM p JOIN {source} a ON a.{_RECORD_KEY[source]} = p.id "
+        "JOIN taxon t ON t.taxid = a.taxid "
+        f"ORDER BY {order_by(keys, backward=backward, table='p')}"
     )
     with conn.cursor(row_factory=dict_row) as cur:
-        return cur.execute(sql, (root_path, limit, offset)).fetchall()
-
-
-def fetch_assembly_records(
-    conn: psycopg.Connection, *, taxid: int, sort: str, limit: int, offset: int
-) -> tuple[tuple[int, str, str], int, dict[str, float | None], list[dict]]:
-    """Assemblies under ``taxid`` (whole subtree) — ``(root_ref, total, stats,
-    records)``. ``stats`` are the live assembly-source distribution stats (median
-    genome size / contig N50). Raises ``TaxonNotFound`` for an unknown taxid."""
-    root_name, root_rank, root_path = fetch_root(conn, taxid)
-    total, stats = _fetch_quality_stats(conn, "assembly", root_path)
-    records = _fetch_records(
-        conn, source="assembly", select=_ASSEMBLY_RECORD_SELECT,
-        key_col="assembly_accession",
-        root_path=root_path, sort=sort, limit=limit, offset=offset,
-    )
-    return (taxid, root_name, root_rank), total, stats, records
-
-
-def fetch_annotation_records(
-    conn: psycopg.Connection, *, taxid: int, sort: str, limit: int, offset: int
-) -> tuple[tuple[int, str, str], int, dict[str, float | None], list[dict]]:
-    """Annotations under ``taxid`` (whole subtree) — ``(root_ref, total, stats,
-    records)``. ``stats`` are the live annotation-source stats (best BUSCO, median
-    protein-coding gene count). Raises ``TaxonNotFound`` for an unknown taxid."""
-    root_name, root_rank, root_path = fetch_root(conn, taxid)
-    total, stats = _fetch_quality_stats(conn, "annotation", root_path)
-    records = _fetch_records(
-        conn, source="annotation", select=_ANNOTATION_RECORD_SELECT,
-        key_col="annotation_id",
-        root_path=root_path, sort=sort, limit=limit, offset=offset,
-    )
-    return (taxid, root_name, root_rank), total, stats, records
+        rows = cur.execute(sql, [*params, *beyond_params, limit + 1]).fetchall()
+    key_names = [f"k{i}" for i in range(len(keys))]
+    keys_of = [[row.pop(k) for k in key_names] for row in rows]
+    return total, page(rows, keys_of, limit=limit, cursor=after, ordering=ordering)
 
 
 def _quality_by_bucket(
@@ -712,7 +593,12 @@ def _quality_by_bucket(
     Ancestors are read from the record taxon's own path labels (they are taxids),
     so buckets are found by primary key instead of an ltree containment scan over
     the whole GiST index. Returns ``{bucket_taxid: {stat_key: value|None}}`` for
-    buckets that carry records.
+    buckets that carry records, one row per bucket, read as a stream.
+
+    The record-to-bucket pairs are built in the database, which spills them to
+    disk past ``work_mem``; ``MATERIALIZED`` keeps the planner from merging them
+    into the outer join, which turns 0.5 s into 12 s for a handful of big clades.
+    Their cost grows with the records, so these stats belong in the build.
     """
     all_keys = [q.key for q in QUALITY_STATS]
     result: dict[int, dict[str, float | None]] = {}
@@ -734,47 +620,23 @@ def _quality_by_bucket(
             f"FROM {source} r JOIN mp ON mp.rec_taxid = r.taxid "
             "GROUP BY mp.bucket_taxid"
         )
-        for row in conn.execute(sql, params).fetchall():
-            entry = result.setdefault(row[0], {k: None for k in all_keys})
-            for k, v in zip(keys, row[1:], strict=True):
-                entry[k] = float(v) if v is not None else None
+        with conn.cursor() as cur:
+            rows = cur.stream(sql, params)
+            for row in rows:
+                entry = result.setdefault(row[0], {k: None for k in all_keys})
+                for k, v in zip(keys, row[1:], strict=True):
+                    entry[k] = float(v) if v is not None else None
     return result
-
-
-def fetch_breakdown_quality(
-    conn: psycopg.Connection,
-    *,
-    root_taxid: int,
-    rank: str,
-    sort: str,
-    filter_keys: list[str],
-    logic: FilterLogic,
-    exclude_empty: bool,
-    limit: int,
-) -> dict[int, dict[str, float | None]]:
-    """Per-bucket QUALITY_STATS for the clades ``fetch_breakdown`` returns with the
-    same arguments, keyed by bucket taxid (buckets without records are absent), so
-    the result never outgrows the breakdown's ``limit``. Raises ``TaxonNotFound``
-    for an unknown root."""
-    order = _breakdown_order(sort)
-    _root_name, _root_rank, root_path = fetch_root(conn, root_taxid)
-    where, params = _breakdown_where(root_path, rank, exclude_empty, filter_keys, logic)
-    taxids = [
-        row[0]
-        for row in conn.execute(
-            "SELECT t.taxid FROM taxon t JOIN clade_features f USING (taxid) "
-            f"WHERE {' AND '.join(where)} {order} LIMIT %s",
-            [*params, limit],
-        ).fetchall()
-    ]
-    return _quality_by_bucket(conn, "b.taxid = ANY(%s)", (taxids,))
 
 
 def fetch_quality_for_taxids(
     conn: psycopg.Connection, taxids: Sequence[int]
 ) -> dict[int, dict[str, float | None]]:
     """QUALITY_STATS over each given clade's subtree, keyed by taxid; every
-    requested taxid is present (all-``None`` when it has no records)."""
+    requested taxid is present (all-``None`` when it has no records). At most
+    ``MAX_PAGE`` taxids, a page of ``/taxons/stats``."""
+    if len(taxids) > MAX_PAGE:
+        raise ValueError(f"at most {MAX_PAGE} taxids, got {len(taxids)}")
     all_keys = [q.key for q in QUALITY_STATS]
     result: dict[int, dict[str, float | None]] = {
         int(t): {k: None for k in all_keys} for t in taxids
@@ -798,7 +660,7 @@ _SET_TAXA_SQL = (
 def fetch_set_taxa(conn: psycopg.Connection, taxids: Collection[int]) -> dict[int, SetTaxon]:
     """The given taxids that are in the taxonomy, with their path and rollup row
     (zero-filled when they have none). Callers bound ``taxids``: at most 40 from
-    ``/aggregate``, and what the groups file names for ``/custom-groups``."""
+    ``/taxons/aggregates``, and what the groups file names for ``/config``."""
     taxa: dict[int, SetTaxon] = {}
     for taxid, name, rank, path, infraspecific, *features in conn.execute(
         _SET_TAXA_SQL, (list(taxids),)

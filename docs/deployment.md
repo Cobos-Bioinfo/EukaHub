@@ -86,9 +86,7 @@ must be an `https://` URL.
 | `FEEDBACK_URL` | the EukaHub Google Form | "Send feedback" in the header menu. |
 | `SOURCE_CODE_URL` | `https://github.com/Cobos-Bioinfo/EukaHub` | The GitHub icon in the header. |
 | `PRIVACY_CONTACT_EMAIL` | `placeholder@crg.eu` | Data protection contact on the Privacy page. Set it to the address of whoever runs the server. |
-| `WIKIPEDIA_SUMMARY_URL` | `https://en.wikipedia.org/api/rest_v1/page/summary/{title}` | Where the "About" summaries come from. Must contain `{title}`. |
-| `WIKIPEDIA_USER_AGENT` | `EukaHub/1.0 (<SOURCE_CODE_URL>)` | Sent with every Wikipedia request. Wikipedia asks for one that says how to reach the operator. |
-| `WIKIPEDIA_TIMEOUT_SECONDS` | `6` | How long a summary lookup may take, 1 to 30 seconds. |
+| `WIKIPEDIA_SUMMARY_URL` | `https://en.wikipedia.org/api/rest_v1/page/summary/{title}` | Where visitors' browsers fetch the "About" summaries from. Must contain `{title}`. |
 
 ### Curated groups
 
@@ -123,10 +121,10 @@ of these rules, the API logs a warning that says why and uses the built-in list.
 ### Custom groups
 
 Groups that are not a single clade, such as fish (vertebrates without tetrapods), go
-in the same file under `custom_groups`. `/api/custom-groups` lists them with the
-clades each is made of, and `/api/aggregate?include=7742&exclude=32523` gives the
-species count, coverage and quality stats of any such set of clades. There are none
-by default, and the web app does not show them yet.
+in the same file under `custom_groups`. `/api/config` lists them with the clades each
+is made of, and `/api/taxons/aggregates?include=7742&exclude=32523` gives the species
+count, coverage and quality stats of any such set of clades. There are none by
+default, and the web app does not show them yet.
 
 ```json
 {
@@ -173,10 +171,11 @@ of it (Traefik, nginx, Caddy, ...). Recommended:
 - Do not expose 8080 to the internet directly: attach `web` to the proxy's Docker
   network and remove its `ports:` mapping, or bind it to `127.0.0.1:8080:80`.
 - Route all paths (`/` and `/api/`) to `web`; it proxies the API itself.
-- Add at the proxy: HSTS, and a Content-Security-Policy. The dashboard shows
-  Wikipedia thumbnails, so `img-src` must allow `https://thumb.wikimedia.org`
-  (and `https://upload.wikimedia.org`). A starting point:
-  `default-src 'self'; img-src 'self' https://thumb.wikimedia.org https://upload.wikimedia.org; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'`.
+- Add at the proxy: HSTS, and a Content-Security-Policy. The dashboard fetches its
+  Wikipedia summary in the browser and shows Wikipedia thumbnails, so `connect-src`
+  must allow the `WIKIPEDIA_SUMMARY_URL` host and `img-src`
+  `https://thumb.wikimedia.org` (and `https://upload.wikimedia.org`). A starting point:
+  `default-src 'self'; connect-src 'self' https://en.wikipedia.org; img-src 'self' https://thumb.wikimedia.org https://upload.wikimedia.org; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'`.
 - Rate limiting is built in: `web` allows each client about 10 API requests per
   second. Bursts of up to 20 pass at once, larger ones are slowed down, and past 60
   they are refused with 429. The client address comes from `X-Forwarded-For` when
@@ -202,8 +201,8 @@ It logs every decision:
 - `dataset is N days old and no newer release exists`: the monthly rebuild has
   stopped producing Releases; check the Actions tab of `EUKAHUB_REPO`.
 
-`GET /api/meta` returns the build date of the data being served (also shown in the
-site footer).
+`GET /api/config` returns the build date of the data being served under `dataset`
+(also shown in the site footer).
 
 Useful commands (run from the repository root; `C` is shorthand):
 

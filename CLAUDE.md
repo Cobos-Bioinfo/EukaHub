@@ -21,7 +21,7 @@ changes. Put personal or machine-specific notes in a gitignored `CLAUDE.local.md
 |---|---|
 | `core/src/eukahub_core/metrics.py` | `METRICS`, `QUALITY_STATS`, `CladeMetadata`, shared by pipeline and API and exported to the web app via OpenAPI. The schema SQL, `rollup._subtree_totals` and `validate._COLS` are kept in sync by hand. |
 | `pipeline/src/eukahub_pipeline/build.py` | taxdump → Eukaryota trim → fetch (parquet cache in `data/sources/`) → `drop_duplicate_assemblies` → `prune_placeholders` → rollup (Polars) → load → `check_invariants` → `dataset_meta` last |
-| `api/src/eukahub_api/` | `main.py` routes and middleware; `queries.py` all SQL (`_quality_by_bucket` is the per-bucket stats helper); `schemas.py`; `db.py` connection pool; `settings.py` deployment settings (env + `infra/config/groups.json`, served by `/site-config`); `clade_sets.py` sets of clades (include minus exclude) and the custom groups built from them |
+| `api/src/eukahub_api/` | `main.py` routes and middleware; `queries.py` all SQL (`_quality_by_bucket` is the per-bucket stats helper); `pagination.py` keyset cursors for every list; `totals.py` list totals cached per dataset build; `schemas.py`; `db.py` connection pool; `settings.py` deployment settings (env + `infra/config/groups.json`, served by `/config`); `clade_sets.py` sets of clades (include minus exclude) and the custom groups built from them |
 | `web/src/` | `api/queries.ts` (all fetches), generated `api/openapi.json` + `schema.ts`; `hooks/useAsync` (results keyed by deps, `reload()`); `hooks/useTree` (visible-node cap); colours are CSS variables in `index.css` |
 | `infra/` | `docker-compose.yml` (dev DB), `docker-compose.prod.yml` (db, api, web, refresher), `postgres/init/001_schema.sql` (schema of record), `lowmem-test/` (1 GB / one-core harness) |
 | `scripts/` | `restore_snapshot.py` (stage, verify, rename swap, `--rollback`), `auto_refresh.py`, `generate_ci_seed.py` + `load_ci_db.py` (CI dataset) |
@@ -56,6 +56,18 @@ changes. Put personal or machine-specific notes in a gitignored `CLAUDE.local.md
   renames databases (the extensions live in `public`).
 - Tests pass on both the full dataset and the CI slice (`api/tests/seed.sql`): assert
   relationships, never fixed counts.
+
+## Memory and scale
+- The project is in early development and there is no production data to protect, so every
+  change must be fast, scalable and efficient as written, not only fine at today's size.
+- Production has plenty of disk and very little RAM: prefer disk over RAM (stream, spill,
+  precompute into tables), and keep every process's memory bounded to a few hundred MB
+  whatever the data size.
+- For large tables, read rollups computed at build time rather than aggregating per request.
+- No unbounded output: cap every list and every response (at most 100 MB, with a clear
+  error), and stream large ones.
+- Every new query or endpoint gets a case in `api/tests/test_memory.py` (`uv run pytest -m
+  ram`, fails over 256 MB); check memory use whenever a query changes.
 
 ## Performance rules
 - API connections have a 15 s statement timeout, a 4-connection pool and

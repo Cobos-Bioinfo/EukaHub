@@ -15,7 +15,7 @@ echo "== Testing $REPO @ $(git -C "$REPO" rev-parse --short HEAD 2>/dev/null)$(g
 
 echo "== Waiting for the refresher to install the dataset (max 45 min)..."
 start=$(date +%s)
-until curl -fsS -o /dev/null "$API/clade/2759/summary" 2>/dev/null; do
+until curl -fsS -o /dev/null "$API/taxons/2759" 2>/dev/null; do
   (( $(date +%s) - start > 2700 )) && { echo "Timed out"; "${C[@]}" logs --tail 40 refresher; exit 1; }
   sleep 15
 done
@@ -26,31 +26,33 @@ hit() {  # label, url  -> status, size, seconds (never aborts the script)
 }
 
 echo "== What the UI requests (expect 200, ideally well under 15s each)"
-hit "overview (landing)"                  "$API/overview"
-hit "gaps teaser (landing)"               "$API/gaps?limit=5&include_quality=false"
-hit "summary Eukaryota (dashboard)"       "$API/clade/2759/summary"
-hit "assemblies Eukaryota (records)"      "$API/taxon/2759/assemblies?limit=50"
-hit "annotations Eukaryota (records)"     "$API/taxon/2759/annotations?limit=50"
-hit "breakdown Eukaryota phylum (map)"    "$API/clade/2759/breakdown?rank=phylum&limit=250&exclude_empty=false"
-hit "quality Eukaryota phylum (map)"      "$API/clade/2759/breakdown/quality?rank=phylum"
-hit "quality Metazoa phylum (map)"        "$API/clade/33208/breakdown/quality?rank=phylum"
-hit "quality Insecta order (map)"         "$API/clade/50557/breakdown/quality?rank=order"
-hit "children Eukaryota (tree)"           "$API/taxon/2759/children?limit=100"
-hit "gaps order (gaps page)"              "$API/gaps?rank=order&limit=25"
-hit "compare 6 groups"                    "$API/compare?taxids=40674,8782,50557,4751,33090,7898"
-hit "export Eukaryota phylum (download)"  "$API/clade/2759/export.tsv?rank=phylum"
+hit "overview (landing)"                  "$API/taxons?taxids=2759,40674,8782,7898,50557,4751,3398&limit=7"
+hit "gaps teaser (landing)"               "$API/taxons?within=2759&rank=order&sort_by=gap_ass&limit=5"
+hit "summary Eukaryota (dashboard)"       "$API/taxons/2759/ancestors"
+hit "stats Eukaryota (dashboard)"         "$API/taxons/2759/stats"
+hit "assemblies Eukaryota (records)"      "$API/assemblies?within=2759&limit=50"
+hit "annotations Eukaryota (records)"     "$API/annotations?within=2759&limit=50"
+hit "breakdown Eukaryota phylum (map)"    "$API/taxons?within=2759&rank=phylum&limit=250"
+hit "quality Eukaryota phylum (map)"      "$API/taxons/stats?within=2759&rank=phylum&limit=250"
+hit "quality Metazoa phylum (map)"        "$API/taxons/stats?within=33208&rank=phylum&limit=250"
+hit "quality Insecta order (map)"         "$API/taxons/stats?within=50557&rank=order&limit=250"
+hit "children Eukaryota (tree)"           "$API/taxons?parent=2759&limit=100"
+hit "gaps order (gaps page)"              "$API/taxons/stats?within=2759&rank=order&sort_by=gap_ass&limit=25"
+hit "compare 6 groups"                    "$API/taxons/stats?taxids=40674,8782,50557,4751,33090,7898&limit=6"
+hit "report Eukaryota phylum (download)"  "$API/taxons/report?within=2759&rank=phylum"
 
 echo "== Heaviest requests (expect 200 within seconds; a clean 504 after ~15s is acceptable, a hang or a crash is not)"
-hit "quality Eukaryota genus"             "$API/clade/2759/breakdown/quality?rank=genus"
-hit "export every eukaryote species"      "$API/clade/2759/export.tsv?rank=species"
+hit "quality Eukaryota genus"             "$API/taxons/stats?within=2759&rank=genus&limit=1000"
+hit "every eukaryote species, a page"     "$API/taxons?within=2759&rank=species&limit=1000"
+hit "report every eukaryote species"      "$API/taxons/report?within=2759&rank=species"
 
 echo "== Six different requests at once (expect all 200, slower than alone)"
-hit "quality Metazoa genus"   "$API/clade/33208/breakdown/quality?rank=genus" &
-hit "quality Fungi genus"     "$API/clade/4751/breakdown/quality?rank=genus" &
-hit "gaps family"             "$API/gaps?rank=family&limit=200" &
-hit "export Insecta species"  "$API/clade/50557/export.tsv?rank=species" &
-hit "summary Mammalia"        "$API/clade/40674/summary" &
-hit "children Metazoa"        "$API/taxon/33208/children?limit=100" &
+hit "quality Metazoa genus"   "$API/taxons/stats?within=33208&rank=genus&limit=1000" &
+hit "quality Fungi genus"     "$API/taxons/stats?within=4751&rank=genus&limit=1000" &
+hit "gaps family"             "$API/taxons/stats?within=2759&rank=family&sort_by=gap_ass&limit=200" &
+hit "report Insecta species"  "$API/taxons/report?within=50557&rank=species" &
+hit "stats Mammalia"          "$API/taxons/40674/stats" &
+hit "children Metazoa"        "$API/taxons?parent=33208&limit=100" &
 wait
 
 echo "== Orphaned queries: anything still running >20s after its request ended (expect none)"

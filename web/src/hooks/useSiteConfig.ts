@@ -1,32 +1,19 @@
 import { useEffect, useMemo, useState } from "react";
 
-import { getSiteConfig } from "../api/queries";
-import type { SiteConfig } from "../api/types";
+import { getConfig } from "../api/queries";
+import type { AppConfig } from "../api/types";
 
-// Fetched once per page load and shared by every component that needs it.
-let cached: SiteConfig | undefined;
-let pending: Promise<SiteConfig> | undefined;
-
-function loadSiteConfig(): Promise<SiteConfig> {
-  pending ??= getSiteConfig().then(
-    (config) => (cached = config),
-    (err: unknown) => {
-      pending = undefined; // the next component to mount retries
-      throw err;
-    },
-  );
-  return pending;
-}
+let cached: AppConfig | undefined;
 
 /** The deployment's links and curated groups, or undefined while loading or
  *  after a failed request. Callers render without it rather than waiting. */
-export function useSiteConfig(): SiteConfig | undefined {
+export function useSiteConfig(): AppConfig | undefined {
   const [config, setConfig] = useState(cached);
   useEffect(() => {
     if (config) return;
     let active = true;
-    loadSiteConfig().then(
-      (c) => active && setConfig(c),
+    getConfig().then(
+      (c) => active && setConfig((cached = c)),
       () => {},
     );
     return () => {

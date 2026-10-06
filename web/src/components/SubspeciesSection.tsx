@@ -26,7 +26,7 @@ export default function SubspeciesSection({
   direct?: Record<string, number> | null;
   metrics: MetricConfig[];
 }) {
-  const children = useAsync(() => getChildren(taxid, { sort: "s_ass", limit: MAX }), [taxid]);
+  const children = useAsync(() => getChildren(taxid, { sort_by: "s_ass", limit: MAX }), [taxid]);
 
   const data = children.data;
   if (children.error) {
@@ -85,7 +85,7 @@ export default function SubspeciesSection({
                 ))}
               </tr>
             )}
-            {data.items.map((it) => (
+            {data.results.map((it) => (
               <tr key={it.taxid}>
                 <td className="bd-name">
                   <Link to={`/clade/${it.taxid}`}>{it.name}</Link>
@@ -104,9 +104,9 @@ export default function SubspeciesSection({
         </table>
       </div>
 
-      {data.total > data.items.length && (
+      {data.total > data.results.length && (
         <p className="bd__sub" style={{ marginTop: "0.6rem" }}>
-          Showing the {data.items.length} with the most data. See them all in the{" "}
+          Showing the {data.results.length} with the most data. See them all in the{" "}
           <Link to={`/tree/${taxid}`}>Tree of Life</Link>.
         </p>
       )}
