@@ -14,8 +14,8 @@ def test_summary_is_cacheable(client):
     assert "public" in cc and "max-age=" in cc
 
 
-def test_breakdown_is_cacheable(client):
-    r = client.get("/clade/2759/breakdown", params={"rank": "phylum", "limit": 1})
+def test_list_is_cacheable(client):
+    r = client.get("/taxons", params={"within": 2759, "rank": "phylum", "limit": 1})
     assert r.status_code == 200
     assert "public" in r.headers.get("cache-control", "")
 
@@ -64,7 +64,8 @@ def test_stale_if_none_match_returns_full_body(client):
 
 def test_etag_matches_across_identical_requests(client):
     """The ETag is a stable content fingerprint: identical requests share it."""
-    assert client.get("/gaps").headers["etag"] == client.get("/gaps").headers["etag"]
+    url = "/taxons?parent=2759"
+    assert client.get(url).headers["etag"] == client.get(url).headers["etag"]
 
 
 def test_streamed_export_has_no_etag(client):

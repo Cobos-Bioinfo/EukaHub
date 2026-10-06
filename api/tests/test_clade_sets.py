@@ -289,8 +289,8 @@ def test_aggregate_counts_are_clade_differences(client):
 def test_aggregate_of_one_clade_matches_the_clade(client):
     body = _aggregate(client, [40674])
     assert _counts(body) == _counts(client.get("/taxons/40674").json())
-    compared = client.get("/compare", params={"taxids": "40674"}).json()["groups"][0]
-    assert _stats(body) == _stats(compared)
+    taxon = client.get("/taxons/40674").json()
+    assert body["quality"] == taxon["stats"]
 
 
 def test_aggregate_can_include_inside_an_excluded_clade(client):

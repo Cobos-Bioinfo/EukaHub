@@ -1,8 +1,8 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 import { useNavigate } from "react-router";
 
-import { getTaxon, searchTaxa } from "../api/queries";
-import type { SearchHit, TaxonRef } from "../api/types";
+import { getTaxon, searchTaxa, type SearchHit } from "../api/queries";
+import type { TaxonRef } from "../api/types";
 import { EUKARYOTA_TAXID } from "../lib/taxonomy";
 
 /** A result row: a search hit, or the taxon a typed TaxID points to (which has

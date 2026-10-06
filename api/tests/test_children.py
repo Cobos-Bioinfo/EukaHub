@@ -1,8 +1,7 @@
-"""Tests for GET /taxon/{taxid}/children — the tree lazy-expand endpoint.
+"""A taxon's children: GET /taxons?parent=..., the tree's lazy expansion.
 
-Exercises the live Phase-1 DB (via the shared `client` fixture), so the taxonomy
-facts asserted here (Eukaryota's children, Homo sapiens' childless subspecies)
-are stable NCBI taxonomy, matching the style of test_lineage.py.
+The taxonomy facts asserted here (Eukaryota's children, Homo sapiens' childless
+subspecies) are stable NCBI taxonomy.
 """
 
 from __future__ import annotations
@@ -12,75 +11,69 @@ import pytest
 from eukahub_api.db import database_url
 
 
+def _children(client, taxid: int, **params) -> dict:
+    response = client.get("/taxons", params={"parent": taxid, **params})
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
 def test_children_root_sorted_by_species(client):
-    """Eukaryota's direct children come back sorted by species count desc, each
-    carrying the tree fields (resources + has_children)."""
-    d = client.get("/taxon/2759/children", params={"limit": 5}).json()
-    assert d["parent"]["taxid"] == 2759
-    assert d["parent"]["name"] == "Eukaryota"
+    d = _children(client, 2759, limit=5)
     assert d["total"] >= 20  # ~21 direct children of Eukaryota
-    assert d["returned"] == 5
-
-    counts = [i["n_rows"] for i in d["items"]]
-    assert counts == sorted(counts, reverse=True)  # non-increasing
-    assert d["items"][0]["name"] == "Opisthokonta"  # most species-rich child
-
-    top = d["items"][0]
+    assert len(d["results"]) == 5
+    counts = [i["n_rows"] for i in d["results"]]
+    assert counts == sorted(counts, reverse=True)
+    top = d["results"][0]
+    assert top["name"] == "Opisthokonta"  # most species-rich child
     assert top["has_children"] is True
     assert set(top["resources"]) == {"ass", "ann", "rna", "lng"}
 
 
-def test_children_pagination(client):
-    """total is the pre-paging count; limit/offset return disjoint slices."""
-    page1 = client.get("/taxon/2759/children", params={"limit": 5, "offset": 0}).json()
-    page2 = client.get("/taxon/2759/children", params={"limit": 5, "offset": 5}).json()
-
-    assert page1["total"] == page2["total"]  # stable across pages
-    ids1 = {i["taxid"] for i in page1["items"]}
-    ids2 = {i["taxid"] for i in page2["items"]}
-    assert len(ids1) == 5 and len(ids2) == 5
-    assert ids1.isdisjoint(ids2)
+def test_children_pages_cover_every_child_once(client):
+    total = _children(client, 2759, limit=1)["total"]
+    seen, cursor = [], None
+    while True:
+        page = _children(client, 2759, limit=5, **({"cursor": cursor} if cursor else {}))
+        seen += [i["taxid"] for i in page["results"]]
+        cursor = page["next"]
+        if not cursor:
+            break
+    assert len(seen) == len(set(seen)) == total
 
 
 def test_children_sort_param_changes_order(client):
-    """A different sort keeps the same child set but reorders it by that metric."""
-    by_species = client.get("/taxon/2759/children", params={"limit": 25}).json()
-    by_ann = client.get(
-        "/taxon/2759/children", params={"limit": 25, "sort": "c_ann"}
-    ).json()
-
-    assert {i["taxid"] for i in by_species["items"]} == {
-        i["taxid"] for i in by_ann["items"]
-    }
-    ann_counts = [i["resources"]["ann"]["covered"] for i in by_ann["items"]]
-    assert ann_counts == sorted(ann_counts, reverse=True)
+    by_species = _children(client, 2759, limit=25)
+    by_ann = _children(client, 2759, limit=25, sort_by="c_ann")
+    assert {i["taxid"] for i in by_species["results"]} == {i["taxid"] for i in by_ann["results"]}
+    ann = [i["resources"]["ann"]["covered"] for i in by_ann["results"]]
+    assert ann == sorted(ann, reverse=True)
+    by_name = _children(client, 2759, limit=25, sort_by="name", sort_order="asc")
+    names = [i["name"] for i in by_name["results"]]
+    with psycopg.connect(database_url()) as conn:  # names sort in the database's collation
+        (in_order,) = conn.execute(
+            "SELECT array_agg(n ORDER BY n) FROM unnest(%s::text[]) n", (names,)
+        ).fetchone()
+    assert names == in_order
 
 
 def test_children_leaf_returns_empty(client):
-    """A childless taxon returns an empty list (not a 404), and its parent's
-    has_children flag agrees. Homo sapiens' subspecies are the childless case."""
-    kids = client.get("/taxon/9606/children").json()["items"]
+    """A childless taxon has an empty list, not a 404; its has_children agrees."""
+    kids = _children(client, 9606)["results"]
     leaves = [k for k in kids if not k["has_children"]]
     assert leaves, "expected a childless child of Homo sapiens"
-
-    res = client.get(f"/taxon/{leaves[0]['taxid']}/children").json()
-    assert res["total"] == 0
-    assert res["returned"] == 0
-    assert res["items"] == []
+    res = _children(client, leaves[0]["taxid"])
+    assert res["total"] == 0 and res["results"] == [] and res["next"] is None
 
 
 def test_children_infraspecific_flag(client):
-    """A species' children are below-species (is_infraspecific True); a genus'
-    children are species (False). One probe on the parent settles the page."""
-    sub = client.get("/taxon/9606/children").json()["items"]  # Homo sapiens' subspecies
+    """A species' children are below-species; a genus' children are species."""
+    sub = _children(client, 9606)["results"]  # Homo sapiens' subspecies
     assert sub and all(i["is_infraspecific"] for i in sub)
-
-    genus_kids = client.get("/taxon/9605/children").json()["items"]  # Homo (genus) -> species
+    genus_kids = _children(client, 9605)["results"]  # Homo (genus) -> species
     assert genus_kids and not any(i["is_infraspecific"] for i in genus_kids)
 
 
 def test_children_of_informal_species_are_infraspecific(client):
-    """Taxa below an informal species are single units too."""
     with psycopg.connect(database_url()) as conn:
         row = conn.execute(
             "SELECT p.taxid FROM taxon p WHERE p.rank = 'informal species' "
@@ -88,10 +81,9 @@ def test_children_of_informal_species_are_infraspecific(client):
         ).fetchone()
     if row is None:
         pytest.skip("no informal species with finer taxa in this dataset")
-    items = client.get(f"/taxon/{row[0]}/children").json()["items"]
+    items = _children(client, row[0])["results"]
     assert items and all(i["is_infraspecific"] for i in items)
 
 
-def test_children_not_found(client):
-    """An unknown taxid is a 404, distinct from 'present but childless'."""
-    assert client.get("/taxon/999999999/children").status_code == 404
+def test_children_of_an_unknown_taxon_is_a_404(client):
+    assert client.get("/taxons", params={"parent": 999999999}).status_code == 404

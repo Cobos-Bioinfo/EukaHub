@@ -1,6 +1,7 @@
 import { useState } from "react";
 
-import type { GapItem, QualityStatConfig } from "../api/types";
+import type { GapItem } from "../api/queries";
+import type { QualityStatConfig } from "../api/types";
 import { useCladeLabel } from "../hooks/useSiteConfig";
 import { fmt, fmtCompact, fmtPct, fmtQuality } from "../lib/format";
 

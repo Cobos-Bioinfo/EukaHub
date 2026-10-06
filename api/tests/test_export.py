@@ -38,16 +38,16 @@ def test_export_headers_and_schema(client):
 def test_export_full_matches_breakdown_total(client):
     # Default export = exclude_empty False → every phylum-rank taxon.
     _, rows = _parse(client.get("/clade/2759/export.tsv?rank=phylum").text)
-    bd = client.get("/clade/2759/breakdown?rank=phylum&exclude_empty=false&limit=1").json()
-    assert len(rows) == bd["total_matches"]
+    listed = client.get("/taxons?within=2759&rank=phylum&limit=1").json()
+    assert len(rows) == listed["total"]
 
 
 def test_export_exclude_empty_matches_filtered_total(client):
     _, rows = _parse(
         client.get("/clade/2759/export.tsv?rank=phylum&exclude_empty=true").text
     )
-    bd = client.get("/clade/2759/breakdown?rank=phylum&exclude_empty=true&limit=1").json()
-    assert len(rows) == bd["total_matches"]
+    listed = client.get("/taxons?within=2759&rank=phylum&exclude_empty=true&limit=1").json()
+    assert len(rows) == listed["total"]
 
 
 def test_export_bad_root_404(client):

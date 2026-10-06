@@ -2,28 +2,26 @@
 // { data, error, response } into the response value, throwing a readable Error
 // on failure so the useAsync hook can surface it.
 import { api } from "./client";
+import { EUKARYOTA_TAXID } from "../lib/taxonomy";
 import type {
   AnnotationPage,
   AnnotationSort,
   AppConfig,
   AssemblyPage,
   AssemblySort,
-  Breakdown,
-  BucketQuality,
-  Compare,
   DatasetMeta,
   FilterLogic,
-  Gaps,
   MetricConfig,
   MetricFilter,
-  Overview,
   QualityStatConfig,
-  SearchHit,
+  QualityStatValue,
   SortColumn,
   SortOrder,
   TargetRank,
   Taxon,
-  TaxonChildren,
+  TaxonItem,
+  TaxonPage,
+  TaxonSort,
 } from "./types";
 
 function extractDetail(error: unknown): string | undefined {
@@ -82,51 +80,189 @@ export const getQualityConfig = async (): Promise<QualityStatConfig[]> =>
 // null before the first build has stamped the DB.
 export const getMeta = async (): Promise<DatasetMeta> => (await getConfig()).dataset;
 
-// Landing-page "at a glance": global totals + a few featured groups, one request.
-export const getOverview = async (): Promise<Overview> => unwrap(await api.GET("/overview"));
-
-// Compare several groups side by side (2-6). Unknown taxids are dropped server-side.
-export const getCompare = async (taxids: number[]): Promise<Compare> =>
-  unwrap(await api.GET("/compare", { params: { query: { taxids: taxids.join(",") } } }));
-
-// The biggest under-sequenced groups ("Where are the gaps?"): descendant clades
-// of `root` at `rank`, ranked by species missing `resource` data (largest first).
-// Every param carries the API default when omitted (Eukaryota / order / ass / 25).
-export interface GapsParams {
-  root?: number;
-  rank?: TargetRank;
-  resource?: MetricFilter;
-  limit?: number;
-  // Attach per-clade quality stats (BUSCO / genes / genome size / N50). Off for
-  // lightweight callers (the landing teaser) that only show the gap bars.
-  include_quality?: boolean;
-}
-
-export const getGaps = async (params: GapsParams = {}): Promise<Gaps> =>
-  unwrap(await api.GET("/gaps", { params: { query: params } }));
-
 // One taxon: its lineage (root first, the taxon last), counts and the quality
 // stats of every record under it.
 export const getTaxon = async (taxid: number): Promise<Taxon> =>
   unwrap(await api.GET("/taxons/{taxid}", { params: { path: { taxid } } }));
 
-// Direct children of a taxon, for lazy-expanding the interactive tree. Sorted
-// by species count by default; `offset` pages through a big node's children.
-export interface ChildrenParams {
-  sort?: SortColumn;
+// Taxa with their counts: a name search (q, or close spellings with fuzzy), a
+// taxon's children (parent), the taxa of a rank under a taxon (within + rank) or
+// chosen taxids. Pass a page's `next` as `cursor` for the page after it.
+export interface TaxaParams {
+  q?: string;
+  fuzzy?: boolean;
+  parent?: number;
+  within?: number;
+  rank?: TargetRank;
+  taxids?: number[];
+  filter?: MetricFilter[];
+  logic?: FilterLogic;
+  exclude_empty?: boolean;
+  sort_by?: TaxonSort;
+  sort_order?: SortOrder;
+  stats?: boolean; // add each taxon's quality stats (slower)
   limit?: number;
-  offset?: number;
+  cursor?: string;
 }
 
-export const getChildren = async (
-  taxid: number,
-  params: ChildrenParams = {},
-): Promise<TaxonChildren> =>
+export const getTaxa = async ({ taxids, ...params }: TaxaParams): Promise<TaxonPage> =>
   unwrap(
-    await api.GET("/taxon/{taxid}/children", {
-      params: { path: { taxid }, query: params },
-    }),
+    await api.GET("/taxons", { params: { query: { ...params, taxids: taxids?.join(",") } } }),
   );
+
+// Direct children of a taxon, for lazy-expanding the tree, biggest first.
+export const getChildren = (
+  taxid: number,
+  params: Pick<TaxaParams, "sort_by" | "limit" | "cursor"> = {},
+): Promise<TaxonPage> => getTaxa({ parent: taxid, ...params });
+
+/** A name-search result for the picker. */
+export type SearchHit = TaxonItem & { has_data: boolean; similar: boolean };
+
+// Names containing the query; when none does, close spellings (`similar`).
+export async function searchTaxa(q: string, limit = 10): Promise<SearchHit[]> {
+  let similar = false;
+  let { results } = await getTaxa({ q, limit });
+  if (results.length === 0 && q.length >= 4) {
+    similar = true;
+    ({ results } = await getTaxa({ q, fuzzy: true, limit }));
+  }
+  return results.map((t) => ({
+    ...t,
+    has_data: Object.values(t.resources).some((r) => r.total > 0),
+    similar,
+  }));
+}
+
+/** Landing-page "at a glance": Eukaryota's totals and the featured groups. */
+export interface Overview {
+  totals: {
+    species: number;
+    assemblies: number;
+    annotations: number;
+    rna_seq: number;
+    long_read: number;
+    reference_genomes: number;
+  };
+  featured: FeaturedClade[];
+}
+
+export interface FeaturedClade {
+  taxid: number;
+  name: string;
+  species: number;
+  assemblies: number;
+  assembly_percent: number;
+  annotation_percent: number;
+}
+
+// One request for Eukaryota and the deployment's featured groups (in config order).
+export async function getOverview(): Promise<Overview> {
+  const featured = (await getConfig()).groups.filter((g) => g.featured).map((g) => g.taxid);
+  const taxids = [EUKARYOTA_TAXID, ...featured];
+  const { results } = await getTaxa({ taxids, limit: taxids.length });
+  const byId = new Map(results.map((t) => [t.taxid, t]));
+  const root = byId.get(EUKARYOTA_TAXID);
+  if (!root) throw new Error("Eukaryota is missing from the dataset");
+  return {
+    totals: {
+      species: root.n_rows,
+      assemblies: root.resources.ass.total,
+      annotations: root.resources.ann.total,
+      rna_seq: root.resources.rna.total,
+      long_read: root.resources.lng.total,
+      reference_genomes: root.composition.reference,
+    },
+    featured: featured.flatMap((taxid) => {
+      const t = byId.get(taxid);
+      return t
+        ? [
+            {
+              taxid,
+              name: t.name,
+              species: t.n_rows,
+              assemblies: t.resources.ass.total,
+              assembly_percent: t.resources.ass.percent,
+              annotation_percent: t.resources.ann.percent,
+            },
+          ]
+        : [];
+    }),
+  };
+}
+
+/** One group in the compare view: its counts and quality stats. */
+export type CompareGroup = TaxonItem & { quality: QualityStatValue[] };
+
+// Several groups side by side, in the order given; unknown taxids are dropped.
+export async function getCompare(taxids: number[]): Promise<{ groups: CompareGroup[] }> {
+  if (taxids.length === 0) return { groups: [] };
+  const { results } = await getTaxa({ taxids, stats: true, limit: taxids.length });
+  const byId = new Map(results.map((t) => [t.taxid, t]));
+  return {
+    groups: taxids.flatMap((id) => {
+      const t = byId.get(id);
+      return t ? [{ ...t, quality: t.stats ?? [] }] : [];
+    }),
+  };
+}
+
+/** One group on the gaps leaderboard: its species still missing a resource. */
+export interface GapItem {
+  taxid: number;
+  name: string;
+  rank: string;
+  n_rows: number;
+  covered: number; // species with the resource
+  percent: number; // covered / n_rows * 100
+  gap: number; // n_rows - covered
+  stats: QualityStatValue[];
+}
+
+// The biggest under-sequenced groups ("Where are the gaps?"): the taxa of `rank`
+// under `root` with the most species missing `resource` data, largest first.
+export interface GapsParams {
+  root?: number;
+  rank?: TargetRank;
+  resource?: MetricFilter;
+  limit?: number;
+  include_quality?: boolean; // per-group quality stats; off for the landing teaser
+}
+
+export async function getGaps({
+  root = EUKARYOTA_TAXID,
+  rank = "order",
+  resource = "ass",
+  limit = 25,
+  include_quality = true,
+}: GapsParams = {}): Promise<{ root: TaxonItem; total_matches: number; items: GapItem[] }> {
+  const [roots, page] = await Promise.all([
+    getTaxa({ taxids: [root], limit: 1 }),
+    getTaxa({
+      within: root,
+      rank,
+      sort_by: `gap_${resource}` as TaxonSort,
+      stats: include_quality,
+      limit,
+    }),
+  ]);
+  const items = page.results
+    .map((t) => {
+      const r = t.resources[resource];
+      return {
+        taxid: t.taxid,
+        name: t.name,
+        rank: t.rank,
+        n_rows: t.n_rows,
+        covered: r.covered,
+        percent: r.percent,
+        gap: t.n_rows - r.covered,
+        stats: t.stats ?? [],
+      };
+    })
+    .filter((it) => it.gap > 0);
+  return { root: roots.results[0], total_matches: page.total, items };
+}
 
 /** A Wikipedia summary for a taxon's "About" card. */
 export interface TaxonAbout {
@@ -167,9 +303,6 @@ export async function getAbout(name: string | undefined): Promise<TaxonAbout | n
   };
 }
 
-export const searchTaxa = async (q: string, limit = 10): Promise<SearchHit[]> =>
-  unwrap(await api.GET("/search", { params: { query: { q, limit } } }));
-
 // Record lists: assemblies or annotations on a taxon or below it, one page at a
 // time. Pass a page's `next` as `cursor` for the page after it.
 export interface RecordParams<Sort> {
@@ -191,8 +324,8 @@ export const getAnnotations = async (
 ): Promise<AnnotationPage> =>
   unwrap(await api.GET("/annotations", { params: { query: { within, ...params } } }));
 
-// The breakdown (Q2) controls, matching the API's query params. `rank` is
-// required; the rest carry the API's own defaults when omitted.
+// The breakdown (Q2) controls. `rank` is required; the rest carry the API's own
+// defaults when omitted.
 export interface BreakdownParams {
   rank: TargetRank;
   sort?: SortColumn;
@@ -202,28 +335,44 @@ export interface BreakdownParams {
   limit?: number;
 }
 
-export const getBreakdown = async (
-  taxid: number,
-  params: BreakdownParams,
-): Promise<Breakdown> =>
-  unwrap(
-    await api.GET("/clade/{taxid}/breakdown", {
-      params: { path: { taxid }, query: params },
-    }),
-  );
+export interface Breakdown {
+  total_matches: number; // taxa matching, before `limit`
+  returned: number;
+  items: TaxonItem[];
+}
 
-// Per-bucket quality stats (BUSCO / median genes / genome size / N50) for the
-// clades a breakdown with the same params returns — the data map's quality
-// lenses. Merged into the breakdown by taxid.
-export const getBreakdownQuality = async (
+const breakdownQuery = (taxid: number, p: BreakdownParams): TaxaParams => ({
+  within: taxid,
+  rank: p.rank,
+  sort_by: p.sort,
+  filter: p.filter,
+  logic: p.logic,
+  exclude_empty: p.exclude_empty,
+  limit: p.limit,
+});
+
+export async function getBreakdown(taxid: number, params: BreakdownParams): Promise<Breakdown> {
+  const page = await getTaxa(breakdownQuery(taxid, params));
+  return { total_matches: page.total, returned: page.results.length, items: page.results };
+}
+
+export interface BucketQuality {
+  taxid: number;
+  stats: QualityStatValue[];
+}
+
+// Per-tile quality stats (BUSCO / median genes / genome size / N50) for the taxa
+// a breakdown with the same params returns: the data map's quality lenses,
+// merged into the breakdown by taxid. Taxa without records are left out.
+export async function getBreakdownQuality(
   taxid: number,
   params: BreakdownParams,
-): Promise<BucketQuality[]> =>
-  unwrap(
-    await api.GET("/clade/{taxid}/breakdown/quality", {
-      params: { path: { taxid }, query: params },
-    }),
-  );
+): Promise<BucketQuality[]> {
+  const page = await getTaxa({ ...breakdownQuery(taxid, params), stats: true });
+  return page.results
+    .filter((t) => t.stats?.some((s) => s.value !== null))
+    .map((t) => ({ taxid: t.taxid, stats: t.stats ?? [] }));
+}
 
 // Direct URL for the streamed full-breakdown TSV (a browser download, not a
 // fetch). Mirrors the export endpoint's params; `filter` repeats per value,

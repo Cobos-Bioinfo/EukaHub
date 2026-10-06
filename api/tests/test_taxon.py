@@ -85,7 +85,7 @@ def _first(sql: str) -> tuple | None:
 
 
 def _children_totals(client, taxid: int) -> dict[str, int]:
-    items = client.get(f"/taxon/{taxid}/children", params={"limit": 500}).json()["items"]
+    items = client.get("/taxons", params={"parent": taxid, "limit": 1000}).json()["results"]
     return {k: sum(i["resources"][k]["total"] for i in items) for k in ("ass", "ann", "rna", "lng")}
 
 
@@ -210,7 +210,7 @@ def test_taxon_quality_stats(client):
 
 def test_taxon_has_children(client):
     assert client.get("/taxons/9605").json()["has_children"] is True  # Homo -> species
-    kids = client.get("/taxon/9606/children").json()["items"]
+    kids = client.get("/taxons", params={"parent": 9606}).json()["results"]
     leaf = next(k for k in kids if not k["has_children"])
     assert client.get(f"/taxons/{leaf['taxid']}").json()["has_children"] is False
 

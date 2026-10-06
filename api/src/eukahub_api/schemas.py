@@ -156,39 +156,6 @@ class CladeSummary(BaseModel):
         )
 
 
-class OverviewTotals(BaseModel):
-    """Global "at a glance" totals across the eukaryotic tree (Eukaryota's
-    rollup) — the live headline numbers on the landing page."""
-
-    species: int  # eukaryotic species surveyed
-    assemblies: int  # genome assemblies
-    annotations: int  # functional annotations
-    rna_seq: int  # RNA-Seq runs (any platform)
-    long_read: int  # long-read RNA-Seq runs
-    reference_genomes: int  # assemblies flagged reference/representative
-
-
-class FeaturedClade(BaseModel):
-    """One featured group on the landing page: its species count and how much of
-    it is assembled/annotated. The frontend supplies the friendly display label
-    (by taxid); ``name`` is the scientific name as a fallback."""
-
-    taxid: int
-    name: str
-    species: int  # species in the subtree
-    assemblies: int  # total genome assemblies in the subtree
-    assembly_percent: float  # % of species with >=1 assembly
-    annotation_percent: float  # % of species with >=1 annotation
-
-
-class Overview(BaseModel):
-    """Landing-page payload: global totals + a handful of featured groups, in one
-    cacheable request (served by ``/overview``)."""
-
-    totals: OverviewTotals
-    featured: list[FeaturedClade]
-
-
 MAX_CLADES_PER_GROUP = 20
 
 _Taxid = Annotated[StrictInt, Field(gt=0)]
@@ -258,20 +225,6 @@ class TaxonRef(BaseModel):
     rank: str
 
 
-class SearchHit(TaxonRef):
-    """A name-search result, with what the picker needs to tell look-alike names apart."""
-
-    context: str | None = Field(
-        description="Nearest class, phylum or kingdom above the taxon, to tell homonyms apart."
-    )
-    has_data: bool = Field(
-        description="Whether any assembly, annotation or RNA-Seq run sits on the taxon or below it."
-    )
-    similar: bool = Field(
-        description="True when no name contains the query and this is a close spelling instead."
-    )
-
-
 class Taxon(CladeSummary):
     """One taxon (served by ``/taxons/{taxid}``): its lineage, its counts, and the
     quality stats of every record under it."""
@@ -281,54 +234,6 @@ class Taxon(CladeSummary):
     stats: list[QualityStatValue]  # in QUALITY_STATS order; null where no record has the field
 
 
-class TaxonNode(CladeSummary):
-    """One node in the interactive tree: a taxon's summary metrics plus a
-    ``has_children`` hint, so the UI can show an expand affordance for a node
-    without a second round-trip to discover it's a leaf."""
-
-    has_children: bool
-
-    @classmethod
-    def from_child(
-        cls,
-        name: str,
-        rank: str,
-        meta: CladeMetadata,
-        has_children: bool,
-        is_infraspecific: bool = False,
-    ) -> TaxonNode:
-        s = CladeSummary.from_metadata(name, rank, meta, is_infraspecific)
-        return cls(
-            taxid=s.taxid,
-            name=s.name,
-            rank=s.rank,
-            n_rows=s.n_rows,
-            is_infraspecific=s.is_infraspecific,
-            resources=s.resources,
-            composition=s.composition,
-            has_children=has_children,
-        )
-
-
-class TaxonChildren(BaseModel):
-    """A taxon's direct children (adjacency) for lazy-expanding the tree."""
-
-    parent: TaxonRef
-    total: int  # total children before limit/offset (for "load more")
-    returned: int  # rows actually returned (== len(items) <= limit)
-    items: list[TaxonNode]  # sorted by species count desc
-
-
-class Breakdown(BaseModel):
-    """The breakdown (Q2) payload: a root's descendants at a target rank."""
-
-    root: TaxonRef
-    rank: str  # the target rank the root was broken down by
-    total_matches: int  # taxa matching the filter, before `limit`
-    returned: int  # rows actually included (== len(items) <= limit)
-    items: list[CladeSummary]  # sorted, limited
-
-
 class QualityStatValue(BaseModel):
     """A quality stat computed live over a taxon's subtree records (median or
     max per QUALITY_STATS). ``value`` is ``null`` when the subtree has no records
@@ -336,39 +241,6 @@ class QualityStatValue(BaseModel):
 
     key: str
     value: float | None
-
-
-class GapItem(BaseModel):
-    """One under-sequenced group in the "Where are the gaps?" leaderboard: its
-    species count, its coverage for the chosen resource, and the ``gap`` = species
-    with no such data (``n_rows - covered``). The frontend ranks/visualizes by
-    ``gap`` (biggest hole first)."""
-
-    taxid: int
-    name: str
-    rank: str
-    n_rows: int  # species in the clade
-    covered: int  # species with >=1 of the chosen resource (c_<resource>)
-    percent: float  # covered / n_rows * 100 — the coverage %
-    gap: int  # n_rows - covered — species missing the resource (the "gap")
-    # Quality of the data that *does* exist in this clade (best BUSCO / median
-    # coding genes / median genome size / N50), keyed like QUALITY_STATS. A value
-    # is null when no record in the clade carries that field. Empty when the
-    # quality dimension isn't computed.
-    stats: list[QualityStatValue] = []
-
-
-class Gaps(BaseModel):
-    """The "Where are the gaps?" payload: the biggest under-sequenced groups at a
-    rank under a root, ranked by missing species for one resource (served by
-    ``/gaps``)."""
-
-    root: TaxonRef
-    rank: str  # the rank the root was broken down by
-    resource: str  # the metric key the gap is measured for ("ass"/"ann"/...)
-    total_matches: int  # clades with any gap, before `limit`
-    returned: int  # rows actually included (== len(items) <= limit)
-    items: list[GapItem]  # sorted by gap desc, limited
 
 
 # --- Quality dimension (per-record drill-down + live distribution stats) -----
@@ -441,17 +313,6 @@ class AnnotationRecord(BaseModel):
     busco_lineage: str | None
 
 
-class BucketQuality(BaseModel):
-    """Per-bucket quality stats for a rank breakdown — one entry per breakdown
-    tile that carries records, keyed by its ``taxid``. Lets the "data map" colour
-    tiles by BUSCO / median genes / median genome size / N50 (the frontend merges
-    these into the breakdown by taxid). ``stats`` are keyed like ``QUALITY_STATS``;
-    a value is ``null`` when that bucket has no record carrying the field."""
-
-    taxid: int
-    stats: list[QualityStatValue]
-
-
 class Page(BaseModel):
     """One page of a list. Pass ``next`` or ``previous`` back as ``cursor`` (with
     the same sort) for the page after or before this one."""
@@ -470,24 +331,19 @@ class AnnotationPage(Page):
     results: list[AnnotationRecord]
 
 
-class CompareGroup(BaseModel):
-    """One group in the compare view: its species count, per-resource coverage,
-    and live quality stats — enough to line several groups up side by side."""
+class TaxonItem(CladeSummary):
+    """One taxon in a list (served by ``/taxons``)."""
 
-    taxid: int
-    name: str
-    rank: str
-    n_rows: int  # species in the subtree
-    resources: dict[str, ResourceSummary]  # keyed by metric key, in METRICS order
-    quality: list[QualityStatValue]  # BUSCO / genes / genome size / N50, QUALITY_STATS order
+    context: str | None = Field(
+        description="Nearest class, phylum or kingdom above the taxon, to tell homonyms apart."
+    )
+    has_children: bool
+    # With ``stats=true``: the quality stats of the records under the taxon.
+    stats: list[QualityStatValue] | None = None
 
 
-class Compare(BaseModel):
-    """The compare payload: several groups' summaries lined up (served by
-    ``/compare``). Unknown taxids are dropped, so ``groups`` may be shorter than
-    the requested set."""
-
-    groups: list[CompareGroup]
+class TaxonPage(Page):
+    results: list[TaxonItem]
 
 
 class Aggregate(BaseModel):

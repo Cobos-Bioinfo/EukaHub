@@ -578,64 +578,6 @@
         "title": "AssemblySort",
         "type": "string"
       },
-      "Breakdown": {
-        "description": "The breakdown (Q2) payload: a root's descendants at a target rank.",
-        "properties": {
-          "items": {
-            "items": {
-              "$ref": "#/components/schemas/CladeSummary"
-            },
-            "title": "Items",
-            "type": "array"
-          },
-          "rank": {
-            "title": "Rank",
-            "type": "string"
-          },
-          "returned": {
-            "title": "Returned",
-            "type": "integer"
-          },
-          "root": {
-            "$ref": "#/components/schemas/TaxonRef"
-          },
-          "total_matches": {
-            "title": "Total Matches",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "root",
-          "rank",
-          "total_matches",
-          "returned",
-          "items"
-        ],
-        "title": "Breakdown",
-        "type": "object"
-      },
-      "BucketQuality": {
-        "description": "Per-bucket quality stats for a rank breakdown \u2014 one entry per breakdown\ntile that carries records, keyed by its ``taxid``. Lets the \"data map\" colour\ntiles by BUSCO / median genes / median genome size / N50 (the frontend merges\nthese into the breakdown by taxid). ``stats`` are keyed like ``QUALITY_STATS``;\na value is ``null`` when that bucket has no record carrying the field.",
-        "properties": {
-          "stats": {
-            "items": {
-              "$ref": "#/components/schemas/QualityStatValue"
-            },
-            "title": "Stats",
-            "type": "array"
-          },
-          "taxid": {
-            "title": "Taxid",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "taxid",
-          "stats"
-        ],
-        "title": "BucketQuality",
-        "type": "object"
-      },
       "CladeGroup": {
         "additionalProperties": false,
         "description": "A curated group: its friendly label is shown wherever the group appears,\nit is in the \"Surprise me\" pool, and ``featured`` groups are the landing-page\ncards. Also the entry format of the deployment's groups file.",
@@ -662,128 +604,6 @@
           "label"
         ],
         "title": "CladeGroup",
-        "type": "object"
-      },
-      "CladeSummary": {
-        "description": "The Genomic Resource Summary (Q1) payload for one taxon.",
-        "properties": {
-          "composition": {
-            "$ref": "#/components/schemas/AssemblyComposition"
-          },
-          "direct": {
-            "anyOf": [
-              {
-                "additionalProperties": {
-                  "type": "integer"
-                },
-                "type": "object"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Direct"
-          },
-          "is_infraspecific": {
-            "default": false,
-            "title": "Is Infraspecific",
-            "type": "boolean"
-          },
-          "n_rows": {
-            "title": "N Rows",
-            "type": "integer"
-          },
-          "name": {
-            "title": "Name",
-            "type": "string"
-          },
-          "rank": {
-            "title": "Rank",
-            "type": "string"
-          },
-          "resources": {
-            "additionalProperties": {
-              "$ref": "#/components/schemas/ResourceSummary"
-            },
-            "title": "Resources",
-            "type": "object"
-          },
-          "taxid": {
-            "title": "Taxid",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "taxid",
-          "name",
-          "rank",
-          "n_rows",
-          "resources",
-          "composition"
-        ],
-        "title": "CladeSummary",
-        "type": "object"
-      },
-      "Compare": {
-        "description": "The compare payload: several groups' summaries lined up (served by\n``/compare``). Unknown taxids are dropped, so ``groups`` may be shorter than\nthe requested set.",
-        "properties": {
-          "groups": {
-            "items": {
-              "$ref": "#/components/schemas/CompareGroup"
-            },
-            "title": "Groups",
-            "type": "array"
-          }
-        },
-        "required": [
-          "groups"
-        ],
-        "title": "Compare",
-        "type": "object"
-      },
-      "CompareGroup": {
-        "description": "One group in the compare view: its species count, per-resource coverage,\nand live quality stats \u2014 enough to line several groups up side by side.",
-        "properties": {
-          "n_rows": {
-            "title": "N Rows",
-            "type": "integer"
-          },
-          "name": {
-            "title": "Name",
-            "type": "string"
-          },
-          "quality": {
-            "items": {
-              "$ref": "#/components/schemas/QualityStatValue"
-            },
-            "title": "Quality",
-            "type": "array"
-          },
-          "rank": {
-            "title": "Rank",
-            "type": "string"
-          },
-          "resources": {
-            "additionalProperties": {
-              "$ref": "#/components/schemas/ResourceSummary"
-            },
-            "title": "Resources",
-            "type": "object"
-          },
-          "taxid": {
-            "title": "Taxid",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "taxid",
-          "name",
-          "rank",
-          "n_rows",
-          "resources",
-          "quality"
-        ],
-        "title": "CompareGroup",
         "type": "object"
       },
       "CustomGroupItem": {
@@ -880,45 +700,6 @@
         "title": "DatasetMeta",
         "type": "object"
       },
-      "FeaturedClade": {
-        "description": "One featured group on the landing page: its species count and how much of\nit is assembled/annotated. The frontend supplies the friendly display label\n(by taxid); ``name`` is the scientific name as a fallback.",
-        "properties": {
-          "annotation_percent": {
-            "title": "Annotation Percent",
-            "type": "number"
-          },
-          "assemblies": {
-            "title": "Assemblies",
-            "type": "integer"
-          },
-          "assembly_percent": {
-            "title": "Assembly Percent",
-            "type": "number"
-          },
-          "name": {
-            "title": "Name",
-            "type": "string"
-          },
-          "species": {
-            "title": "Species",
-            "type": "integer"
-          },
-          "taxid": {
-            "title": "Taxid",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "taxid",
-          "name",
-          "species",
-          "assemblies",
-          "assembly_percent",
-          "annotation_percent"
-        ],
-        "title": "FeaturedClade",
-        "type": "object"
-      },
       "FilterLogic": {
         "description": "How multiple resource-presence filters combine (ported verbatim).",
         "enum": [
@@ -927,99 +708,6 @@
         ],
         "title": "FilterLogic",
         "type": "string"
-      },
-      "GapItem": {
-        "description": "One under-sequenced group in the \"Where are the gaps?\" leaderboard: its\nspecies count, its coverage for the chosen resource, and the ``gap`` = species\nwith no such data (``n_rows - covered``). The frontend ranks/visualizes by\n``gap`` (biggest hole first).",
-        "properties": {
-          "covered": {
-            "title": "Covered",
-            "type": "integer"
-          },
-          "gap": {
-            "title": "Gap",
-            "type": "integer"
-          },
-          "n_rows": {
-            "title": "N Rows",
-            "type": "integer"
-          },
-          "name": {
-            "title": "Name",
-            "type": "string"
-          },
-          "percent": {
-            "title": "Percent",
-            "type": "number"
-          },
-          "rank": {
-            "title": "Rank",
-            "type": "string"
-          },
-          "stats": {
-            "default": [],
-            "items": {
-              "$ref": "#/components/schemas/QualityStatValue"
-            },
-            "title": "Stats",
-            "type": "array"
-          },
-          "taxid": {
-            "title": "Taxid",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "taxid",
-          "name",
-          "rank",
-          "n_rows",
-          "covered",
-          "percent",
-          "gap"
-        ],
-        "title": "GapItem",
-        "type": "object"
-      },
-      "Gaps": {
-        "description": "The \"Where are the gaps?\" payload: the biggest under-sequenced groups at a\nrank under a root, ranked by missing species for one resource (served by\n``/gaps``).",
-        "properties": {
-          "items": {
-            "items": {
-              "$ref": "#/components/schemas/GapItem"
-            },
-            "title": "Items",
-            "type": "array"
-          },
-          "rank": {
-            "title": "Rank",
-            "type": "string"
-          },
-          "resource": {
-            "title": "Resource",
-            "type": "string"
-          },
-          "returned": {
-            "title": "Returned",
-            "type": "integer"
-          },
-          "root": {
-            "$ref": "#/components/schemas/TaxonRef"
-          },
-          "total_matches": {
-            "title": "Total Matches",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "root",
-          "rank",
-          "resource",
-          "total_matches",
-          "returned",
-          "items"
-        ],
-        "title": "Gaps",
-        "type": "object"
       },
       "HTTPValidationError": {
         "properties": {
@@ -1150,66 +838,6 @@
         "title": "MetricFilter",
         "type": "string"
       },
-      "Overview": {
-        "description": "Landing-page payload: global totals + a handful of featured groups, in one\ncacheable request (served by ``/overview``).",
-        "properties": {
-          "featured": {
-            "items": {
-              "$ref": "#/components/schemas/FeaturedClade"
-            },
-            "title": "Featured",
-            "type": "array"
-          },
-          "totals": {
-            "$ref": "#/components/schemas/OverviewTotals"
-          }
-        },
-        "required": [
-          "totals",
-          "featured"
-        ],
-        "title": "Overview",
-        "type": "object"
-      },
-      "OverviewTotals": {
-        "description": "Global \"at a glance\" totals across the eukaryotic tree (Eukaryota's\nrollup) \u2014 the live headline numbers on the landing page.",
-        "properties": {
-          "annotations": {
-            "title": "Annotations",
-            "type": "integer"
-          },
-          "assemblies": {
-            "title": "Assemblies",
-            "type": "integer"
-          },
-          "long_read": {
-            "title": "Long Read",
-            "type": "integer"
-          },
-          "reference_genomes": {
-            "title": "Reference Genomes",
-            "type": "integer"
-          },
-          "rna_seq": {
-            "title": "Rna Seq",
-            "type": "integer"
-          },
-          "species": {
-            "title": "Species",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "species",
-          "assemblies",
-          "annotations",
-          "rna_seq",
-          "long_read",
-          "reference_genomes"
-        ],
-        "title": "OverviewTotals",
-        "type": "object"
-      },
       "QualityStatConfig": {
         "description": "Static chrome for one quality stat \u2014 served once in ``/config`` and\njoined client-side to the per-taxon ``QualityStatValue`` by ``key``.\nThe analogue of ``MetricConfig`` for the annotation/assembly-quality\ndimension (BUSCO %, gene count, genome size, N50).",
         "properties": {
@@ -1309,55 +937,6 @@
           "percent"
         ],
         "title": "ResourceSummary",
-        "type": "object"
-      },
-      "SearchHit": {
-        "description": "A name-search result, with what the picker needs to tell look-alike names apart.",
-        "properties": {
-          "context": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "Nearest class, phylum or kingdom above the taxon, to tell homonyms apart.",
-            "title": "Context"
-          },
-          "has_data": {
-            "description": "Whether any assembly, annotation or RNA-Seq run sits on the taxon or below it.",
-            "title": "Has Data",
-            "type": "boolean"
-          },
-          "name": {
-            "title": "Name",
-            "type": "string"
-          },
-          "rank": {
-            "title": "Rank",
-            "type": "string"
-          },
-          "similar": {
-            "description": "True when no name contains the query and this is a close spelling instead.",
-            "title": "Similar",
-            "type": "boolean"
-          },
-          "taxid": {
-            "title": "Taxid",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "taxid",
-          "name",
-          "rank",
-          "context",
-          "has_data",
-          "similar"
-        ],
-        "title": "SearchHit",
         "type": "object"
       },
       "SortColumn": {
@@ -1481,42 +1060,23 @@
         "title": "Taxon",
         "type": "object"
       },
-      "TaxonChildren": {
-        "description": "A taxon's direct children (adjacency) for lazy-expanding the tree.",
-        "properties": {
-          "items": {
-            "items": {
-              "$ref": "#/components/schemas/TaxonNode"
-            },
-            "title": "Items",
-            "type": "array"
-          },
-          "parent": {
-            "$ref": "#/components/schemas/TaxonRef"
-          },
-          "returned": {
-            "title": "Returned",
-            "type": "integer"
-          },
-          "total": {
-            "title": "Total",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "parent",
-          "total",
-          "returned",
-          "items"
-        ],
-        "title": "TaxonChildren",
-        "type": "object"
-      },
-      "TaxonNode": {
-        "description": "One node in the interactive tree: a taxon's summary metrics plus a\n``has_children`` hint, so the UI can show an expand affordance for a node\nwithout a second round-trip to discover it's a leaf.",
+      "TaxonItem": {
+        "description": "One taxon in a list (served by ``/taxons``).",
         "properties": {
           "composition": {
             "$ref": "#/components/schemas/AssemblyComposition"
+          },
+          "context": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Nearest class, phylum or kingdom above the taxon, to tell homonyms apart.",
+            "title": "Context"
           },
           "direct": {
             "anyOf": [
@@ -1560,6 +1120,20 @@
             "title": "Resources",
             "type": "object"
           },
+          "stats": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/QualityStatValue"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stats"
+          },
           "taxid": {
             "title": "Taxid",
             "type": "integer"
@@ -1572,9 +1146,60 @@
           "n_rows",
           "resources",
           "composition",
+          "context",
           "has_children"
         ],
-        "title": "TaxonNode",
+        "title": "TaxonItem",
+        "type": "object"
+      },
+      "TaxonPage": {
+        "properties": {
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "next": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next"
+          },
+          "previous": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Previous"
+          },
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/TaxonItem"
+            },
+            "title": "Results",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total",
+          "limit",
+          "next",
+          "previous",
+          "results"
+        ],
+        "title": "TaxonPage",
         "type": "object"
       },
       "TaxonRef": {
@@ -1600,6 +1225,31 @@
         ],
         "title": "TaxonRef",
         "type": "object"
+      },
+      "TaxonSort": {
+        "enum": [
+          "n_rows",
+          "c_ass",
+          "c_ann",
+          "c_rna",
+          "c_lng",
+          "s_ass",
+          "s_ann",
+          "s_rna",
+          "s_lng",
+          "n_ass_complete",
+          "n_ass_chromosome",
+          "n_ass_scaffold",
+          "n_ass_contig",
+          "n_reference",
+          "gap_ass",
+          "gap_ann",
+          "gap_rna",
+          "gap_lng",
+          "name"
+        ],
+        "title": "TaxonSort",
+        "type": "string"
       },
       "ValidationError": {
         "properties": {
@@ -1899,232 +1549,6 @@
         "summary": "Assemblies"
       }
     },
-    "/clade/{taxid}/breakdown": {
-      "get": {
-        "description": "How a clade's data is distributed at a lower rank (Q2).\n\nDescendants of `taxid` at `rank`, with filter/sort/limit pushed into a\nsingle indexed `ltree` query. Defaults mirror Euka-Survey: sort by species\ncount, exclude empty taxa, AND-combine filters, top 25.",
-        "operationId": "clade_breakdown_clade__taxid__breakdown_get",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "taxid",
-            "required": true,
-            "schema": {
-              "title": "Taxid",
-              "type": "integer"
-            }
-          },
-          {
-            "description": "Rank to break the root down by.",
-            "in": "query",
-            "name": "rank",
-            "required": true,
-            "schema": {
-              "$ref": "#/components/schemas/TargetRank",
-              "description": "Rank to break the root down by."
-            }
-          },
-          {
-            "in": "query",
-            "name": "sort",
-            "required": false,
-            "schema": {
-              "$ref": "#/components/schemas/SortColumn",
-              "default": "n_rows"
-            }
-          },
-          {
-            "description": "Keep only taxa with data for these resource(s).",
-            "in": "query",
-            "name": "filter",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "items": {
-                    "$ref": "#/components/schemas/MetricFilter"
-                  },
-                  "type": "array"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "Keep only taxa with data for these resource(s).",
-              "title": "Filter"
-            }
-          },
-          {
-            "in": "query",
-            "name": "logic",
-            "required": false,
-            "schema": {
-              "$ref": "#/components/schemas/FilterLogic",
-              "default": "AND"
-            }
-          },
-          {
-            "in": "query",
-            "name": "exclude_empty",
-            "required": false,
-            "schema": {
-              "default": true,
-              "title": "Exclude Empty",
-              "type": "boolean"
-            }
-          },
-          {
-            "in": "query",
-            "name": "limit",
-            "required": false,
-            "schema": {
-              "default": 25,
-              "maximum": 1000,
-              "minimum": 1,
-              "title": "Limit",
-              "type": "integer"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Breakdown"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Clade Breakdown"
-      }
-    },
-    "/clade/{taxid}/breakdown/quality": {
-      "get": {
-        "description": "Per-bucket distribution stats (BUSCO / median genes / genome size / N50)\nfor a rank breakdown \u2014 the quality lenses of the \"data map\". Covers the clades\n`breakdown` returns for the same parameters (so at most `limit`); merge into\nit by taxid. Clades without records are absent.",
-        "operationId": "clade_breakdown_quality_clade__taxid__breakdown_quality_get",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "taxid",
-            "required": true,
-            "schema": {
-              "title": "Taxid",
-              "type": "integer"
-            }
-          },
-          {
-            "description": "Rank the root is broken down by.",
-            "in": "query",
-            "name": "rank",
-            "required": true,
-            "schema": {
-              "$ref": "#/components/schemas/TargetRank",
-              "description": "Rank the root is broken down by."
-            }
-          },
-          {
-            "in": "query",
-            "name": "sort",
-            "required": false,
-            "schema": {
-              "$ref": "#/components/schemas/SortColumn",
-              "default": "n_rows"
-            }
-          },
-          {
-            "description": "Keep only taxa with data for these resource(s).",
-            "in": "query",
-            "name": "filter",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "items": {
-                    "$ref": "#/components/schemas/MetricFilter"
-                  },
-                  "type": "array"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "Keep only taxa with data for these resource(s).",
-              "title": "Filter"
-            }
-          },
-          {
-            "in": "query",
-            "name": "logic",
-            "required": false,
-            "schema": {
-              "$ref": "#/components/schemas/FilterLogic",
-              "default": "AND"
-            }
-          },
-          {
-            "in": "query",
-            "name": "exclude_empty",
-            "required": false,
-            "schema": {
-              "default": true,
-              "title": "Exclude Empty",
-              "type": "boolean"
-            }
-          },
-          {
-            "in": "query",
-            "name": "limit",
-            "required": false,
-            "schema": {
-              "default": 25,
-              "maximum": 1000,
-              "minimum": 1,
-              "title": "Limit",
-              "type": "integer"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/BucketQuality"
-                  },
-                  "title": "Response Clade Breakdown Quality Clade  Taxid  Breakdown Quality Get",
-                  "type": "array"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Clade Breakdown Quality"
-      }
-    },
     "/clade/{taxid}/export.tsv": {
       "get": {
         "description": "The full breakdown at `rank` as a streamed TSV download.\n\nSame subtree query as `breakdown` but unlimited and streamed via a\nserver-side cursor. Defaults to the complete breakdown (empties included);\npass filter/exclude_empty/sort to export exactly what the table shows.",
@@ -2220,48 +1644,6 @@
         "summary": "Clade Export"
       }
     },
-    "/compare": {
-      "get": {
-        "description": "Line several groups up side by side: each group's species count,\nper-resource coverage, and live quality stats (BUSCO / genes / genome size /\nN50) in one cacheable request. Unknown taxids are dropped; at most\n``_COMPARE_MAX_GROUPS`` are honoured.",
-        "operationId": "compare_compare_get",
-        "parameters": [
-          {
-            "description": "Comma-separated taxids to compare (2-6, e.g. 40674,8782).",
-            "in": "query",
-            "name": "taxids",
-            "required": true,
-            "schema": {
-              "description": "Comma-separated taxids to compare (2-6, e.g. 40674,8782).",
-              "title": "Taxids",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Compare"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Compare"
-      }
-    },
     "/config": {
       "get": {
         "description": "What a client reads once before showing any data: the dataset being served\n(``built_at`` is ``null`` before the first build has stamped the database), the\npresentation of each measure and quality stat, and the deployment's links,\nWikipedia summary endpoint, curated groups and custom groups. Pass a custom\ngroup's clades to ``/aggregate`` for its data.",
@@ -2279,95 +1661,6 @@
           }
         },
         "summary": "Config"
-      }
-    },
-    "/gaps": {
-      "get": {
-        "description": "The biggest under-sequenced groups: the app's thesis surfaced directly.\n\nRanks ``root``'s descendant clades at ``rank`` by the number of species with\nno ``resource`` data (``n_rows - covered``), largest gap first \u2014 so the huge,\nbarely-sequenced clades (e.g. insect orders with a genome for <1% of species)\nrise to the top without any navigating. One indexed ``ltree`` subtree query;\nfully-covered clades are omitted. Defaults: Eukaryota, order level,\nassemblies, top 25. ``include_quality`` adds the quality of the data that\n*does* exist per clade (a second, small subtree query over the shown clades).",
-        "operationId": "gaps_gaps_get",
-        "parameters": [
-          {
-            "description": "Root taxon to search under (default Eukaryota).",
-            "in": "query",
-            "name": "root",
-            "required": false,
-            "schema": {
-              "default": 2759,
-              "description": "Root taxon to search under (default Eukaryota).",
-              "title": "Root",
-              "type": "integer"
-            }
-          },
-          {
-            "description": "Rank of the groups to rank by gap.",
-            "in": "query",
-            "name": "rank",
-            "required": false,
-            "schema": {
-              "$ref": "#/components/schemas/TargetRank",
-              "default": "order",
-              "description": "Rank of the groups to rank by gap."
-            }
-          },
-          {
-            "description": "Resource whose coverage gap to measure.",
-            "in": "query",
-            "name": "resource",
-            "required": false,
-            "schema": {
-              "$ref": "#/components/schemas/MetricFilter",
-              "default": "ass",
-              "description": "Resource whose coverage gap to measure."
-            }
-          },
-          {
-            "in": "query",
-            "name": "limit",
-            "required": false,
-            "schema": {
-              "default": 25,
-              "maximum": 200,
-              "minimum": 1,
-              "title": "Limit",
-              "type": "integer"
-            }
-          },
-          {
-            "description": "Attach per-clade quality stats (best BUSCO / median coding genes / genome size / N50) for the covered subset. Off for lightweight callers like the landing teaser.",
-            "in": "query",
-            "name": "include_quality",
-            "required": false,
-            "schema": {
-              "default": true,
-              "description": "Attach per-clade quality stats (best BUSCO / median coding genes / genome size / N50) for the covered subset. Off for lightweight callers like the landing teaser.",
-              "title": "Include Quality",
-              "type": "boolean"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Gaps"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Gaps"
       }
     },
     "/health": {
@@ -2416,129 +1709,227 @@
         "summary": "Readiness"
       }
     },
-    "/overview": {
+    "/taxons": {
       "get": {
-        "description": "Landing-page \"at a glance\": global totals across the eukaryotic tree plus\na few featured groups with their assembly/annotation coverage \u2014 one cacheable\nrequest so the hero can render live headline numbers + coverage cards.",
-        "operationId": "overview_overview_get",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Overview"
-                }
-              }
-            },
-            "description": "Successful Response"
-          }
-        },
-        "summary": "Overview"
-      }
-    },
-    "/search": {
-      "get": {
-        "description": "Case-insensitive taxon-name search for the search box. Names starting with\nthe query come first, the best-covered taxa ahead; then names containing it.\nWhen no name contains it, close spellings are returned with `similar` set.",
-        "operationId": "search_search_get",
+        "description": "Taxa with their counts: a name search (``q``), a taxon's children\n(``parent``), every taxon of a rank under a taxon (``within`` and ``rank``), or\nchosen taxa (``taxids``), narrowed by the data they have. Sort by\n``gap_<resource>`` for the groups with the most species still missing it.",
+        "operationId": "taxons_taxons_get",
         "parameters": [
           {
-            "description": "Name query.",
+            "description": "A count column, `gap_<resource>` (species without that resource) or `name`. Without it: relevance for `q`, else species count (`n_rows`).",
+            "in": "query",
+            "name": "sort_by",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/TaxonSort"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "A count column, `gap_<resource>` (species without that resource) or `name`. Without it: relevance for `q`, else species count (`n_rows`).",
+              "title": "Sort By"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sort_order",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/SortOrder",
+              "default": "desc"
+            }
+          },
+          {
+            "description": "Add each taxon's quality stats (best BUSCO, median genes, genome size and N50), computed from its records: slower.",
+            "in": "query",
+            "name": "stats",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "Add each taxon's quality stats (best BUSCO, median genes, genome size and N50), computed from its records: slower.",
+              "title": "Stats",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 25,
+              "maximum": 1000,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "``next`` or ``previous`` from a page with the same sort, for the page after or before it.",
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 1000,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "``next`` or ``previous`` from a page with the same sort, for the page after or before it.",
+              "title": "Cursor"
+            }
+          },
+          {
+            "description": "Only taxa whose name contains this text, ignoring case (or is spelled like it, with `fuzzy`). The root and 'cellular organisms' are left out.",
             "in": "query",
             "name": "q",
-            "required": true,
+            "required": false,
             "schema": {
-              "description": "Name query.",
-              "maxLength": 100,
-              "minLength": 3,
-              "title": "Q",
-              "type": "string"
+              "anyOf": [
+                {
+                  "maxLength": 100,
+                  "minLength": 3,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only taxa whose name contains this text, ignoring case (or is spelled like it, with `fuzzy`). The root and 'cellular organisms' are left out.",
+              "title": "Q"
             }
           },
           {
+            "description": "Match `q` by spelling instead, for a misspelt name.",
             "in": "query",
-            "name": "limit",
+            "name": "fuzzy",
             "required": false,
             "schema": {
-              "default": 20,
-              "maximum": 50,
-              "minimum": 1,
-              "title": "Limit",
-              "type": "integer"
+              "default": false,
+              "description": "Match `q` by spelling instead, for a misspelt name.",
+              "title": "Fuzzy",
+              "type": "boolean"
             }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
+          },
+          {
+            "description": "Only the direct children of this taxon.",
+            "in": "query",
+            "name": "parent",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only the direct children of this taxon.",
+              "title": "Parent"
+            }
+          },
+          {
+            "description": "Only rows on this taxon or below it (e.g. 40674 for mammals).",
+            "in": "query",
+            "name": "within",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only rows on this taxon or below it (e.g. 40674 for mammals).",
+              "title": "Within"
+            }
+          },
+          {
+            "description": "Only taxa of this rank.",
+            "in": "query",
+            "name": "rank",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/TargetRank"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only taxa of this rank.",
+              "title": "Rank"
+            }
+          },
+          {
+            "description": "Only these taxa: comma-separated taxids, at most 100.",
+            "in": "query",
+            "name": "taxids",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only these taxa: comma-separated taxids, at most 100.",
+              "title": "Taxids"
+            }
+          },
+          {
+            "description": "Only taxa with data for these resources.",
+            "in": "query",
+            "name": "filter",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
                   "items": {
-                    "$ref": "#/components/schemas/SearchHit"
+                    "$ref": "#/components/schemas/MetricFilter"
                   },
-                  "title": "Response Search Search Get",
                   "type": "array"
+                },
+                {
+                  "type": "null"
                 }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Search"
-      }
-    },
-    "/taxon/{taxid}/children": {
-      "get": {
-        "description": "A taxon's direct children (adjacency), for lazy-expanding the tree.\n\nOne indexed `parent_id` lookup, sorted by species count by default (biggest\nclades first) and paginated via limit/offset so a node with tens of\nthousands of children loads a screenful at a time. Each child carries a\n`has_children` flag. 404 if the taxid is unknown; a childless taxon (e.g. a\nspecies leaf) returns an empty list.",
-        "operationId": "taxon_children_taxon__taxid__children_get",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "taxid",
-            "required": true,
-            "schema": {
-              "title": "Taxid",
-              "type": "integer"
+              ],
+              "description": "Only taxa with data for these resources.",
+              "title": "Filter"
             }
           },
           {
+            "description": "Whether `filter` needs every resource (AND) or any (OR).",
             "in": "query",
-            "name": "sort",
+            "name": "logic",
             "required": false,
             "schema": {
-              "$ref": "#/components/schemas/SortColumn",
-              "default": "n_rows"
+              "$ref": "#/components/schemas/FilterLogic",
+              "default": "AND",
+              "description": "Whether `filter` needs every resource (AND) or any (OR)."
             }
           },
           {
+            "description": "Only taxa with data for at least one resource.",
             "in": "query",
-            "name": "limit",
+            "name": "exclude_empty",
             "required": false,
             "schema": {
-              "default": 10,
-              "maximum": 500,
-              "minimum": 1,
-              "title": "Limit",
-              "type": "integer"
-            }
-          },
-          {
-            "in": "query",
-            "name": "offset",
-            "required": false,
-            "schema": {
-              "default": 0,
-              "minimum": 0,
-              "title": "Offset",
-              "type": "integer"
+              "default": false,
+              "description": "Only taxa with data for at least one resource.",
+              "title": "Exclude Empty",
+              "type": "boolean"
             }
           }
         ],
@@ -2547,7 +1938,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/TaxonChildren"
+                  "$ref": "#/components/schemas/TaxonPage"
                 }
               }
             },
@@ -2564,7 +1955,7 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Taxon Children"
+        "summary": "Taxons"
       }
     },
     "/taxons/{taxid}": {

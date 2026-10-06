@@ -157,6 +157,3 @@ def test_endpoints_follow_the_settings(client, monkeypatch, tmp_path):
     assert config["feedback_url"] == "https://example.org/feedback"
     assert config["wikipedia_summary_url"].startswith("https://es.wikipedia.org/")
     assert config["groups"] == [{"taxid": 40674, "label": "Mammals", "featured": True}]
-
-    # Mammalia is in both the full dataset and the CI slice.
-    assert [f["taxid"] for f in client.get("/overview").json()["featured"]] == [40674]

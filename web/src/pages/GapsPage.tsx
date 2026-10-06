@@ -1,7 +1,7 @@
 import { Link, useSearchParams } from "react-router";
 
-import { getGaps, getMetricsConfig, getQualityConfig } from "../api/queries";
-import type { GapItem, MetricFilter, QualityStatConfig, TargetRank } from "../api/types";
+import { getGaps, getMetricsConfig, getQualityConfig, type GapItem } from "../api/queries";
+import type { MetricFilter, QualityStatConfig, TargetRank } from "../api/types";
 import GapsScatter from "../components/GapsScatter";
 import RootPicker from "../components/RootPicker";
 import { DashboardIcon, MapIcon, TreeIcon } from "../components/icons";
@@ -145,7 +145,7 @@ export default function GapsPage() {
           <div className="gaps__toolbar">
             <p className="gaps__summary">
               The {items.length} {PLURAL[rank]} with the most species missing {resourceLower}, of{" "}
-              {fmt(gaps.data!.total_matches)} with a gap.
+              {fmt(gaps.data!.total_matches)} in all.
             </p>
             <div className="tree-controls__seg gaps__view" role="group" aria-label="View">
               <button

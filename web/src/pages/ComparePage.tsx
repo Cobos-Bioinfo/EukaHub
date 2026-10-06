@@ -1,8 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 
-import { getCompare, getMetricsConfig, getQualityConfig } from "../api/queries";
-import type { CompareGroup, MetricConfig, QualityStatConfig, TaxonRef } from "../api/types";
+import {
+  getCompare,
+  getMetricsConfig,
+  getQualityConfig,
+  type CompareGroup,
+} from "../api/queries";
+import type { MetricConfig, QualityStatConfig, TaxonRef } from "../api/types";
 import RootPicker from "../components/RootPicker";
 import { useAsync } from "../hooks/useAsync";
 import { useCladeLabel } from "../hooks/useSiteConfig";
