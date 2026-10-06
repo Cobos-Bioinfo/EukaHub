@@ -18,11 +18,13 @@ def test_config_shape(client):
         "feedback_url",
         "source_code_url",
         "privacy_contact_email",
+        "wikipedia_summary_url",
         "groups",
         "custom_groups",
     }
     assert body["feedback_url"].startswith("https://")
     assert body["source_code_url"].startswith("https://")
+    assert "{title}" in body["wikipedia_summary_url"]
     assert any(g["featured"] for g in body["groups"])
     for g in body["groups"]:
         assert set(g) == {"taxid", "label", "featured"}

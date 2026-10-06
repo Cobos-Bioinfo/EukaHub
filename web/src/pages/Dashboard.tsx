@@ -34,7 +34,8 @@ export default function Dashboard() {
   const quality = useAsync(() => getQualityConfig(), []);
   // Decorative Wikipedia context — never gates the page; rendered only if it
   // resolves to a summary, its error deliberately ignored.
-  const about = useAsync(() => getAbout(taxid), [taxid]);
+  const name = summary.data?.name;
+  const about = useAsync(() => getAbout(name), [name]);
 
   if (!validId) return <TaxonError taxid={taxidParam} />;
   if (summary.error) {

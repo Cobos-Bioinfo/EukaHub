@@ -13,7 +13,6 @@ Phase 2 read endpoints:
 - ``GET /taxon/{taxid}/children``      — direct children for the interactive tree.
 - ``GET /taxon/{taxid}/assemblies``    — genome assemblies in the subtree (+ stats).
 - ``GET /taxon/{taxid}/annotations``   — annotations in the subtree (+ BUSCO stats).
-- ``GET /taxon/{taxid}/about``         — Wikipedia "About" summary (decorative).
 - ``GET /search``                      — name search for the root picker.
 
 ``/health`` (liveness) + ``/health/ready`` (DB readiness) and ``/config`` (the dataset
@@ -97,14 +96,12 @@ from eukahub_api.schemas import (
     QualityStatValue,
     ResourceSummary,
     SearchHit,
-    TaxonAbout,
     TaxonChildren,
     TaxonLineage,
     TaxonNode,
     TaxonRef,
 )
 from eukahub_api.settings import get_settings
-from eukahub_api.wikipedia import fetch_about
 
 log = logging.getLogger("eukahub.api")
 
@@ -309,8 +306,8 @@ def config(conn: Conn) -> AppConfig:
     """What a client reads once before showing any data: the dataset being served
     (``built_at`` is ``null`` before the first build has stamped the database), the
     presentation of each measure and quality stat, and the deployment's links,
-    curated groups and custom groups. Pass a custom group's clades to
-    ``/aggregate`` for its data."""
+    Wikipedia summary endpoint, curated groups and custom groups. Pass a custom
+    group's clades to ``/aggregate`` for its data."""
     settings = get_settings()
     row = fetch_dataset_meta(conn)
     dataset = (
@@ -333,6 +330,7 @@ def config(conn: Conn) -> AppConfig:
         feedback_url=settings.feedback_url,
         source_code_url=settings.source_code_url,
         privacy_contact_email=settings.privacy_contact_email,
+        wikipedia_summary_url=settings.wikipedia_summary_url,
         groups=list(settings.groups),
         custom_groups=_custom_groups(conn, settings.custom_groups),
     )
@@ -759,24 +757,6 @@ def taxon_annotations(
         stats=[QualityStatValue(key=k, value=v) for k, v in stats.items()],
         items=[AnnotationRecord(**r) for r in records],
     )
-
-
-@app.get("/taxon/{taxid}/about", response_model=TaxonAbout | None)
-def taxon_about(taxid: int, conn: Conn) -> TaxonAbout | None:
-    """A Wikipedia "About" summary for the taxon — the decorative dashboard card.
-
-    Resolves the taxon's scientific name, then does one cached, server-side GET
-    against Wikipedia's REST summary endpoint (so we can send the User-Agent
-    Wikipedia's policy wants and cache across viewers). ``404`` if the taxid is
-    unknown; otherwise the summary, or ``null`` when there's no usable article —
-    the frontend omits the card either way. The ``null`` result caches as a
-    normal 200, so taxa without a page don't re-hit the network downstream.
-    """
-    try:
-        name, _rank, _path = fetch_root(conn, taxid)
-    except TaxonNotFound:
-        raise HTTPException(status_code=404, detail=f"taxon {taxid} not found")
-    return fetch_about(name)
 
 
 @app.get("/clade/{taxid}/export.tsv")

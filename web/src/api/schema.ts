@@ -156,8 +156,8 @@ export interface paths {
          * @description What a client reads once before showing any data: the dataset being served
          *     (``built_at`` is ``null`` before the first build has stamped the database), the
          *     presentation of each measure and quality stat, and the deployment's links,
-         *     curated groups and custom groups. Pass a custom group's clades to
-         *     ``/aggregate`` for its data.
+         *     Wikipedia summary endpoint, curated groups and custom groups. Pass a custom
+         *     group's clades to ``/aggregate`` for its data.
          */
         get: operations["config_config_get"];
         put?: never;
@@ -296,33 +296,6 @@ export interface paths {
          *     ancestor query on the materialized path.
          */
         get: operations["taxon_lineage_taxon__taxid__get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/taxon/{taxid}/about": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Taxon About
-         * @description A Wikipedia "About" summary for the taxon — the decorative dashboard card.
-         *
-         *     Resolves the taxon's scientific name, then does one cached, server-side GET
-         *     against Wikipedia's REST summary endpoint (so we can send the User-Agent
-         *     Wikipedia's policy wants and cache across viewers). ``404`` if the taxid is
-         *     unknown; otherwise the summary, or ``null`` when there's no usable article —
-         *     the frontend omits the card either way. The ``null`` result caches as a
-         *     normal 200, so taxa without a page don't re-hit the network downstream.
-         */
-        get: operations["taxon_about_taxon__taxid__about_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -505,6 +478,8 @@ export interface components {
             quality_stats: components["schemas"]["QualityStatConfig"][];
             /** Source Code Url */
             source_code_url: string;
+            /** Wikipedia Summary Url */
+            wikipedia_summary_url: string;
         };
         /**
          * AssemblyComposition
@@ -962,26 +937,6 @@ export interface components {
          * @enum {string}
          */
         TargetRank: "phylum" | "class" | "order" | "family" | "genus" | "species";
-        /**
-         * TaxonAbout
-         * @description Wikipedia summary for a taxon's "About" card (decorative, non-load-bearing).
-         *
-         *     Sourced live from Wikipedia's REST summary endpoint and cached server-side.
-         *     The endpoint returns ``null`` instead of this model when the taxon has no
-         *     usable article, in which case the frontend simply omits the card.
-         */
-        TaxonAbout: {
-            /** Description */
-            description: string;
-            /** Extract */
-            extract: string;
-            /** Thumbnail */
-            thumbnail: string | null;
-            /** Title */
-            title: string;
-            /** Url */
-            url: string;
-        };
         /**
          * TaxonChildren
          * @description A taxon's direct children (adjacency) for lazy-expanding the tree.
@@ -1464,37 +1419,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TaxonLineage"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    taxon_about_taxon__taxid__about_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                taxid: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["TaxonAbout"] | null;
                 };
             };
             /** @description Validation Error */

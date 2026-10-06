@@ -22,7 +22,6 @@ import type {
   SearchHit,
   SortColumn,
   TargetRank,
-  TaxonAbout,
   TaxonChildren,
   TaxonLineage,
 } from "./types";
@@ -130,17 +129,44 @@ export const getChildren = async (
     }),
   );
 
-// The decorative Wikipedia "About" summary. The endpoint returns a null body
-// when the taxon has no usable article, so this resolves to null rather than
-// throwing — the card is omitted, never load-bearing. (A real request failure
-// still throws; the Dashboard ignores it and drops the card.)
-export const getAbout = async (taxid: number): Promise<TaxonAbout | null> => {
-  const { data, error, response } = await api.GET("/taxon/{taxid}/about", {
-    params: { path: { taxid } },
+/** A Wikipedia summary for a taxon's "About" card. */
+export interface TaxonAbout {
+  title: string; // article title (may differ from the NCBI name via a redirect)
+  description: string; // short one-line descriptor ("" when Wikipedia has none)
+  extract: string; // first-paragraph plain-text summary
+  thumbnail: string | null;
+  url: string; // the article
+}
+
+const NO_ARTICLE = new Set(["", "Unknown", "Error"]);
+
+// The decorative Wikipedia "About" summary, fetched by the browser from the
+// deployment's Wikipedia endpoint (Wikipedia allows cross-origin requests and
+// asks browsers to identify the tool with Api-User-Agent). Resolves to null when
+// there is no usable article; a failed request throws, and the Dashboard drops
+// the card either way.
+export async function getAbout(name: string | undefined): Promise<TaxonAbout | null> {
+  if (name === undefined || NO_ARTICLE.has(name)) return null;
+  const { wikipedia_summary_url, source_code_url } = await getConfig();
+  const url = wikipedia_summary_url.replace("{title}", encodeURIComponent(name));
+  const response = await fetch(url, {
+    headers: { "Api-User-Agent": `EukaHub (${source_code_url})` },
+    signal: AbortSignal.timeout(6000),
   });
-  if (error !== undefined) throw new Error(`Request failed (${response.status})`);
-  return data ?? null;
-};
+  if (response.status === 404) return null;
+  if (!response.ok) throw new Error(`Request failed (${response.status})`);
+  const data = await response.json();
+  if (data.type === "disambiguation" || !data.extract) return null;
+  return {
+    title: data.title || name,
+    description: data.description || "",
+    extract: data.extract,
+    thumbnail: data.thumbnail?.source ?? null,
+    url:
+      data.content_urls?.desktop?.page ??
+      `${new URL(url).origin}/wiki/${encodeURIComponent(name)}`,
+  };
+}
 
 export const searchTaxa = async (q: string, limit = 10): Promise<SearchHit[]> =>
   unwrap(await api.GET("/search", { params: { query: { q, limit } } }));

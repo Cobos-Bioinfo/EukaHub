@@ -93,12 +93,12 @@ Streamlit app that answered the same questions but was slow to build and to serv
   four-connection pool, no parallel query workers, and an nginx response cache keep
   one expensive request from taking the server down.
 - **Deployment settings are configuration, not code.** Links, the privacy contact,
-  the Wikipedia lookup and the curated groups are read by the API at startup (from
-  `infra/.env` and an optional `infra/config/groups.json`), and the web app gets them
-  from `/api/config`, so changing one needs a restart, not a new image. Only the
-  API container reads the groups file, which also feeds the landing-page numbers.
-  Every setting has a default, and an invalid one is logged and replaced by its
-  default, because a typo should not take an unattended site down. The pipeline's
+  the Wikipedia summary endpoint and the curated groups are read by the API at
+  startup (from `infra/.env` and an optional `infra/config/groups.json`), and the web
+  app gets them from `/api/config`, so changing one needs a restart, not a new image.
+  Only the API container reads the groups file, which also feeds the landing-page
+  numbers. Every setting has a default, and an invalid one is logged and replaced by
+  its default, because a typo should not take an unattended site down. The pipeline's
   source addresses are GitHub Actions repository variables instead, since the
   pipeline runs there; there an invalid value stops the build, because a build
   against a source nobody chose must not publish.
@@ -113,9 +113,12 @@ Streamlit app that answered the same questions but was slow to build and to serv
 - **The root taxids stay in code**, in one constant per side
   (`eukahub_core.taxonomy` and `web/src/lib/taxonomy.ts`). The dataset is built and
   validated for Eukaryota, so another root needs a rebuild and new checks anyway.
-- **Wikipedia summaries go through the API**, not the browser: Wikipedia asks for a
-  descriptive User-Agent, which browsers cannot set, and the API can cache each
-  summary. A failure just hides the card.
+- **The browser fetches Wikipedia summaries itself**, from the endpoint `/api/config`
+  names. Wikipedia allows cross-origin requests and asks browsers to identify the tool
+  with an `Api-User-Agent` header. Proxying them through the API held a database
+  connection while Wikipedia answered and put an external service in the request
+  path; the browser already loaded the thumbnails from Wikimedia anyway. A failure
+  just hides the card.
 
 ## Interface
 

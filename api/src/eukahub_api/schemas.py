@@ -319,21 +319,6 @@ class TaxonChildren(BaseModel):
     items: list[TaxonNode]  # sorted by species count desc
 
 
-class TaxonAbout(BaseModel):
-    """Wikipedia summary for a taxon's "About" card (decorative, non-load-bearing).
-
-    Sourced live from Wikipedia's REST summary endpoint and cached server-side.
-    The endpoint returns ``null`` instead of this model when the taxon has no
-    usable article, in which case the frontend simply omits the card.
-    """
-
-    title: str  # article title (may differ from the NCBI name via redirect)
-    description: str  # short one-line descriptor ("" when Wikipedia has none)
-    extract: str  # first-paragraph plain-text summary
-    thumbnail: str | None  # image URL (upload.wikimedia.org), if any
-    url: str  # canonical desktop article URL
-
-
 class Breakdown(BaseModel):
     """The breakdown (Q2) payload: a root's descendants at a target rank."""
 
@@ -545,6 +530,8 @@ class AppConfig(BaseModel):
     feedback_url: str
     source_code_url: str
     privacy_contact_email: str
+    # Wikipedia REST summary URL with {title}; clients fetch the "About" text themselves.
+    wikipedia_summary_url: str
     groups: list[CladeGroup]  # curated groups; ``featured`` ones are the landing-page cards
     # In groups-file order; a group that doesn't fit the current taxonomy is left out.
     custom_groups: list[CustomGroupItem]

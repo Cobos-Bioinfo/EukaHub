@@ -26,15 +26,15 @@ ENA           ┘   (rebuild.yml)          (public)          ▲
 | Web | `web/` | React + TypeScript SPA built with Vite, served by nginx, which also proxies `/api` and caches API responses. |
 | Refresher | `scripts/auto_refresh.py` + `scripts/restore_snapshot.py` | Sidecar container. Installs the latest dataset Release on first start, then checks daily for a newer one. |
 | Shared config | `core/src/eukahub_core/metrics.py`, `taxonomy.py` | The four resource metrics, the quality stats and the root taxids, shared by pipeline and API and exported to the web app through OpenAPI. |
-| Deployment settings | `api/src/eukahub_api/settings.py`, `infra/config/` | Links, privacy contact, Wikipedia lookup, curated groups and custom groups, read by the API at startup. The web app gets them, with the custom groups, from `/api/config`, and the data of any set of clades from `/api/aggregate`. See [deployment.md](deployment.md#configuration). |
+| Deployment settings | `api/src/eukahub_api/settings.py`, `infra/config/` | Links, privacy contact, Wikipedia summary endpoint, curated groups and custom groups, read by the API at startup. The web app gets them, with the custom groups, from `/api/config`, and the data of any set of clades from `/api/aggregate`. See [deployment.md](deployment.md#configuration). |
 
 ## Request path
 
 Browser → nginx (static SPA; `/api/*` proxied, successful GETs cached for up to
 an hour) → FastAPI → Postgres. Successful API responses carry `Cache-Control`,
 and JSON responses an `ETag`. Nothing in the request path writes to the database or calls an external
-service, except the Wikipedia summary on the dashboard, which is fetched by the
-API and cached for 24 hours.
+service. The Wikipedia summary on the dashboard is fetched by the browser from
+Wikipedia.
 
 ## Data updates
 
