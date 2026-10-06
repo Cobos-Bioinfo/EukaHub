@@ -276,8 +276,8 @@ def _path(taxid: int) -> str:
 
 def test_aggregate_counts_are_clade_differences(client):
     body = _aggregate(client, [40674], [9443])
-    mammals = client.get("/clade/40674/summary").json()
-    primates = client.get("/clade/9443/summary").json()
+    mammals = client.get("/taxons/40674").json()
+    primates = client.get("/taxons/9443").json()
     assert _counts(body) == [m - p for m, p in zip(_counts(mammals), _counts(primates))]
     assert [t["taxid"] for t in body["include"]] == [40674]
     assert [t["taxid"] for t in body["exclude"]] == [9443]
@@ -288,14 +288,14 @@ def test_aggregate_counts_are_clade_differences(client):
 
 def test_aggregate_of_one_clade_matches_the_clade(client):
     body = _aggregate(client, [40674])
-    assert _counts(body) == _counts(client.get("/clade/40674/summary").json())
+    assert _counts(body) == _counts(client.get("/taxons/40674").json())
     compared = client.get("/compare", params={"taxids": "40674"}).json()["groups"][0]
     assert _stats(body) == _stats(compared)
 
 
 def test_aggregate_can_include_inside_an_excluded_clade(client):
     body = _aggregate(client, [7742, 40674], [32523])
-    summaries = {t: _counts(client.get(f"/clade/{t}/summary").json()) for t in (7742, 32523, 40674)}
+    summaries = {t: _counts(client.get(f"/taxons/{t}").json()) for t in (7742, 32523, 40674)}
     assert _counts(body) == [
         v - t + m for v, t, m in zip(summaries[7742], summaries[32523], summaries[40674])
     ]

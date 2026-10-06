@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useReducer, useRef } from "react";
 
-import { getChildren, getSummary } from "../api/queries";
+import { getChildren, getTaxon } from "../api/queries";
 import type { TaxonChildren, TaxonNode } from "../api/types";
 
 // How many children to load per expand / "load more" (matches the API default).
@@ -173,7 +173,7 @@ export function useTree(rootTaxid: number): Tree {
     dispatch({ type: "reset", rootId: rootTaxid });
     // Seed the centre node (metrics from the summary) and its first ring at once;
     // has_children is known from whether the children page reports any total.
-    Promise.all([getSummary(rootTaxid), getChildren(rootTaxid, { limit: PAGE_SIZE })])
+    Promise.all([getTaxon(rootTaxid), getChildren(rootTaxid, { limit: PAGE_SIZE })])
       .then(([summary, page]) => {
         if (!active) return;
         dispatch({ type: "seedRoot", node: { ...summary, has_children: page.total > 0 } });

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 
 def test_summary_is_cacheable(client):
-    r = client.get("/clade/2759/summary")
+    r = client.get("/taxons/2759")
     assert r.status_code == 200
     cc = r.headers.get("cache-control", "")
     assert "public" in cc and "max-age=" in cc

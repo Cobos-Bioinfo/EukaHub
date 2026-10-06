@@ -99,28 +99,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/clade/{taxid}/summary": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Clade Summary
-         * @description Genomic Resource Summary for one taxon: species count + per-resource
-         *     coverage/total/percent. For a species or a finer taxon, also the records
-         *     attached to the taxon itself rather than to a finer taxon below it.
-         */
-        get: operations["clade_summary_clade__taxid__summary_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/compare": {
         parameters: {
             query?: never;
@@ -283,27 +261,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/taxon/{taxid}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Taxon Lineage
-         * @description The taxon and its root→node lineage (breadcrumb). One indexed `ltree`
-         *     ancestor query on the materialized path.
-         */
-        get: operations["taxon_lineage_taxon__taxid__get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/taxon/{taxid}/annotations": {
         parameters: {
             query?: never;
@@ -368,6 +325,30 @@ export interface paths {
          *     species leaf) returns an empty list.
          */
         get: operations["taxon_children_taxon__taxid__children_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/taxons/{taxid}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Taxon
+         * @description One taxon: its lineage (root first, the taxon last), species count,
+         *     per-resource coverage, assembly composition, and the quality stats (best
+         *     BUSCO, median genes, genome size and N50) of every record under it. A
+         *     species, an informal species or a finer taxon also has ``direct``: its
+         *     records attached to the taxon itself rather than to a finer taxon below it.
+         */
+        get: operations["taxon_taxons__taxid__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -938,6 +919,41 @@ export interface components {
          */
         TargetRank: "phylum" | "class" | "order" | "family" | "genus" | "species";
         /**
+         * Taxon
+         * @description One taxon (served by ``/taxons/{taxid}``): its lineage, its counts, and the
+         *     quality stats of every record under it.
+         */
+        Taxon: {
+            composition: components["schemas"]["AssemblyComposition"];
+            /** Direct */
+            direct?: {
+                [key: string]: number;
+            } | null;
+            /** Has Children */
+            has_children: boolean;
+            /**
+             * Is Infraspecific
+             * @default false
+             */
+            is_infraspecific: boolean;
+            /** Lineage */
+            lineage: components["schemas"]["TaxonRef"][];
+            /** N Rows */
+            n_rows: number;
+            /** Name */
+            name: string;
+            /** Rank */
+            rank: string;
+            /** Resources */
+            resources: {
+                [key: string]: components["schemas"]["ResourceSummary"];
+            };
+            /** Stats */
+            stats: components["schemas"]["QualityStatValue"][];
+            /** Taxid */
+            taxid: number;
+        };
+        /**
          * TaxonChildren
          * @description A taxon's direct children (adjacency) for lazy-expanding the tree.
          */
@@ -949,20 +965,6 @@ export interface components {
             returned: number;
             /** Total */
             total: number;
-        };
-        /**
-         * TaxonLineage
-         * @description A taxon plus its root→node lineage (for the header breadcrumb).
-         */
-        TaxonLineage: {
-            /** Lineage */
-            lineage: components["schemas"]["TaxonRef"][];
-            /** Name */
-            name: string;
-            /** Rank */
-            rank: string;
-            /** Taxid */
-            taxid: number;
         };
         /**
          * TaxonNode
@@ -1182,37 +1184,6 @@ export interface operations {
             };
         };
     };
-    clade_summary_clade__taxid__summary_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                taxid: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["CladeSummary"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     compare_compare_get: {
         parameters: {
             query: {
@@ -1401,37 +1372,6 @@ export interface operations {
             };
         };
     };
-    taxon_lineage_taxon__taxid__get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                taxid: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["TaxonLineage"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     taxon_annotations_taxon__taxid__annotations_get: {
         parameters: {
             query?: {
@@ -1524,6 +1464,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TaxonChildren"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    taxon_taxons__taxid__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                taxid: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Taxon"];
                 };
             };
             /** @description Validation Error */

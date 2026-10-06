@@ -2,7 +2,7 @@
 
 Rebuild/slice-safe: the assertions never pin a specific clade to a fixed rank in
 the top-N (prod has far bigger clades than the CI slice), so they cross-check
-whatever comes back against /clade/{taxid}/summary instead. The one place a
+whatever comes back against /taxons/{taxid} instead. The one place a
 non-empty result is needed uses resource=lng at class level: long-read coverage
 is sparse on prod, and the CI slice carries a mammal species without data, so
 Mammalia keeps a gap on both.
@@ -50,7 +50,7 @@ def test_gaps_match_summary(client):
     gap is derived from it — no separate source of truth."""
     body = client.get("/gaps", params={"rank": "class", "resource": "lng"}).json()
     for it in body["items"][:3]:
-        summ = client.get(f"/clade/{it['taxid']}/summary").json()
+        summ = client.get(f"/taxons/{it['taxid']}").json()
         assert it["n_rows"] == summ["n_rows"]
         res = summ["resources"]["lng"]
         assert it["covered"] == res["covered"]

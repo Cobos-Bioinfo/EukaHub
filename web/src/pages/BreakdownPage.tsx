@@ -1,6 +1,6 @@
 import { useParams } from "react-router";
 
-import { getLineage } from "../api/queries";
+import { getTaxon } from "../api/queries";
 import BreakdownMap from "../components/BreakdownMap";
 import { TaxonError } from "../components/ErrorPage";
 import ViewSwitcher from "../components/ViewSwitcher";
@@ -12,7 +12,7 @@ import { useAsync } from "../hooks/useAsync";
 export default function BreakdownPage() {
   const { taxid: taxidParam } = useParams();
   const id = Number(taxidParam);
-  const lineage = useAsync(() => getLineage(id), [id]);
+  const lineage = useAsync(() => getTaxon(id), [id]);
 
   if (!Number.isInteger(id) || id <= 0)
     return <TaxonError taxid={taxidParam} />;

@@ -28,7 +28,7 @@ def test_cors_omits_unknown_origin(client):
 
 def test_cors_preflight(client):
     r = client.options(
-        "/clade/2759/summary",
+        "/taxons/2759",
         headers={
             "Origin": ALLOWED_ORIGIN,
             "Access-Control-Request-Method": "GET",

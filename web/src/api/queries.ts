@@ -10,7 +10,6 @@ import type {
   AssemblySort,
   Breakdown,
   BucketQuality,
-  CladeSummary,
   Compare,
   DatasetMeta,
   FilterLogic,
@@ -22,8 +21,8 @@ import type {
   SearchHit,
   SortColumn,
   TargetRank,
+  Taxon,
   TaxonChildren,
-  TaxonLineage,
 } from "./types";
 
 function extractDetail(error: unknown): string | undefined {
@@ -105,11 +104,10 @@ export interface GapsParams {
 export const getGaps = async (params: GapsParams = {}): Promise<Gaps> =>
   unwrap(await api.GET("/gaps", { params: { query: params } }));
 
-export const getSummary = async (taxid: number): Promise<CladeSummary> =>
-  unwrap(await api.GET("/clade/{taxid}/summary", { params: { path: { taxid } } }));
-
-export const getLineage = async (taxid: number): Promise<TaxonLineage> =>
-  unwrap(await api.GET("/taxon/{taxid}", { params: { path: { taxid } } }));
+// One taxon: its lineage (root first, the taxon last), counts and the quality
+// stats of every record under it.
+export const getTaxon = async (taxid: number): Promise<Taxon> =>
+  unwrap(await api.GET("/taxons/{taxid}", { params: { path: { taxid } } }));
 
 // Direct children of a taxon, for lazy-expanding the interactive tree. Sorted
 // by species count by default; `offset` pages through a big node's children.

@@ -14,7 +14,7 @@ def test_overview_totals_match_eukaryota_summary(client):
     """The global totals are Eukaryota's rollup — cross-check against the summary
     endpoint so the two can't drift."""
     ov = client.get("/overview").json()
-    summ = client.get("/clade/2759/summary").json()
+    summ = client.get("/taxons/2759").json()
 
     t = ov["totals"]
     assert t["species"] == summ["n_rows"]

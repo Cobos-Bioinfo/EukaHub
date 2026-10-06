@@ -272,13 +272,13 @@ class SearchHit(TaxonRef):
     )
 
 
-class TaxonLineage(BaseModel):
-    """A taxon plus its root→node lineage (for the header breadcrumb)."""
+class Taxon(CladeSummary):
+    """One taxon (served by ``/taxons/{taxid}``): its lineage, its counts, and the
+    quality stats of every record under it."""
 
-    taxid: int
-    name: str
-    rank: str
-    lineage: list[TaxonRef]  # root first, this taxon last (inclusive)
+    lineage: list[TaxonRef]  # root first, this taxon last
+    has_children: bool
+    stats: list[QualityStatValue]  # in QUALITY_STATS order; null where no record has the field
 
 
 class TaxonNode(CladeSummary):

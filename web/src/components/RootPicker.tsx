@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 import { useNavigate } from "react-router";
 
-import { getLineage, searchTaxa } from "../api/queries";
+import { getTaxon, searchTaxa } from "../api/queries";
 import type { SearchHit, TaxonRef } from "../api/types";
 import { EUKARYOTA_TAXID } from "../lib/taxonomy";
 
@@ -48,7 +48,7 @@ export default function RootPicker({
     // All digits → look the taxon up directly by TaxID; otherwise search names.
     if (/^\d+$/.test(query)) {
       const timer = setTimeout(() => {
-        getLineage(Number(query)).then(
+        getTaxon(Number(query)).then(
           (t) => {
             if (!t.lineage.some((a) => a.taxid === EUKARYOTA_TAXID)) return show([]);
             const above = t.lineage.slice(0, -1).filter((a) => CONTEXT_RANKS.includes(a.rank));

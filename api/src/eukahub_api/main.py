@@ -6,10 +6,9 @@ Phase 2 read endpoints:
 - ``GET /compare``                     — several groups lined up side by side.
 - ``GET /aggregate``                   — data for a set of clades (include minus exclude).
 - ``GET /gaps``                        — the biggest under-sequenced groups.
-- ``GET /clade/{taxid}/summary``       — the Genomic Resource Summary (Q1).
+- ``GET /taxons/{taxid}``              — one taxon: lineage, counts and quality stats.
 - ``GET /clade/{taxid}/breakdown``     — descendants at a target rank (Q2).
 - ``GET /clade/{taxid}/export.tsv``    — the full breakdown as a TSV download.
-- ``GET /taxon/{taxid}``               — the root→node lineage breadcrumb.
 - ``GET /taxon/{taxid}/children``      — direct children for the interactive tree.
 - ``GET /taxon/{taxid}/assemblies``    — genome assemblies in the subtree (+ stats).
 - ``GET /taxon/{taxid}/annotations``   — annotations in the subtree (+ BUSCO stats).
@@ -59,13 +58,12 @@ from eukahub_api.queries import (
     fetch_dataset_meta,
     fetch_direct_totals,
     fetch_gaps,
-    fetch_lineage,
     fetch_overview,
     fetch_quality_for_taxids,
     fetch_root,
     fetch_set_quality,
     fetch_set_taxa,
-    fetch_summary,
+    fetch_taxon,
     iter_export_tsv,
     search_taxa,
 )
@@ -96,8 +94,8 @@ from eukahub_api.schemas import (
     QualityStatValue,
     ResourceSummary,
     SearchHit,
+    Taxon,
     TaxonChildren,
-    TaxonLineage,
     TaxonNode,
     TaxonRef,
 )
@@ -556,19 +554,26 @@ def gaps(
     )
 
 
-@app.get("/clade/{taxid}/summary", response_model=CladeSummary)
-def clade_summary(taxid: int, conn: Conn) -> CladeSummary:
-    """Genomic Resource Summary for one taxon: species count + per-resource
-    coverage/total/percent. For a species or a finer taxon, also the records
-    attached to the taxon itself rather than to a finer taxon below it."""
+@app.get("/taxons/{taxid}", response_model=Taxon)
+def taxon(taxid: int, conn: Conn) -> Taxon:
+    """One taxon: its lineage (root first, the taxon last), species count,
+    per-resource coverage, assembly composition, and the quality stats (best
+    BUSCO, median genes, genome size and N50) of every record under it. A
+    species, an informal species or a finer taxon also has ``direct``: its
+    records attached to the taxon itself rather than to a finer taxon below it."""
     try:
-        name, rank, meta, is_infraspecific = fetch_summary(conn, taxid)
+        row = fetch_taxon(conn, taxid)
     except TaxonNotFound:
         raise HTTPException(status_code=404, detail=f"taxon {taxid} not found")
-    summary = CladeSummary.from_metadata(name, rank, meta, is_infraspecific)
-    if is_infraspecific or rank in UNIT_RANKS:
-        summary.direct = fetch_direct_totals(conn, taxid, meta)
-    return summary
+    summary = CladeSummary.from_metadata(row.name, row.rank, row.meta, row.is_infraspecific)
+    if row.is_infraspecific or row.rank in UNIT_RANKS:
+        summary.direct = fetch_direct_totals(conn, taxid, row.meta)
+    return Taxon(
+        **summary.model_dump(),
+        lineage=[TaxonRef(taxid=t, name=n, rank=r) for t, n, r in row.lineage],
+        has_children=row.has_children,
+        stats=[QualityStatValue(key=k, value=v) for k, v in row.stats.items()],
+    )
 
 
 @app.get("/clade/{taxid}/breakdown", response_model=Breakdown)
@@ -653,19 +658,6 @@ def clade_breakdown_quality(
         )
         for t, stats in buckets.items()
     ]
-
-
-@app.get("/taxon/{taxid}", response_model=TaxonLineage)
-def taxon_lineage(taxid: int, conn: Conn) -> TaxonLineage:
-    """The taxon and its root→node lineage (breadcrumb). One indexed `ltree`
-    ancestor query on the materialized path."""
-    try:
-        rows = fetch_lineage(conn, taxid)
-    except TaxonNotFound:
-        raise HTTPException(status_code=404, detail=f"taxon {taxid} not found")
-    lineage = [TaxonRef(taxid=t, name=n, rank=r) for t, n, r in rows]
-    node = lineage[-1]  # deepest = the requested taxon
-    return TaxonLineage(taxid=node.taxid, name=node.name, rank=node.rank, lineage=lineage)
 
 
 @app.get("/taxon/{taxid}/children", response_model=TaxonChildren)

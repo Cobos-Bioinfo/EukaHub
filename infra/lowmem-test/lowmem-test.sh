@@ -15,7 +15,7 @@ echo "== Testing $REPO @ $(git -C "$REPO" rev-parse --short HEAD 2>/dev/null)$(g
 
 echo "== Waiting for the refresher to install the dataset (max 45 min)..."
 start=$(date +%s)
-until curl -fsS -o /dev/null "$API/clade/2759/summary" 2>/dev/null; do
+until curl -fsS -o /dev/null "$API/taxons/2759" 2>/dev/null; do
   (( $(date +%s) - start > 2700 )) && { echo "Timed out"; "${C[@]}" logs --tail 40 refresher; exit 1; }
   sleep 15
 done
@@ -28,7 +28,7 @@ hit() {  # label, url  -> status, size, seconds (never aborts the script)
 echo "== What the UI requests (expect 200, ideally well under 15s each)"
 hit "overview (landing)"                  "$API/overview"
 hit "gaps teaser (landing)"               "$API/gaps?limit=5&include_quality=false"
-hit "summary Eukaryota (dashboard)"       "$API/clade/2759/summary"
+hit "summary Eukaryota (dashboard)"       "$API/taxons/2759"
 hit "assemblies Eukaryota (records)"      "$API/taxon/2759/assemblies?limit=50"
 hit "annotations Eukaryota (records)"     "$API/taxon/2759/annotations?limit=50"
 hit "breakdown Eukaryota phylum (map)"    "$API/clade/2759/breakdown?rank=phylum&limit=250&exclude_empty=false"
@@ -49,7 +49,7 @@ hit "quality Metazoa genus"   "$API/clade/33208/breakdown/quality?rank=genus" &
 hit "quality Fungi genus"     "$API/clade/4751/breakdown/quality?rank=genus" &
 hit "gaps family"             "$API/gaps?rank=family&limit=200" &
 hit "export Insecta species"  "$API/clade/50557/export.tsv?rank=species" &
-hit "summary Mammalia"        "$API/clade/40674/summary" &
+hit "summary Mammalia"        "$API/taxons/40674" &
 hit "children Metazoa"        "$API/taxon/33208/children?limit=100" &
 wait
 

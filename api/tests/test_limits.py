@@ -48,8 +48,8 @@ def test_repeated_queries_never_switch_to_generic_plans(client):
 
 
 def test_cancelled_query_is_a_clean_504(client, monkeypatch):
-    monkeypatch.setattr(main, "fetch_summary", _slow_query)
-    resp = client.get("/clade/2759/summary")
+    monkeypatch.setattr(main, "fetch_taxon", _slow_query)
+    resp = client.get("/taxons/2759")
     assert resp.status_code == 504
     assert "smaller group" in resp.json()["detail"]
     # Errors must never be cached by the browser or the nginx proxy cache.
@@ -73,8 +73,8 @@ def test_pool_exhaustion_is_a_retryable_503(client, monkeypatch):
     def _no_connection(conn, taxid):
         raise PoolTimeout("couldn't get a connection after 30.00 sec")
 
-    monkeypatch.setattr(main, "fetch_summary", _no_connection)
-    resp = client.get("/clade/2759/summary")
+    monkeypatch.setattr(main, "fetch_taxon", _no_connection)
+    resp = client.get("/taxons/2759")
     assert resp.status_code == 503
     assert resp.headers["retry-after"] == "10"
     assert "public" not in resp.headers.get("cache-control", "")

@@ -28,7 +28,7 @@ def test_search_puts_the_exact_name_first(client):
 def test_search_hits_name_their_nearest_major_rank(client):
     body = client.get("/search", params={"q": "Homo", "limit": 5}).json()
     for hit in body:
-        lineage = client.get(f"/taxon/{hit['taxid']}").json()["lineage"]
+        lineage = client.get(f"/taxons/{hit['taxid']}").json()["lineage"]
         above = [a for a in lineage[:-1] if a["rank"] in ("class", "phylum", "kingdom")]
         assert hit["context"] == (above[-1]["name"] if above else None)
 
@@ -36,7 +36,7 @@ def test_search_hits_name_their_nearest_major_rank(client):
 def test_search_data_flag_matches_the_summary(client):
     body = client.get("/search", params={"q": "Homo", "limit": 5}).json()
     for hit in body:
-        summary = client.get(f"/clade/{hit['taxid']}/summary").json()
+        summary = client.get(f"/taxons/{hit['taxid']}").json()
         totals = [r["total"] for r in summary["resources"].values()]
         assert hit["has_data"] == any(t > 0 for t in totals)
         assert hit["similar"] is False

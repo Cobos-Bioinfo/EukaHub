@@ -2,7 +2,7 @@ import { hierarchy, treemap, treemapResquarify } from "d3-hierarchy";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 
-import { exportTsvUrl, getBreakdown, getBreakdownQuality, getLineage } from "../api/queries";
+import { exportTsvUrl, getBreakdown, getBreakdownQuality, getTaxon } from "../api/queries";
 import type { CladeSummary, TargetRank, TaxonRef } from "../api/types";
 import { useAsync } from "../hooks/useAsync";
 import { fmt, fmtBp, fmtPct } from "../lib/format";
@@ -155,7 +155,7 @@ function useDrillTrail(root: TaxonRef, rootLineage: TaxonRef[] | undefined, sync
   }, [root, rootLineage, clicked]);
   const needLookup = syncUrl && drillTaxids.some((id) => !known.has(id));
   const recon = useAsync(
-    () => (needLookup ? getLineage(focusTaxid) : Promise.resolve(null)),
+    () => (needLookup ? getTaxon(focusTaxid) : Promise.resolve(null)),
     [needLookup, focusTaxid],
   );
 

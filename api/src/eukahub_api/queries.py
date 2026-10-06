@@ -10,6 +10,7 @@ field order, guarded by a test.
 from __future__ import annotations
 
 from collections.abc import Collection, Iterator, Sequence
+from dataclasses import dataclass
 from enum import Enum
 
 import psycopg
@@ -143,6 +144,57 @@ def fetch_summary(
     return name, rank, CladeMetadata(taxid, *features), is_infraspecific
 
 
+@dataclass(frozen=True, slots=True)
+class TaxonRow:
+    """One taxon with its lineage, rollup and quality stats (see ``fetch_taxon``)."""
+
+    name: str
+    rank: str
+    lineage: list[tuple[int, str, str]]  # (taxid, name, rank), root first, the taxon last
+    is_infraspecific: bool
+    has_children: bool
+    meta: CladeMetadata
+    stats: dict[str, float | None]  # QUALITY_STATS over every record in the subtree
+
+
+def fetch_taxon(conn: psycopg.Connection, taxid: int) -> TaxonRow:
+    """One taxon with its lineage, rollup row (zero-filled when it has none) and
+    the quality stats of the records under it. The ancestors are the labels of
+    its path, so they are primary-key lookups. Raises ``TaxonNotFound``."""
+    row = conn.execute(
+        f"SELECT t.name, t.rank, ltree2text(t.path), "
+        "EXISTS (SELECT 1 FROM taxon c WHERE c.parent_id = t.taxid AND c.taxid <> t.taxid), "
+        f"{', '.join('f.' + c for c in _FEATURE_COLS)} "
+        "FROM taxon t LEFT JOIN clade_features f USING (taxid) WHERE t.taxid = %s",
+        (taxid,),
+    ).fetchone()
+    if row is None:
+        raise TaxonNotFound(taxid)
+    name, rank, path, has_children, *features = row
+    labels = [int(label) for label in path.split(".")]
+    ranks = {
+        t: (n, r)
+        for t, n, r in conn.execute(
+            "SELECT taxid, name, rank FROM taxon WHERE taxid = ANY(%s)", (labels,)
+        ).fetchall()
+    }
+    lineage = [(t, *ranks[t]) for t in labels if t in ranks]
+    stats: dict[str, float | None] = {}
+    for source in ("assembly", "annotation"):
+        stats |= _fetch_quality_stats(conn, source, path)[1]
+    return TaxonRow(
+        name=name,
+        rank=rank,
+        lineage=lineage,
+        is_infraspecific=any(r in UNIT_RANKS for _t, _n, r in lineage[:-1]),
+        has_children=has_children,
+        meta=(
+            CladeMetadata.zero(taxid) if features[0] is None else CladeMetadata(taxid, *features)
+        ),
+        stats={q.key: stats[q.key] for q in QUALITY_STATS},
+    )
+
+
 def fetch_direct_totals(
     conn: psycopg.Connection, taxid: int, meta: CladeMetadata
 ) -> dict[str, int]:
@@ -218,25 +270,6 @@ def fetch_compare(
         _ann_total, ann_stats = _fetch_quality_stats(conn, "annotation", path)
         groups.append((taxid, name, rank, meta, {**ass_stats, **ann_stats}))
     return groups
-
-
-def fetch_lineage(conn: psycopg.Connection, taxid: int) -> list[tuple[int, str, str]]:
-    """Return the root→taxon lineage as ``(taxid, name, rank)`` rows, inclusive
-    of the taxon itself, ordered root-first.
-
-    One indexed query: ``path @>`` selects the ancestors-or-self via the GiST
-    index, ``nlevel(path)`` orders them by depth. No recursion, no ETE3. Raises
-    ``TaxonNotFound`` if the taxid is absent (a present taxon always yields at
-    least its own row)."""
-    rows = conn.execute(
-        "SELECT t.taxid, t.name, t.rank FROM taxon t "
-        "WHERE t.path @> (SELECT path FROM taxon WHERE taxid = %s) "
-        "ORDER BY nlevel(t.path)",
-        (taxid,),
-    ).fetchall()
-    if not rows:
-        raise TaxonNotFound(taxid)
-    return rows
 
 
 def fetch_children(

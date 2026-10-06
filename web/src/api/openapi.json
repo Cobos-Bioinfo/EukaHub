@@ -1370,6 +1370,87 @@
         "title": "TargetRank",
         "type": "string"
       },
+      "Taxon": {
+        "description": "One taxon (served by ``/taxons/{taxid}``): its lineage, its counts, and the\nquality stats of every record under it.",
+        "properties": {
+          "composition": {
+            "$ref": "#/components/schemas/AssemblyComposition"
+          },
+          "direct": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "integer"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Direct"
+          },
+          "has_children": {
+            "title": "Has Children",
+            "type": "boolean"
+          },
+          "is_infraspecific": {
+            "default": false,
+            "title": "Is Infraspecific",
+            "type": "boolean"
+          },
+          "lineage": {
+            "items": {
+              "$ref": "#/components/schemas/TaxonRef"
+            },
+            "title": "Lineage",
+            "type": "array"
+          },
+          "n_rows": {
+            "title": "N Rows",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "rank": {
+            "title": "Rank",
+            "type": "string"
+          },
+          "resources": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/ResourceSummary"
+            },
+            "title": "Resources",
+            "type": "object"
+          },
+          "stats": {
+            "items": {
+              "$ref": "#/components/schemas/QualityStatValue"
+            },
+            "title": "Stats",
+            "type": "array"
+          },
+          "taxid": {
+            "title": "Taxid",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "taxid",
+          "name",
+          "rank",
+          "n_rows",
+          "resources",
+          "composition",
+          "lineage",
+          "has_children",
+          "stats"
+        ],
+        "title": "Taxon",
+        "type": "object"
+      },
       "TaxonChildren": {
         "description": "A taxon's direct children (adjacency) for lazy-expanding the tree.",
         "properties": {
@@ -1399,38 +1480,6 @@
           "items"
         ],
         "title": "TaxonChildren",
-        "type": "object"
-      },
-      "TaxonLineage": {
-        "description": "A taxon plus its root\u2192node lineage (for the header breadcrumb).",
-        "properties": {
-          "lineage": {
-            "items": {
-              "$ref": "#/components/schemas/TaxonRef"
-            },
-            "title": "Lineage",
-            "type": "array"
-          },
-          "name": {
-            "title": "Name",
-            "type": "string"
-          },
-          "rank": {
-            "title": "Rank",
-            "type": "string"
-          },
-          "taxid": {
-            "title": "Taxid",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "taxid",
-          "name",
-          "rank",
-          "lineage"
-        ],
-        "title": "TaxonLineage",
         "type": "object"
       },
       "TaxonNode": {
@@ -1945,46 +1994,6 @@
         "summary": "Clade Export"
       }
     },
-    "/clade/{taxid}/summary": {
-      "get": {
-        "description": "Genomic Resource Summary for one taxon: species count + per-resource\ncoverage/total/percent. For a species or a finer taxon, also the records\nattached to the taxon itself rather than to a finer taxon below it.",
-        "operationId": "clade_summary_clade__taxid__summary_get",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "taxid",
-            "required": true,
-            "schema": {
-              "title": "Taxid",
-              "type": "integer"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/CladeSummary"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Clade Summary"
-      }
-    },
     "/compare": {
       "get": {
         "description": "Line several groups up side by side: each group's species count,\nper-resource coverage, and live quality stats (BUSCO / genes / genome size /\nN50) in one cacheable request. Unknown taxids are dropped; at most\n``_COMPARE_MAX_GROUPS`` are honoured.",
@@ -2260,46 +2269,6 @@
         "summary": "Search"
       }
     },
-    "/taxon/{taxid}": {
-      "get": {
-        "description": "The taxon and its root\u2192node lineage (breadcrumb). One indexed `ltree`\nancestor query on the materialized path.",
-        "operationId": "taxon_lineage_taxon__taxid__get",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "taxid",
-            "required": true,
-            "schema": {
-              "title": "Taxid",
-              "type": "integer"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/TaxonLineage"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Taxon Lineage"
-      }
-    },
     "/taxon/{taxid}/annotations": {
       "get": {
         "description": "Functional annotations anywhere under a taxon, for the drill-down list +\nthe live annotation-quality stats (best BUSCO, median protein-coding gene\ncount). Subtree join to the `annotation` table; default sort surfaces the\nbest-annotated genomes first. 404 if the taxid is unknown.",
@@ -2514,6 +2483,46 @@
           }
         },
         "summary": "Taxon Children"
+      }
+    },
+    "/taxons/{taxid}": {
+      "get": {
+        "description": "One taxon: its lineage (root first, the taxon last), species count,\nper-resource coverage, assembly composition, and the quality stats (best\nBUSCO, median genes, genome size and N50) of every record under it. A\nspecies, an informal species or a finer taxon also has ``direct``: its\nrecords attached to the taxon itself rather than to a finer taxon below it.",
+        "operationId": "taxon_taxons__taxid__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "taxid",
+            "required": true,
+            "schema": {
+              "title": "Taxid",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Taxon"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Taxon"
       }
     }
   }

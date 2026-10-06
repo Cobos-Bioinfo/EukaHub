@@ -2,7 +2,7 @@
 
 Rebuild/slice-safe: Mammalia (40674) and Homo sapiens (9606) are both in the
 full DB and the CI seed slice, so they anchor the assertions. Values are
-cross-checked against /clade/{taxid}/summary rather than frozen.
+cross-checked against /taxons/{taxid} rather than frozen.
 """
 
 from __future__ import annotations
@@ -31,7 +31,7 @@ def test_compare_two_groups_shape(client):
 def test_compare_matches_summary(client):
     """A compare entry is the same rollup the summary endpoint serves."""
     g = client.get("/compare", params={"taxids": "40674"}).json()["groups"][0]
-    summ = client.get("/clade/40674/summary").json()
+    summ = client.get("/taxons/40674").json()
     assert g["n_rows"] == summ["n_rows"]
     for k in METRIC_KEYS:
         assert g["resources"][k]["total"] == summ["resources"][k]["total"]
