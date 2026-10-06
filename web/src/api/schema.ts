@@ -173,7 +173,8 @@ export interface paths {
          * Taxons Report
          * @description Every taxon ``/taxons`` lists for the same filters and sort, as a streamed
          *     TSV download: taxid, name, species count, then the species with each resource
-         *     and the total of each resource.
+         *     and the total of each resource. At most 100 MB: a larger report is refused
+         *     before it starts.
          */
         get: operations["taxons_report_taxons_report_get"];
         put?: never;

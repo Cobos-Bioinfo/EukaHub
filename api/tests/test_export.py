@@ -5,6 +5,7 @@ from __future__ import annotations
 import dataclasses
 import math
 
+import pytest
 from eukahub_api import main, queries
 from eukahub_api.queries import EXPORT_HEADER, TaxonFilter
 from eukahub_api.resources import taxons
@@ -84,3 +85,44 @@ def test_report_streams_one_chunk_per_batch(client, monkeypatch):
     n_rows = len(whole) - 1
     assert n_rows > 3
     assert len(chunks) == 1 + math.ceil(n_rows / 3)  # header, then one chunk per batch
+
+
+@pytest.mark.parametrize(
+    "query",
+    ["within=40674&rank=species", "taxids=40674,9606", "q=homo", "within=2759&rank=phylum&filter=ass"],
+)
+def test_the_report_limit_counts_the_bytes_sent(client, monkeypatch, query):
+    """A report exactly at the limit is sent, and one byte over it is refused."""
+    url = f"/taxons/report?{query}"
+    size = len(client.get(url).content)
+    monkeypatch.setattr(taxons, "MAX_REPORT_BYTES", size)
+    assert client.get(url).status_code == 200
+    monkeypatch.setattr(taxons, "MAX_REPORT_BYTES", size - 1)
+    resp = client.get(url)
+    assert resp.status_code == 422
+    assert "MB limit" in resp.json()["detail"]
+
+
+def test_an_oversized_report_is_refused_before_it_starts(client, monkeypatch):
+    def _never(*args, **kwargs):
+        raise AssertionError("the report query ran")
+
+    monkeypatch.setattr(taxons, "MAX_REPORT_BYTES", 0)  # below any report: each has a header
+    monkeypatch.setattr(taxons, "iter_report_tsv", _never)
+    resp = client.get("/taxons/report?within=2759&rank=species")
+    assert resp.status_code == 422
+    assert "public" not in resp.headers.get("cache-control", "")
+
+
+def test_postgres_counts_a_row_as_the_report_writes_it():
+    """The size query and the TSV writer agree on multi-byte names and on the
+    characters a cell replaces."""
+    row = (9606, "Bömbus\tlüc\r\nörum", 0, 1234567)
+    written = "\t".join(queries._tsv_cell(v) for v in row) + "\n"
+    with main.app.state.pool.connection() as conn:
+        (counted,) = conn.execute(
+            "SELECT octet_length(concat_ws(E'\\t', %s::int, %s::text, %s::int, %s::int)) + 1",
+            row,
+        ).fetchone()
+    assert counted == len(written.encode())
+

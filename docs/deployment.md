@@ -288,6 +288,9 @@ fixes over time; rebuild with `$C build --pull && $C up -d` every few months.
   rank works.
 - 503 "The server is busy": all database connections were busy; clients should
   retry after the `Retry-After` delay.
+- 422 "This report would be N MB, over the 100 MB limit": the TSV report asked for
+  more taxa than the API sends at once; a smaller `within`, one `rank` or a `filter`
+  narrows it.
 
 ## Testing under the production budget
 

@@ -31,6 +31,7 @@ from eukahub_api.queries import (
     fetch_taxon_stats,
     iter_report_tsv,
     list_taxa,
+    report_size,
 )
 from eukahub_api.schemas import (
     MAX_CLADES_PER_GROUP,
@@ -51,6 +52,8 @@ router = APIRouter()
 
 # Most taxids one /taxons request may name.
 MAX_TAXIDS = 100
+# Largest /taxons/report the API sends, in bytes.
+MAX_REPORT_BYTES = 100_000_000
 
 
 def _parse_taxids(raw: str, name: str, cap: int) -> list[int]:
@@ -226,7 +229,16 @@ def taxons_report(
 ) -> StreamingResponse:
     """Every taxon ``/taxons`` lists for the same filters and sort, as a streamed
     TSV download: taxid, name, species count, then the species with each resource
-    and the total of each resource."""
+    and the total of each resource. At most 100 MB: a larger report is refused
+    before it starts."""
+    size = report_size(conn, f)
+    if size > MAX_REPORT_BYTES:
+        raise HTTPException(
+            status_code=422,
+            detail=f"This report would be {size / 1e6:.1f} MB, over the "
+            f"{MAX_REPORT_BYTES / 1e6:.0f} MB limit. Ask for fewer taxa with within, rank, "
+            "q or filter.",
+        )
     rows = iter_report_tsv(
         request.app.state.pool,
         f,
