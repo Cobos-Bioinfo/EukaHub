@@ -352,13 +352,25 @@ class TaxonItem(CladeSummary):
         description="Nearest class, phylum or kingdom above the taxon, to tell homonyms apart."
     )
     has_children: bool
-    stats: list[QualityStatValue] | None = Field(
-        None, description="With stats=true: as in /taxons/{taxid}; otherwise null."
-    )
 
 
 class TaxonPage(Page):
     results: list[TaxonItem]
+
+
+class TaxonStats(BaseModel):
+    """The quality stats of one taxon in a list (served by ``/taxons/stats``)."""
+
+    taxid: int
+    name: str
+    stats: list[QualityStatValue] = Field(
+        description="As in /taxons/{taxid}: computed per request from every record on or "
+        "below the taxon; /config says which aggregation each one is."
+    )
+
+
+class TaxonStatsPage(Page):
+    results: list[TaxonStats]
 
 
 class Aggregate(BaseModel):

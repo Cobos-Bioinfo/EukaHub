@@ -19,15 +19,50 @@ def test_page_envelope(client):
 def test_taxids_lists_those_taxa(client):
     """Mammalia and Homo sapiens are in the full dataset and the CI slice. Unknown
     taxids match nothing."""
-    body = client.get("/taxons", params={"taxids": "9606,40674,99999999", "stats": "true"}).json()
+    body = client.get("/taxons", params={"taxids": "9606,40674,99999999"}).json()
     assert sorted(it["taxid"] for it in body["results"]) == [9606, 40674]
     assert body["total"] == 2
     for it in body["results"]:
         taxon = client.get(f"/taxons/{it['taxid']}").json()
         assert it["n_rows"] == taxon["n_rows"]
         assert it["resources"] == taxon["resources"]
-        assert it["stats"] == taxon["stats"]
-        assert [s["key"] for s in it["stats"]] == list(QUALITY_KEYS)
+        assert "stats" not in it
+
+
+@pytest.mark.parametrize(
+    "params",
+    [
+        {"taxids": "9606,40674,99999999"},
+        {"within": 40674, "rank": "order", "sort_by": "gap_ass", "limit": 4},
+        {"within": 2759, "rank": "species", "sort_by": "s_ass", "limit": 5},
+        {"q": "homo", "limit": 3},
+    ],
+)
+def test_stats_follow_the_list_page_for_page(client, params):
+    """/taxons/stats holds the same taxa as /taxons for the same parameters, in the
+    same order and with the same cursors, and each taxon's stats are the ones
+    /taxons/{taxid} serves."""
+    listed = client.get("/taxons", params=params).json()
+    stats = client.get("/taxons/stats", params=params).json()
+    assert [s["taxid"] for s in stats["results"]] == [it["taxid"] for it in listed["results"]]
+    assert {k: stats[k] for k in ("total", "limit", "next", "previous")} == {
+        k: listed[k] for k in ("total", "limit", "next", "previous")
+    }
+    for s in stats["results"][:3]:
+        assert set(s) == {"taxid", "name", "stats"}
+        assert [v["key"] for v in s["stats"]] == list(QUALITY_KEYS)
+        assert s["stats"] == client.get(f"/taxons/{s['taxid']}").json()["stats"]
+
+
+def test_stats_page_with_the_list_cursor(client):
+    params = {"within": 2759, "rank": "class", "limit": 4}
+    first = client.get("/taxons", params=params).json()
+    listed = client.get("/taxons", params={**params, "cursor": first["next"]}).json()
+    stats = client.get("/taxons/stats", params={**params, "cursor": first["next"]}).json()
+    assert [s["taxid"] for s in stats["results"]] == [it["taxid"] for it in listed["results"]]
+    for s in stats["results"]:
+        busco = next(v["value"] for v in s["stats"] if v["key"] == "busco")
+        assert busco is None or 0.0 <= busco <= 100.0
 
 
 @pytest.mark.parametrize(

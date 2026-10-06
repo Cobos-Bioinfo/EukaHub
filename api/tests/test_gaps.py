@@ -39,12 +39,12 @@ def test_gap_sort_ascending_puts_the_best_covered_first(client):
     assert gaps == sorted(gaps)
 
 
-def test_gaps_with_stats_match_the_taxon(client):
-    """A gap clade's stats are the ones /taxons/{taxid} serves."""
-    it = _gaps(client, stats="true", limit=1)[0]
-    taxon = client.get(f"/taxons/{it['taxid']}").json()
-    assert it["stats"] == taxon["stats"]
-    assert it["resources"] == taxon["resources"]
+def test_gaps_stats_match_the_taxon(client):
+    """The stats of a gap clade are the ones /taxons/{taxid} serves."""
+    params = {"within": 2759, "sort_by": "gap_lng", "rank": "class", "limit": 1}
+    it = client.get("/taxons/stats", params=params).json()["results"][0]
+    assert it["taxid"] == _gaps(client, limit=1)[0]["taxid"]
+    assert it["stats"] == client.get(f"/taxons/{it['taxid']}").json()["stats"]
 
 
 def test_every_resource_has_a_gap_sort(client):

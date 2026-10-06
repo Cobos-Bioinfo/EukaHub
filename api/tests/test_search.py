@@ -41,7 +41,7 @@ def test_search_hits_carry_the_taxon_counts(client):
         assert hit["resources"] == taxon["resources"]
         assert hit["n_rows"] == taxon["n_rows"]
         assert hit["has_children"] == taxon["has_children"]
-        assert hit["stats"] is None  # only with stats=true
+        assert "stats" not in hit  # in /taxons/stats
 
 
 def test_fuzzy_search_finds_close_spellings(client):

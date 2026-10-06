@@ -178,7 +178,7 @@ export function useTree(rootTaxid: number): Tree {
     Promise.all([getTaxon(rootTaxid), getChildren(rootTaxid, { limit: PAGE_SIZE })])
       .then(([taxon, page]) => {
         if (!active) return;
-        dispatch({ type: "seedRoot", node: { ...taxon, context: null, stats: null } });
+        dispatch({ type: "seedRoot", node: { ...taxon, context: null } });
         dispatch({ type: "childrenLoaded", taxid: rootTaxid, page });
       })
       .catch((e) => active && dispatch({ type: "error", taxid: rootTaxid, error: errMsg(e) }));

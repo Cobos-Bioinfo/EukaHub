@@ -10,7 +10,6 @@ from itertools import pairwise
 
 import psycopg
 from eukahub_api.db import database_url
-from eukahub_core.metrics import QUALITY_KEYS
 
 
 def _is_descending(values: list[float]) -> bool:
@@ -88,33 +87,3 @@ def test_breakdown_invalid_rank_422(client):
 
 def test_breakdown_unknown_root_404(client):
     assert client.get("/taxons", params={"within": 999999999, "rank": "phylum"}).status_code == 404
-
-
-def test_breakdown_stats_shape(client):
-    body = client.get(
-        "/taxons", params={"within": 40674, "rank": "order", "stats": "true", "limit": 50}
-    ).json()
-    assert body["results"], "Mammalia has orders"
-    for it in body["results"]:
-        assert [s["key"] for s in it["stats"]] == list(QUALITY_KEYS)
-        busco = next(s["value"] for s in it["stats"] if s["key"] == "busco")
-        assert busco is None or 0.0 <= busco <= 100.0
-
-
-def test_breakdown_stats_match_each_taxon(client):
-    body = client.get(
-        "/taxons", params={"within": 40674, "rank": "order", "stats": "true", "limit": 3}
-    ).json()
-    for it in body["results"]:
-        assert it["stats"] == client.get(f"/taxons/{it['taxid']}").json()["stats"]
-
-
-def test_breakdown_stats_cover_only_the_page(client):
-    """Stats are computed for the listed taxa, so they never outgrow `limit`, even
-    for every species in Eukaryota."""
-    body = client.get(
-        "/taxons",
-        params={"within": 2759, "rank": "species", "sort_by": "s_ass", "stats": "true", "limit": 5},
-    ).json()
-    assert len(body["results"]) == 5
-    assert all(it["stats"] is not None for it in body["results"])

@@ -11,6 +11,7 @@ export type TaxonRef = components["schemas"]["TaxonRef"];
 export type Taxon = components["schemas"]["Taxon"];
 export type TaxonItem = components["schemas"]["TaxonItem"];
 export type TaxonPage = components["schemas"]["TaxonPage"];
+export type TaxonStatsPage = components["schemas"]["TaxonStatsPage"];
 // The counts every taxon carries, alone or in a list.
 export type CladeSummary = Omit<Taxon, "lineage" | "has_children" | "stats">;
 // A taxon in the interactive tree.

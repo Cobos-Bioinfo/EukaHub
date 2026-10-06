@@ -1125,21 +1125,6 @@
             "title": "Resources",
             "type": "object"
           },
-          "stats": {
-            "anyOf": [
-              {
-                "items": {
-                  "$ref": "#/components/schemas/QualityStatValue"
-                },
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "With stats=true: as in /taxons/{taxid}; otherwise null.",
-            "title": "Stats"
-          },
           "taxid": {
             "title": "Taxid",
             "type": "integer"
@@ -1256,6 +1241,84 @@
         ],
         "title": "TaxonSort",
         "type": "string"
+      },
+      "TaxonStats": {
+        "description": "The quality stats of one taxon in a list (served by ``/taxons/stats``).",
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "stats": {
+            "description": "As in /taxons/{taxid}: computed per request from every record on or below the taxon; /config says which aggregation each one is.",
+            "items": {
+              "$ref": "#/components/schemas/QualityStatValue"
+            },
+            "title": "Stats",
+            "type": "array"
+          },
+          "taxid": {
+            "title": "Taxid",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "taxid",
+          "name",
+          "stats"
+        ],
+        "title": "TaxonStats",
+        "type": "object"
+      },
+      "TaxonStatsPage": {
+        "properties": {
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "next": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next"
+          },
+          "previous": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Previous"
+          },
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/TaxonStats"
+            },
+            "title": "Results",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total",
+          "limit",
+          "next",
+          "previous",
+          "results"
+        ],
+        "title": "TaxonStatsPage",
+        "type": "object"
       },
       "ValidationError": {
         "properties": {
@@ -1568,7 +1631,7 @@
     },
     "/taxons": {
       "get": {
-        "description": "Taxa with their counts: a name search (``q``), a taxon's children\n(``parent``), every taxon of a rank under a taxon (``within`` and ``rank``), or\nchosen taxa (``taxids``), narrowed by the data they have. Sort by\n``gap_<resource>`` for the groups with the most species still missing it.",
+        "description": "Taxa with their counts: a name search (``q``), a taxon's children\n(``parent``), every taxon of a rank under a taxon (``within`` and ``rank``), or\nchosen taxa (``taxids``), narrowed by the data they have. Sort by\n``gap_<resource>`` for the groups with the most species still missing it. Their\nquality stats are in ``/taxons/stats``.",
         "operationId": "taxons_taxons_get",
         "parameters": [
           {
@@ -1596,18 +1659,6 @@
             "schema": {
               "$ref": "#/components/schemas/SortOrder",
               "default": "desc"
-            }
-          },
-          {
-            "description": "Add each taxon's quality stats (best BUSCO, median genes, genome size and N50), computed from its records: slower.",
-            "in": "query",
-            "name": "stats",
-            "required": false,
-            "schema": {
-              "default": false,
-              "description": "Add each taxon's quality stats (best BUSCO, median genes, genome size and N50), computed from its records: slower.",
-              "title": "Stats",
-              "type": "boolean"
             }
           },
           {
@@ -2071,6 +2122,243 @@
           }
         },
         "summary": "Taxons Report"
+      }
+    },
+    "/taxons/stats": {
+      "get": {
+        "description": "The quality stats (best BUSCO, median genes, genome size and N50) of the taxa\n``/taxons`` lists for the same parameters, page for page and with the same\ncursors, each computed from the records on or below the taxon. Slower than\n``/taxons``: about half a second for any page on the full dataset.",
+        "operationId": "taxons_stats_taxons_stats_get",
+        "parameters": [
+          {
+            "description": "A count column, `gap_<resource>` (species without that resource) or `name`. Without it: relevance for `q`, else species count (`n_rows`).",
+            "in": "query",
+            "name": "sort_by",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/TaxonSort"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "A count column, `gap_<resource>` (species without that resource) or `name`. Without it: relevance for `q`, else species count (`n_rows`).",
+              "title": "Sort By"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sort_order",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/SortOrder",
+              "default": "desc"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 25,
+              "maximum": 1000,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "``next`` or ``previous`` from a page with the same sort, for the page after or before it.",
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 1000,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "``next`` or ``previous`` from a page with the same sort, for the page after or before it.",
+              "title": "Cursor"
+            }
+          },
+          {
+            "description": "Only taxa whose name contains this text, ignoring case (or is spelled like it, with `fuzzy`). The root and 'cellular organisms' are left out.",
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 100,
+                  "minLength": 3,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only taxa whose name contains this text, ignoring case (or is spelled like it, with `fuzzy`). The root and 'cellular organisms' are left out.",
+              "title": "Q"
+            }
+          },
+          {
+            "description": "Match `q` by spelling instead, for a misspelt name.",
+            "in": "query",
+            "name": "fuzzy",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "Match `q` by spelling instead, for a misspelt name.",
+              "title": "Fuzzy",
+              "type": "boolean"
+            }
+          },
+          {
+            "description": "Only the direct children of this taxon.",
+            "in": "query",
+            "name": "parent",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only the direct children of this taxon.",
+              "title": "Parent"
+            }
+          },
+          {
+            "description": "Only rows on this taxon or below it (e.g. 40674 for mammals).",
+            "in": "query",
+            "name": "within",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only rows on this taxon or below it (e.g. 40674 for mammals).",
+              "title": "Within"
+            }
+          },
+          {
+            "description": "Only taxa of this rank.",
+            "in": "query",
+            "name": "rank",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/TargetRank"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only taxa of this rank.",
+              "title": "Rank"
+            }
+          },
+          {
+            "description": "Only these taxa: comma-separated taxids, at most 100.",
+            "in": "query",
+            "name": "taxids",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only these taxa: comma-separated taxids, at most 100.",
+              "title": "Taxids"
+            }
+          },
+          {
+            "description": "Only taxa with data for these resources.",
+            "in": "query",
+            "name": "filter",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "$ref": "#/components/schemas/MetricFilter"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only taxa with data for these resources.",
+              "title": "Filter"
+            }
+          },
+          {
+            "description": "Whether `filter` needs every resource (AND) or any (OR).",
+            "in": "query",
+            "name": "logic",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/FilterLogic",
+              "default": "AND",
+              "description": "Whether `filter` needs every resource (AND) or any (OR)."
+            }
+          },
+          {
+            "description": "Only taxa with data for at least one resource.",
+            "in": "query",
+            "name": "exclude_empty",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "Only taxa with data for at least one resource.",
+              "title": "Exclude Empty",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaxonStatsPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Taxons Stats"
       }
     },
     "/taxons/{taxid}": {

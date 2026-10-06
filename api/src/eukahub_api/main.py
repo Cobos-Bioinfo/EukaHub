@@ -6,6 +6,7 @@ Resources:
   chrome, deployment links and groups.
 - ``GET /taxons``                      — taxa by name, parent, rank under a taxon or taxid,
   with their counts; sorted, filtered and paged.
+- ``GET /taxons/stats``                — the quality stats of the same taxa, page for page.
 - ``GET /taxons/report``               — every taxon the same list would page through, as TSV.
 - ``GET /taxons/aggregate``            — data for a set of clades (include minus exclude).
 - ``GET /taxons/{taxid}``              — one taxon: lineage, counts and quality stats.
@@ -48,6 +49,7 @@ from eukahub_api.queries import (
     SortOrder,
     TargetRank,
     TaxonFilter,
+    TaxonListRow,
     TaxonNotFound,
     TaxonSort,
     fetch_dataset_meta,
@@ -82,6 +84,8 @@ from eukahub_api.schemas import (
     TaxonItem,
     TaxonPage,
     TaxonRef,
+    TaxonStats,
+    TaxonStatsPage,
 )
 from eukahub_api.settings import get_settings
 
@@ -440,28 +444,19 @@ _TaxonSortBy = Annotated[
 ]
 
 
-@app.get("/taxons", response_model=TaxonPage)
-def taxons(
-    conn: Conn,
-    f: _TaxonFilter,
-    sort_by: _TaxonSortBy = None,
-    sort_order: SortOrder = SortOrder.desc,
-    stats: Annotated[
-        bool,
-        Query(
-            description="Add each taxon's quality stats (best BUSCO, median genes, genome "
-            "size and N50), computed from its records: slower."
-        ),
-    ] = False,
-    limit: Annotated[int, Query(ge=1, le=1000)] = 25,
-    cursor: _Cursor = None,
-) -> TaxonPage:
-    """Taxa with their counts: a name search (``q``), a taxon's children
-    (``parent``), every taxon of a rank under a taxon (``within`` and ``rank``), or
-    chosen taxa (``taxids``), narrowed by the data they have. Sort by
-    ``gap_<resource>`` for the groups with the most species still missing it."""
+_Limit = Annotated[int, Query(ge=1, le=1000)]
+
+
+def _taxa_page(
+    conn: psycopg.Connection,
+    f: TaxonFilter,
+    sort_by: TaxonSort | None,
+    sort_order: SortOrder,
+    limit: int,
+    cursor: str | None,
+) -> tuple[int, Page[TaxonListRow]]:
     try:
-        total, result = list_taxa(
+        return list_taxa(
             conn,
             f,
             sort=sort_by.value if sort_by else None,
@@ -471,9 +466,23 @@ def taxons(
         )
     except InvalidCursor as e:
         raise HTTPException(status_code=422, detail=f"cursor: {e}")
-    quality = (
-        fetch_quality_for_taxids(conn, [r.meta.taxid for r in result.rows]) if stats else {}
-    )
+
+
+@app.get("/taxons", response_model=TaxonPage)
+def taxons(
+    conn: Conn,
+    f: _TaxonFilter,
+    sort_by: _TaxonSortBy = None,
+    sort_order: SortOrder = SortOrder.desc,
+    limit: _Limit = 25,
+    cursor: _Cursor = None,
+) -> TaxonPage:
+    """Taxa with their counts: a name search (``q``), a taxon's children
+    (``parent``), every taxon of a rank under a taxon (``within`` and ``rank``), or
+    chosen taxa (``taxids``), narrowed by the data they have. Sort by
+    ``gap_<resource>`` for the groups with the most species still missing it. Their
+    quality stats are in ``/taxons/stats``."""
+    total, result = _taxa_page(conn, f, sort_by, sort_order, limit, cursor)
     return TaxonPage(
         total=total,
         limit=limit,
@@ -486,11 +495,39 @@ def taxons(
                 ).model_dump(),
                 context=r.context,
                 has_children=r.has_children,
-                stats=(
-                    [QualityStatValue(key=k, value=v) for k, v in quality[r.meta.taxid].items()]
-                    if stats
-                    else None
-                ),
+            )
+            for r in result.rows
+        ],
+    )
+
+
+@app.get("/taxons/stats", response_model=TaxonStatsPage)
+def taxons_stats(
+    conn: Conn,
+    f: _TaxonFilter,
+    sort_by: _TaxonSortBy = None,
+    sort_order: SortOrder = SortOrder.desc,
+    limit: _Limit = 25,
+    cursor: _Cursor = None,
+) -> TaxonStatsPage:
+    """The quality stats (best BUSCO, median genes, genome size and N50) of the taxa
+    ``/taxons`` lists for the same parameters, page for page and with the same
+    cursors, each computed from the records on or below the taxon. Slower than
+    ``/taxons``: about half a second for any page on the full dataset."""
+    total, result = _taxa_page(conn, f, sort_by, sort_order, limit, cursor)
+    quality = fetch_quality_for_taxids(conn, [r.meta.taxid for r in result.rows])
+    return TaxonStatsPage(
+        total=total,
+        limit=limit,
+        next=result.next,
+        previous=result.previous,
+        results=[
+            TaxonStats(
+                taxid=r.meta.taxid,
+                name=r.name,
+                stats=[
+                    QualityStatValue(key=k, value=v) for k, v in quality[r.meta.taxid].items()
+                ],
             )
             for r in result.rows
         ],

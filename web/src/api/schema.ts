@@ -125,7 +125,8 @@ export interface paths {
          * @description Taxa with their counts: a name search (``q``), a taxon's children
          *     (``parent``), every taxon of a rank under a taxon (``within`` and ``rank``), or
          *     chosen taxa (``taxids``), narrowed by the data they have. Sort by
-         *     ``gap_<resource>`` for the groups with the most species still missing it.
+         *     ``gap_<resource>`` for the groups with the most species still missing it. Their
+         *     quality stats are in ``/taxons/stats``.
          */
         get: operations["taxons_taxons_get"];
         put?: never;
@@ -174,6 +175,29 @@ export interface paths {
          *     and the total of each resource.
          */
         get: operations["taxons_report_taxons_report_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/taxons/stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Taxons Stats
+         * @description The quality stats (best BUSCO, median genes, genome size and N50) of the taxa
+         *     ``/taxons`` lists for the same parameters, page for page and with the same
+         *     cursors, each computed from the records on or below the taxon. Slower than
+         *     ``/taxons``: about half a second for any page on the full dataset.
+         */
+        get: operations["taxons_stats_taxons_stats_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -666,11 +690,6 @@ export interface components {
             resources: {
                 [key: string]: components["schemas"]["ResourceSummary"];
             };
-            /**
-             * Stats
-             * @description With stats=true: as in /taxons/{taxid}; otherwise null.
-             */
-            stats?: components["schemas"]["QualityStatValue"][] | null;
             /** Taxid */
             taxid: number;
         };
@@ -704,6 +723,34 @@ export interface components {
          * @enum {string}
          */
         TaxonSort: "n_rows" | "c_ass" | "c_ann" | "c_rna" | "c_lng" | "s_ass" | "s_ann" | "s_rna" | "s_lng" | "n_ass_complete" | "n_ass_chromosome" | "n_ass_scaffold" | "n_ass_contig" | "n_reference" | "gap_ass" | "gap_ann" | "gap_rna" | "gap_lng" | "name";
+        /**
+         * TaxonStats
+         * @description The quality stats of one taxon in a list (served by ``/taxons/stats``).
+         */
+        TaxonStats: {
+            /** Name */
+            name: string;
+            /**
+             * Stats
+             * @description As in /taxons/{taxid}: computed per request from every record on or below the taxon; /config says which aggregation each one is.
+             */
+            stats: components["schemas"]["QualityStatValue"][];
+            /** Taxid */
+            taxid: number;
+        };
+        /** TaxonStatsPage */
+        TaxonStatsPage: {
+            /** Limit */
+            limit: number;
+            /** Next */
+            next: string | null;
+            /** Previous */
+            previous: string | null;
+            /** Results */
+            results: components["schemas"]["TaxonStats"][];
+            /** Total */
+            total: number;
+        };
         /** ValidationError */
         ValidationError: {
             /** Context */
@@ -870,8 +917,6 @@ export interface operations {
                 /** @description A count column, `gap_<resource>` (species without that resource) or `name`. Without it: relevance for `q`, else species count (`n_rows`). */
                 sort_by?: components["schemas"]["TaxonSort"] | null;
                 sort_order?: components["schemas"]["SortOrder"];
-                /** @description Add each taxon's quality stats (best BUSCO, median genes, genome size and N50), computed from its records: slower. */
-                stats?: boolean;
                 limit?: number;
                 /** @description ``next`` or ``previous`` from a page with the same sort, for the page after or before it. */
                 cursor?: string | null;
@@ -992,6 +1037,60 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    taxons_stats_taxons_stats_get: {
+        parameters: {
+            query?: {
+                /** @description A count column, `gap_<resource>` (species without that resource) or `name`. Without it: relevance for `q`, else species count (`n_rows`). */
+                sort_by?: components["schemas"]["TaxonSort"] | null;
+                sort_order?: components["schemas"]["SortOrder"];
+                limit?: number;
+                /** @description ``next`` or ``previous`` from a page with the same sort, for the page after or before it. */
+                cursor?: string | null;
+                /** @description Only taxa whose name contains this text, ignoring case (or is spelled like it, with `fuzzy`). The root and 'cellular organisms' are left out. */
+                q?: string | null;
+                /** @description Match `q` by spelling instead, for a misspelt name. */
+                fuzzy?: boolean;
+                /** @description Only the direct children of this taxon. */
+                parent?: number | null;
+                /** @description Only rows on this taxon or below it (e.g. 40674 for mammals). */
+                within?: number | null;
+                /** @description Only taxa of this rank. */
+                rank?: components["schemas"]["TargetRank"] | null;
+                /** @description Only these taxa: comma-separated taxids, at most 100. */
+                taxids?: string | null;
+                /** @description Only taxa with data for these resources. */
+                filter?: components["schemas"]["MetricFilter"][] | null;
+                /** @description Whether `filter` needs every resource (AND) or any (OR). */
+                logic?: components["schemas"]["FilterLogic"];
+                /** @description Only taxa with data for at least one resource. */
+                exclude_empty?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaxonStatsPage"];
                 };
             };
             /** @description Validation Error */

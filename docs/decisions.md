@@ -116,7 +116,11 @@ Streamlit app that answered the same questions but was slow to build and to serv
   count or by the species still missing a resource (`gap_<key>`). Search, the tree's
   children, the data map, the gaps list, compare and the landing numbers are that
   one list with different filters, so each page's request is cached on its own and
-  nothing is computed twice. Records are their own collections (`/assemblies`,
+  nothing is computed twice. The list's quality stats are a separate resource,
+  `/taxons/stats`, paged with the same parameters and cursors: they cost about half
+  a second per page whatever its size (search takes 7 ms without them), so a list
+  that does not show them never pays for them, and no parameter changes a
+  response's shape. Records are their own collections (`/assemblies`,
   `/annotations`), filtered by `within`, and `/taxons/report` is the whole list as
   TSV. Names follow Annotrieve's API (`/taxons`, `sort_by`, `sort_order`, `results`,
   `/report`), which the same people maintain and use.

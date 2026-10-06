@@ -21,6 +21,7 @@ import type {
   TaxonItem,
   TaxonPage,
   TaxonSort,
+  TaxonStatsPage,
 } from "./types";
 
 function extractDetail(error: unknown): string | undefined {
@@ -99,7 +100,6 @@ export interface TaxaParams {
   exclude_empty?: boolean;
   sort_by?: TaxonSort;
   sort_order?: SortOrder;
-  stats?: boolean; // add each taxon's quality stats (slower)
   limit?: number;
   cursor?: string;
 }
@@ -108,6 +108,17 @@ export const getTaxa = async ({ taxids, ...params }: TaxaParams): Promise<TaxonP
   unwrap(
     await api.GET("/taxons", { params: { query: { ...params, taxids: taxids?.join(",") } } }),
   );
+
+// The quality stats of the taxa getTaxa returns for the same params, page for
+// page (slower: about half a second on the full dataset).
+export const getTaxaStats = async ({ taxids, ...params }: TaxaParams): Promise<TaxonStatsPage> =>
+  unwrap(
+    await api.GET("/taxons/stats", {
+      params: { query: { ...params, taxids: taxids?.join(",") } },
+    }),
+  );
+
+const statsById = (page: TaxonStatsPage) => new Map(page.results.map((t) => [t.taxid, t.stats]));
 
 // Direct children of a taxon, for lazy-expanding the tree, biggest first.
 export const getChildren = (
@@ -196,12 +207,14 @@ export type CompareGroup = TaxonItem & { quality: QualityStatValue[] };
 // Several groups side by side, in the order given; unknown taxids are dropped.
 export async function getCompare(taxids: number[]): Promise<{ groups: CompareGroup[] }> {
   if (taxids.length === 0) return { groups: [] };
-  const { results } = await getTaxa({ taxids, stats: true, limit: taxids.length });
+  const params = { taxids, limit: taxids.length };
+  const [{ results }, stats] = await Promise.all([getTaxa(params), getTaxaStats(params)]);
   const byId = new Map(results.map((t) => [t.taxid, t]));
+  const quality = statsById(stats);
   return {
     groups: taxids.flatMap((id) => {
       const t = byId.get(id);
-      return t ? [{ ...t, quality: t.stats ?? [] }] : [];
+      return t ? [{ ...t, quality: quality.get(id) ?? [] }] : [];
     }),
   };
 }
@@ -235,16 +248,13 @@ export async function getGaps({
   limit = 25,
   include_quality = true,
 }: GapsParams = {}): Promise<{ root: TaxonItem; total_matches: number; items: GapItem[] }> {
-  const [roots, page] = await Promise.all([
+  const params = { within: root, rank, sort_by: `gap_${resource}` as TaxonSort, limit };
+  const [roots, page, stats] = await Promise.all([
     getTaxa({ taxids: [root], limit: 1 }),
-    getTaxa({
-      within: root,
-      rank,
-      sort_by: `gap_${resource}` as TaxonSort,
-      stats: include_quality,
-      limit,
-    }),
+    getTaxa(params),
+    include_quality ? getTaxaStats(params) : null,
   ]);
+  const quality = stats ? statsById(stats) : new Map<number, QualityStatValue[]>();
   const items = page.results
     .map((t) => {
       const r = t.resources[resource];
@@ -256,7 +266,7 @@ export async function getGaps({
         covered: r.covered,
         percent: r.percent,
         gap: t.n_rows - r.covered,
-        stats: t.stats ?? [],
+        stats: quality.get(t.taxid) ?? [],
       };
     })
     .filter((it) => it.gap > 0);
@@ -367,10 +377,10 @@ export async function getBreakdownQuality(
   taxid: number,
   params: BreakdownParams,
 ): Promise<BucketQuality[]> {
-  const page = await getTaxa({ ...breakdownQuery(taxid, params), stats: true });
+  const page = await getTaxaStats(breakdownQuery(taxid, params));
   return page.results
-    .filter((t) => t.stats?.some((s) => s.value !== null))
-    .map((t) => ({ taxid: t.taxid, stats: t.stats ?? [] }));
+    .filter((t) => t.stats.some((s) => s.value !== null))
+    .map((t) => ({ taxid: t.taxid, stats: t.stats }));
 }
 
 // Direct URL for the whole breakdown as TSV (a browser download, not a fetch):
