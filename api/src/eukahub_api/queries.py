@@ -28,6 +28,8 @@ from psycopg.rows import dict_row
 from psycopg_pool import ConnectionPool
 
 from eukahub_api.clade_sets import SetTaxon
+from eukahub_api.pagination import Key, Page, beyond, key_columns, order_by, page
+from eukahub_api.pagination import decode as decode_cursor
 
 # n_rows, then c_* (COVERAGE_KEYS), then s_* (TOTAL_KEYS), then the additive
 # composition columns — the exact tail of CladeMetadata's constructor after
@@ -71,6 +73,11 @@ def _identifier(value: str, allowed: Collection[str]) -> str:
     if value not in allowed:
         raise ValueError(f"not an allowed SQL identifier: {value!r}")
     return value
+
+
+class SortOrder(str, Enum):
+    asc = "asc"
+    desc = "desc"
 
 
 class FilterLogic(str, Enum):
@@ -677,63 +684,76 @@ def _fetch_quality_stats(
     return count, values
 
 
-def _fetch_records(
+# Primary key and the SQL type of each sort column, per record table.
+_RECORD_KEY: dict[str, str] = {"assembly": "assembly_accession", "annotation": "annotation_id"}
+_RECORD_SORT_TYPES: dict[str, str] = {
+    "release_date": "date",
+    "contig_n50": "bigint",
+    "total_sequence_length": "bigint",
+    "busco_complete": "real",
+    "protein_coding_count": "integer",
+}
+_RECORD_SELECT: dict[str, str] = {
+    "assembly": _ASSEMBLY_RECORD_SELECT,
+    "annotation": _ANNOTATION_RECORD_SELECT,
+}
+
+
+def _record_keys(source: str, sort: str, descending: bool) -> list[Key]:
+    """Records sort by ``sort`` with missing values last in either direction, then
+    by primary key. ``sort`` must be one of the source's sort columns."""
+    sort = _identifier(sort, _RECORD_SORTS[_identifier(source, _RECORD_SORTS)])
+    return [
+        Key(f"(r.{sort} IS NULL)", "boolean"),
+        Key(f"r.{sort}", _RECORD_SORT_TYPES[sort], descending),
+        Key(f"r.{_RECORD_KEY[source]}", "text"),
+    ]
+
+
+def list_records(
     conn: psycopg.Connection,
     *,
     source: str,
-    select: str,
-    key_col: str,
-    root_path: str,
+    within_path: str | None,
     sort: str,
+    descending: bool,
     limit: int,
-    offset: int,
-) -> list[dict]:
-    """Paginated per-record rows for a source over the subtree, as dicts keyed by
-    the aliased column names. ``sort`` must be one of the source's sort columns;
-    ``key_col`` is the table's primary key, appended as a unique tiebreaker so
-    limit/offset paging is a stable total order (``sort`` alone ties — many
-    records share a taxid)."""
-    sort = _identifier(sort, _RECORD_SORTS[_identifier(source, _RECORD_SORTS)])
+    cursor: str | None,
+) -> tuple[int, Page[dict]]:
+    """One page of a record table, optionally only the records on a taxon or below
+    it, as dicts keyed by the response-model fields, with the number of matching
+    records. Raises ``InvalidCursor`` for a cursor of another ordering."""
+    keys = _record_keys(source, sort, descending)
+    ordering = f"{source}:{sort}:{'desc' if descending else 'asc'}"
+    after = decode_cursor(cursor, ordering=ordering, keys=keys) if cursor else None
+    where, params = ("WHERE t.path <@ %s::ltree", [within_path]) if within_path else ("", [])
+    matches = (
+        f"SELECT r.{_RECORD_KEY[source]} AS id, {key_columns(keys)} "
+        f"FROM {source} r JOIN taxon t USING (taxid) {where}"
+    )
+    beyond_sql, beyond_params = beyond(keys, after) if after else ("TRUE", [])
+    backward = after is not None and after.backward
     sql = (
-        f"SELECT {select} FROM {source} a JOIN taxon t USING (taxid) "
-        "WHERE t.path <@ %s::ltree "
-        f"ORDER BY a.{sort} DESC NULLS LAST, a.{key_col} "
-        "LIMIT %s OFFSET %s"
+        f"WITH m AS MATERIALIZED ({matches}), "
+        f"p AS (SELECT * FROM m WHERE {beyond_sql} "
+        f"ORDER BY {order_by(keys, backward=backward)} LIMIT %s) "
+        f"SELECT (SELECT count(*) FROM m) AS total, {_RECORD_SELECT[source]}, "
+        f"{', '.join(f'p.k{i}' for i in range(len(keys)))} "
+        f"FROM p JOIN {source} a ON a.{_RECORD_KEY[source]} = p.id "
+        "JOIN taxon t ON t.taxid = a.taxid "
+        f"ORDER BY {order_by(keys, backward=backward, table='p')}"
     )
     with conn.cursor(row_factory=dict_row) as cur:
-        return cur.execute(sql, (root_path, limit, offset)).fetchall()
-
-
-def fetch_assembly_records(
-    conn: psycopg.Connection, *, taxid: int, sort: str, limit: int, offset: int
-) -> tuple[tuple[int, str, str], int, dict[str, float | None], list[dict]]:
-    """Assemblies under ``taxid`` (whole subtree) — ``(root_ref, total, stats,
-    records)``. ``stats`` are the live assembly-source distribution stats (median
-    genome size / contig N50). Raises ``TaxonNotFound`` for an unknown taxid."""
-    root_name, root_rank, root_path = fetch_root(conn, taxid)
-    total, stats = _fetch_quality_stats(conn, "assembly", root_path)
-    records = _fetch_records(
-        conn, source="assembly", select=_ASSEMBLY_RECORD_SELECT,
-        key_col="assembly_accession",
-        root_path=root_path, sort=sort, limit=limit, offset=offset,
-    )
-    return (taxid, root_name, root_rank), total, stats, records
-
-
-def fetch_annotation_records(
-    conn: psycopg.Connection, *, taxid: int, sort: str, limit: int, offset: int
-) -> tuple[tuple[int, str, str], int, dict[str, float | None], list[dict]]:
-    """Annotations under ``taxid`` (whole subtree) — ``(root_ref, total, stats,
-    records)``. ``stats`` are the live annotation-source stats (best BUSCO, median
-    protein-coding gene count). Raises ``TaxonNotFound`` for an unknown taxid."""
-    root_name, root_rank, root_path = fetch_root(conn, taxid)
-    total, stats = _fetch_quality_stats(conn, "annotation", root_path)
-    records = _fetch_records(
-        conn, source="annotation", select=_ANNOTATION_RECORD_SELECT,
-        key_col="annotation_id",
-        root_path=root_path, sort=sort, limit=limit, offset=offset,
-    )
-    return (taxid, root_name, root_rank), total, stats, records
+        rows = cur.execute(sql, [*params, *beyond_params, limit + 1]).fetchall()
+        if rows:
+            total = rows[0]["total"]
+        else:
+            total = cur.execute(f"SELECT count(*) AS n FROM ({matches}) m", params).fetchone()["n"]
+    key_names = [f"k{i}" for i in range(len(keys))]
+    keys_of = [[row.pop(k) for k in key_names] for row in rows]
+    for row in rows:
+        del row["total"]
+    return total, page(rows, keys_of, limit=limit, cursor=after, ordering=ordering)
 
 
 def _quality_by_bucket(

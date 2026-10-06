@@ -28,6 +28,48 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/annotations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Annotations
+         * @description Gene annotations, best BUSCO first by default; records missing the sort field
+         *     come last. The quality stats of a taxon's annotations are in ``/taxons/{taxid}``.
+         */
+        get: operations["annotations_annotations_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/assemblies": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Assemblies
+         * @description Genome assemblies, newest first by default; records missing the sort field
+         *     come last. The quality stats of a taxon's assemblies are in ``/taxons/{taxid}``.
+         */
+        get: operations["assemblies_assemblies_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/clade/{taxid}/breakdown": {
         parameters: {
             query?: never;
@@ -261,52 +303,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/taxon/{taxid}/annotations": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Taxon Annotations
-         * @description Functional annotations anywhere under a taxon, for the drill-down list +
-         *     the live annotation-quality stats (best BUSCO, median protein-coding gene
-         *     count). Subtree join to the `annotation` table; default sort surfaces the
-         *     best-annotated genomes first. 404 if the taxid is unknown.
-         */
-        get: operations["taxon_annotations_taxon__taxid__annotations_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/taxon/{taxid}/assemblies": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Taxon Assemblies
-         * @description Genome assemblies anywhere under a taxon (the whole subtree), for the
-         *     drill-down list + the live assembly-quality stats (median genome size /
-         *     contig N50). One indexed `ltree` subtree join to the small `assembly` table,
-         *     paginated. 404 if the taxid is unknown; an empty subtree returns `[]`.
-         */
-        get: operations["taxon_assemblies_taxon__taxid__assemblies_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/taxon/{taxid}/children": {
         parameters: {
             query?: never;
@@ -382,18 +378,16 @@ export interface components {
                 [key: string]: components["schemas"]["ResourceSummary"];
             };
         };
-        /**
-         * AnnotationList
-         * @description Annotations under a taxon: live annotation-quality stats + a paginated list.
-         */
-        AnnotationList: {
-            /** Items */
-            items: components["schemas"]["AnnotationRecord"][];
-            /** Returned */
-            returned: number;
-            root: components["schemas"]["TaxonRef"];
-            /** Stats */
-            stats: components["schemas"]["QualityStatValue"][];
+        /** AnnotationPage */
+        AnnotationPage: {
+            /** Limit */
+            limit: number;
+            /** Next */
+            next: string | null;
+            /** Previous */
+            previous: string | null;
+            /** Results */
+            results: components["schemas"]["AnnotationRecord"][];
             /** Total */
             total: number;
         };
@@ -480,18 +474,16 @@ export interface components {
             /** Scaffold */
             scaffold: number;
         };
-        /**
-         * AssemblyList
-         * @description Assemblies under a taxon: live assembly-quality stats + a paginated list.
-         */
-        AssemblyList: {
-            /** Items */
-            items: components["schemas"]["AssemblyRecord"][];
-            /** Returned */
-            returned: number;
-            root: components["schemas"]["TaxonRef"];
-            /** Stats */
-            stats: components["schemas"]["QualityStatValue"][];
+        /** AssemblyPage */
+        AssemblyPage: {
+            /** Limit */
+            limit: number;
+            /** Next */
+            next: string | null;
+            /** Previous */
+            previous: string | null;
+            /** Results */
+            results: components["schemas"]["AssemblyRecord"][];
             /** Total */
             total: number;
         };
@@ -914,6 +906,11 @@ export interface components {
          */
         SortColumn: "n_rows" | "c_ass" | "c_ann" | "c_rna" | "c_lng" | "s_ass" | "s_ann" | "s_rna" | "s_lng" | "n_ass_complete" | "n_ass_chromosome" | "n_ass_scaffold" | "n_ass_contig" | "n_reference";
         /**
+         * SortOrder
+         * @enum {string}
+         */
+        SortOrder: "asc" | "desc";
+        /**
          * TargetRank
          * @enum {string}
          */
@@ -1053,6 +1050,80 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Aggregate"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    annotations_annotations_get: {
+        parameters: {
+            query?: {
+                /** @description Only rows on this taxon or below it (e.g. 40674 for mammals). */
+                within?: number | null;
+                sort_by?: components["schemas"]["AnnotationSort"];
+                sort_order?: components["schemas"]["SortOrder"];
+                limit?: number;
+                /** @description ``next`` or ``previous`` from a page with the same sort, for the page after or before it. */
+                cursor?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnnotationPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    assemblies_assemblies_get: {
+        parameters: {
+            query?: {
+                /** @description Only rows on this taxon or below it (e.g. 40674 for mammals). */
+                within?: number | null;
+                sort_by?: components["schemas"]["AssemblySort"];
+                sort_order?: components["schemas"]["SortOrder"];
+                limit?: number;
+                /** @description ``next`` or ``previous`` from a page with the same sort, for the page after or before it. */
+                cursor?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssemblyPage"];
                 };
             };
             /** @description Validation Error */
@@ -1359,76 +1430,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SearchHit"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    taxon_annotations_taxon__taxid__annotations_get: {
-        parameters: {
-            query?: {
-                sort?: components["schemas"]["AnnotationSort"];
-                limit?: number;
-                offset?: number;
-            };
-            header?: never;
-            path: {
-                taxid: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AnnotationList"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    taxon_assemblies_taxon__taxid__assemblies_get: {
-        parameters: {
-            query?: {
-                sort?: components["schemas"]["AssemblySort"];
-                limit?: number;
-                offset?: number;
-            };
-            header?: never;
-            path: {
-                taxid: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AssemblyList"];
                 };
             };
             /** @description Validation Error */

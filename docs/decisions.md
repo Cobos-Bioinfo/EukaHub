@@ -110,6 +110,15 @@ Streamlit app that answered the same questions but was slow to build and to serv
   and `/aggregate` computes any set. Nothing is precomputed, so a deployment changes
   its groups with a restart, not a rebuild. Groups under one parent may not overlap,
   so that they and the parent's "rest" group always add up to the parent.
+- **Lists page with a cursor, not an offset.** Each list sorts on keys that end in
+  a unique one (the taxid or the record's accession), and a page's `next` and
+  `previous` cursors hold the key values of its last and first rows. The next query
+  filters on those values instead of skipping `offset` rows, which Postgres reads
+  and throws away, so a deep page costs what the first does and an indexed sort
+  can start where the cursor points. The cursor is opaque base64url JSON naming its
+  sort order; one from another order is refused with a 422. Records missing the
+  sort field come last in either direction. Lists still report `total`, counted
+  in the same query.
 - **The root taxids stay in code**, in one constant per side
   (`eukahub_core.taxonomy` and `web/src/lib/taxonomy.ts`). The dataset is built and
   validated for Eukaryota, so another root needs a rebuild and new checks anyway.

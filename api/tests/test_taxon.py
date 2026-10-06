@@ -128,7 +128,7 @@ def test_taxon_species_includes_subspecies_data(client):
     assert body["rank"] == "species"
     assert body["is_infraspecific"] is False
     assert body["n_rows"] == 1
-    assemblies = client.get(f"/taxon/{taxid}/assemblies", params={"limit": 1}).json()
+    assemblies = client.get("/assemblies", params={"within": taxid, "limit": 1}).json()
     assert body["resources"]["ass"]["total"] == assemblies["total"]
     assert body["resources"]["ass"]["covered"] == 1
 
@@ -168,7 +168,7 @@ def test_taxon_clade_totals_match_records(client):
     body = client.get("/taxons/2759").json()
     assert body["direct"] is None
     for key, source in (("ass", "assemblies"), ("ann", "annotations")):
-        records = client.get(f"/taxon/2759/{source}", params={"limit": 1}).json()
+        records = client.get(f"/{source}", params={"within": 2759, "limit": 1}).json()
         assert body["resources"][key]["total"] == records["total"]
 
 

@@ -51,28 +51,39 @@
         "title": "Aggregate",
         "type": "object"
       },
-      "AnnotationList": {
-        "description": "Annotations under a taxon: live annotation-quality stats + a paginated list.",
+      "AnnotationPage": {
         "properties": {
-          "items": {
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "next": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next"
+          },
+          "previous": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Previous"
+          },
+          "results": {
             "items": {
               "$ref": "#/components/schemas/AnnotationRecord"
             },
-            "title": "Items",
-            "type": "array"
-          },
-          "returned": {
-            "title": "Returned",
-            "type": "integer"
-          },
-          "root": {
-            "$ref": "#/components/schemas/TaxonRef"
-          },
-          "stats": {
-            "items": {
-              "$ref": "#/components/schemas/QualityStatValue"
-            },
-            "title": "Stats",
+            "title": "Results",
             "type": "array"
           },
           "total": {
@@ -81,13 +92,13 @@
           }
         },
         "required": [
-          "root",
           "total",
-          "returned",
-          "stats",
-          "items"
+          "limit",
+          "next",
+          "previous",
+          "results"
         ],
-        "title": "AnnotationList",
+        "title": "AnnotationPage",
         "type": "object"
       },
       "AnnotationRecord": {
@@ -355,28 +366,39 @@
         "title": "AssemblyComposition",
         "type": "object"
       },
-      "AssemblyList": {
-        "description": "Assemblies under a taxon: live assembly-quality stats + a paginated list.",
+      "AssemblyPage": {
         "properties": {
-          "items": {
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "next": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next"
+          },
+          "previous": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Previous"
+          },
+          "results": {
             "items": {
               "$ref": "#/components/schemas/AssemblyRecord"
             },
-            "title": "Items",
-            "type": "array"
-          },
-          "returned": {
-            "title": "Returned",
-            "type": "integer"
-          },
-          "root": {
-            "$ref": "#/components/schemas/TaxonRef"
-          },
-          "stats": {
-            "items": {
-              "$ref": "#/components/schemas/QualityStatValue"
-            },
-            "title": "Stats",
+            "title": "Results",
             "type": "array"
           },
           "total": {
@@ -385,13 +407,13 @@
           }
         },
         "required": [
-          "root",
           "total",
-          "returned",
-          "stats",
-          "items"
+          "limit",
+          "next",
+          "previous",
+          "results"
         ],
-        "title": "AssemblyList",
+        "title": "AssemblyPage",
         "type": "object"
       },
       "AssemblyRecord": {
@@ -1358,6 +1380,14 @@
         "title": "SortColumn",
         "type": "string"
       },
+      "SortOrder": {
+        "enum": [
+          "asc",
+          "desc"
+        ],
+        "title": "SortOrder",
+        "type": "string"
+      },
       "TargetRank": {
         "enum": [
           "phylum",
@@ -1671,6 +1701,202 @@
           }
         },
         "summary": "Aggregate"
+      }
+    },
+    "/annotations": {
+      "get": {
+        "description": "Gene annotations, best BUSCO first by default; records missing the sort field\ncome last. The quality stats of a taxon's annotations are in ``/taxons/{taxid}``.",
+        "operationId": "annotations_annotations_get",
+        "parameters": [
+          {
+            "description": "Only rows on this taxon or below it (e.g. 40674 for mammals).",
+            "in": "query",
+            "name": "within",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only rows on this taxon or below it (e.g. 40674 for mammals).",
+              "title": "Within"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sort_by",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/AnnotationSort",
+              "default": "busco_complete"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sort_order",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/SortOrder",
+              "default": "desc"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "``next`` or ``previous`` from a page with the same sort, for the page after or before it.",
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 1000,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "``next`` or ``previous`` from a page with the same sort, for the page after or before it.",
+              "title": "Cursor"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnnotationPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Annotations"
+      }
+    },
+    "/assemblies": {
+      "get": {
+        "description": "Genome assemblies, newest first by default; records missing the sort field\ncome last. The quality stats of a taxon's assemblies are in ``/taxons/{taxid}``.",
+        "operationId": "assemblies_assemblies_get",
+        "parameters": [
+          {
+            "description": "Only rows on this taxon or below it (e.g. 40674 for mammals).",
+            "in": "query",
+            "name": "within",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only rows on this taxon or below it (e.g. 40674 for mammals).",
+              "title": "Within"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sort_by",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/AssemblySort",
+              "default": "release_date"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sort_order",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/SortOrder",
+              "default": "desc"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "``next`` or ``previous`` from a page with the same sort, for the page after or before it.",
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 1000,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "``next`` or ``previous`` from a page with the same sort, for the page after or before it.",
+              "title": "Cursor"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssemblyPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Assemblies"
       }
     },
     "/clade/{taxid}/breakdown": {
@@ -2267,150 +2493,6 @@
           }
         },
         "summary": "Search"
-      }
-    },
-    "/taxon/{taxid}/annotations": {
-      "get": {
-        "description": "Functional annotations anywhere under a taxon, for the drill-down list +\nthe live annotation-quality stats (best BUSCO, median protein-coding gene\ncount). Subtree join to the `annotation` table; default sort surfaces the\nbest-annotated genomes first. 404 if the taxid is unknown.",
-        "operationId": "taxon_annotations_taxon__taxid__annotations_get",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "taxid",
-            "required": true,
-            "schema": {
-              "title": "Taxid",
-              "type": "integer"
-            }
-          },
-          {
-            "in": "query",
-            "name": "sort",
-            "required": false,
-            "schema": {
-              "$ref": "#/components/schemas/AnnotationSort",
-              "default": "busco_complete"
-            }
-          },
-          {
-            "in": "query",
-            "name": "limit",
-            "required": false,
-            "schema": {
-              "default": 50,
-              "maximum": 200,
-              "minimum": 1,
-              "title": "Limit",
-              "type": "integer"
-            }
-          },
-          {
-            "in": "query",
-            "name": "offset",
-            "required": false,
-            "schema": {
-              "default": 0,
-              "minimum": 0,
-              "title": "Offset",
-              "type": "integer"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AnnotationList"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Taxon Annotations"
-      }
-    },
-    "/taxon/{taxid}/assemblies": {
-      "get": {
-        "description": "Genome assemblies anywhere under a taxon (the whole subtree), for the\ndrill-down list + the live assembly-quality stats (median genome size /\ncontig N50). One indexed `ltree` subtree join to the small `assembly` table,\npaginated. 404 if the taxid is unknown; an empty subtree returns `[]`.",
-        "operationId": "taxon_assemblies_taxon__taxid__assemblies_get",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "taxid",
-            "required": true,
-            "schema": {
-              "title": "Taxid",
-              "type": "integer"
-            }
-          },
-          {
-            "in": "query",
-            "name": "sort",
-            "required": false,
-            "schema": {
-              "$ref": "#/components/schemas/AssemblySort",
-              "default": "release_date"
-            }
-          },
-          {
-            "in": "query",
-            "name": "limit",
-            "required": false,
-            "schema": {
-              "default": 50,
-              "maximum": 200,
-              "minimum": 1,
-              "title": "Limit",
-              "type": "integer"
-            }
-          },
-          {
-            "in": "query",
-            "name": "offset",
-            "required": false,
-            "schema": {
-              "default": 0,
-              "minimum": 0,
-              "title": "Offset",
-              "type": "integer"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AssemblyList"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Taxon Assemblies"
       }
     },
     "/taxon/{taxid}/children": {

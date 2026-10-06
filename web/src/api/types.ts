@@ -26,8 +26,8 @@ export type TaxonChildren = components["schemas"]["TaxonChildren"];
 export type AssemblyComposition = components["schemas"]["AssemblyComposition"];
 export type QualityStatConfig = components["schemas"]["QualityStatConfig"];
 export type QualityStatValue = components["schemas"]["QualityStatValue"];
-export type AssemblyList = components["schemas"]["AssemblyList"];
-export type AnnotationList = components["schemas"]["AnnotationList"];
+export type AssemblyPage = components["schemas"]["AssemblyPage"];
+export type AnnotationPage = components["schemas"]["AnnotationPage"];
 export type AssemblyRecord = components["schemas"]["AssemblyRecord"];
 export type AnnotationRecord = components["schemas"]["AnnotationRecord"];
 export type BucketQuality = components["schemas"]["BucketQuality"];
@@ -41,3 +41,4 @@ export type FilterLogic = components["schemas"]["FilterLogic"];
 // Per-record drill-down sort enums (assemblies / annotations lists).
 export type AssemblySort = components["schemas"]["AssemblySort"];
 export type AnnotationSort = components["schemas"]["AnnotationSort"];
+export type SortOrder = components["schemas"]["SortOrder"];

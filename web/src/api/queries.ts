@@ -3,10 +3,10 @@
 // on failure so the useAsync hook can surface it.
 import { api } from "./client";
 import type {
-  AnnotationList,
-  AppConfig,
+  AnnotationPage,
   AnnotationSort,
-  AssemblyList,
+  AppConfig,
+  AssemblyPage,
   AssemblySort,
   Breakdown,
   BucketQuality,
@@ -20,6 +20,7 @@ import type {
   QualityStatConfig,
   SearchHit,
   SortColumn,
+  SortOrder,
   TargetRank,
   Taxon,
   TaxonChildren,
@@ -169,43 +170,26 @@ export async function getAbout(name: string | undefined): Promise<TaxonAbout | n
 export const searchTaxa = async (q: string, limit = 10): Promise<SearchHit[]> =>
   unwrap(await api.GET("/search", { params: { query: { q, limit } } }));
 
-// Per-record drill-down: genome assemblies anywhere under a taxon, with live
-// distribution stats (median genome size / contig N50). Paginated via
-// limit/offset; sorted newest-first by default.
-export interface AssemblyParams {
-  sort?: AssemblySort;
+// Record lists: assemblies or annotations on a taxon or below it, one page at a
+// time. Pass a page's `next` as `cursor` for the page after it.
+export interface RecordParams<Sort> {
+  sort_by?: Sort;
+  sort_order?: SortOrder;
   limit?: number;
-  offset?: number;
+  cursor?: string;
 }
 
 export const getAssemblies = async (
-  taxid: number,
-  params: AssemblyParams = {},
-): Promise<AssemblyList> =>
-  unwrap(
-    await api.GET("/taxon/{taxid}/assemblies", {
-      params: { path: { taxid }, query: params },
-    }),
-  );
-
-// Functional annotations under a taxon, with live annotation-quality stats
-// (best BUSCO, median protein-coding gene count). Default sort surfaces the
-// best-annotated genomes first.
-export interface AnnotationParams {
-  sort?: AnnotationSort;
-  limit?: number;
-  offset?: number;
-}
+  within: number,
+  params: RecordParams<AssemblySort> = {},
+): Promise<AssemblyPage> =>
+  unwrap(await api.GET("/assemblies", { params: { query: { within, ...params } } }));
 
 export const getAnnotations = async (
-  taxid: number,
-  params: AnnotationParams = {},
-): Promise<AnnotationList> =>
-  unwrap(
-    await api.GET("/taxon/{taxid}/annotations", {
-      params: { path: { taxid }, query: params },
-    }),
-  );
+  within: number,
+  params: RecordParams<AnnotationSort> = {},
+): Promise<AnnotationPage> =>
+  unwrap(await api.GET("/annotations", { params: { query: { within, ...params } } }));
 
 // The breakdown (Q2) controls, matching the API's query params. `rank` is
 // required; the rest carry the API's own defaults when omitted.

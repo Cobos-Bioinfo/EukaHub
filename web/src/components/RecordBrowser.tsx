@@ -25,15 +25,15 @@ const ANNOTATION_SORTS: { value: AnnotationSort; label: string }[] = [
   { value: "release_date", label: "Newest" },
 ];
 
-/** Accumulating pager: fetches page 0 whenever `resetKey` changes (tab / sort /
- *  taxon) and appends further pages on `loadMore`. Responses for an outdated key
- *  are dropped. */
-function usePagedRecords(
-  fetchPage: (offset: number) => Promise<{ items: Record[]; total: number }>,
-  resetKey: string,
-) {
+type RecordPage = { items: Record[]; total: number; next: string | null };
+
+/** Accumulating pager: fetches the first page whenever `resetKey` changes (tab /
+ *  sort / taxon) and appends the next page on `loadMore`. Responses for an
+ *  outdated key are dropped. */
+function usePagedRecords(fetchPage: (cursor?: string) => Promise<RecordPage>, resetKey: string) {
   const [items, setItems] = useState<Record[]>([]);
   const [total, setTotal] = useState(0);
+  const [next, setNext] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string>();
@@ -48,6 +48,7 @@ function usePagedRecords(
     setCurKey(resetKey);
     setItems([]);
     setTotal(0);
+    setNext(null);
     setLoading(true);
     setLoadingMore(false);
     setError(undefined);
@@ -58,8 +59,8 @@ function usePagedRecords(
     let active = true;
     setLoading(true);
     setError(undefined);
-    fetchPage(0).then(
-      (r) => active && (setItems(r.items), setTotal(r.total), setLoading(false)),
+    fetchPage().then(
+      (r) => active && (setItems(r.items), setTotal(r.total), setNext(r.next), setLoading(false)),
       (e) => active && (setError(e instanceof Error ? e.message : String(e)), setLoading(false)),
     );
     return () => {
@@ -69,13 +70,15 @@ function usePagedRecords(
   }, [resetKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadMore = useCallback(() => {
+    if (!next) return;
     const key = resetKey;
     setLoadingMore(true);
-    fetchPage(items.length).then(
+    fetchPage(next).then(
       (r) => {
         if (keyRef.current !== key) return;
         setItems((cur) => [...cur, ...r.items]);
         setTotal(r.total);
+        setNext(r.next);
         setLoadingMore(false);
       },
       (e) => {
@@ -84,9 +87,9 @@ function usePagedRecords(
         setLoadingMore(false);
       },
     );
-  }, [fetchPage, items.length, resetKey]);
+  }, [fetchPage, next, resetKey]);
 
-  return { items, total, loading, loadingMore, error, loadMore };
+  return { items, total, next, loading, loadingMore, error, loadMore };
 }
 
 /** The per-record drill-down: individual genome assemblies and functional
@@ -99,21 +102,16 @@ export default function RecordBrowser({ taxid }: { taxid: number }) {
   const [annSort, setAnnSort] = useState<AnnotationSort>("busco_complete");
 
   const fetchPage = useCallback(
-    (offset: number): Promise<{ items: Record[]; total: number }> =>
-      tab === "assemblies"
-        ? getAssemblies(taxid, { sort: asmSort, limit: PAGE, offset }).then((r) => ({
-            items: r.items,
-            total: r.total,
-          }))
-        : getAnnotations(taxid, { sort: annSort, limit: PAGE, offset }).then((r) => ({
-            items: r.items,
-            total: r.total,
-          })),
+    (cursor?: string): Promise<RecordPage> =>
+      (tab === "assemblies"
+        ? getAssemblies(taxid, { sort_by: asmSort, limit: PAGE, cursor })
+        : getAnnotations(taxid, { sort_by: annSort, limit: PAGE, cursor })
+      ).then((r) => ({ items: r.results, total: r.total, next: r.next })),
     [taxid, tab, asmSort, annSort],
   );
 
   const resetKey = `${taxid}:${tab}:${tab === "assemblies" ? asmSort : annSort}`;
-  const { items, total, loading, loadingMore, error, loadMore } = usePagedRecords(
+  const { items, total, next, loading, loadingMore, error, loadMore } = usePagedRecords(
     fetchPage,
     resetKey,
   );
@@ -188,7 +186,7 @@ export default function RecordBrowser({ taxid }: { taxid: number }) {
             <span>
               Showing <strong>{fmt(items.length)}</strong> of <strong>{fmt(total)}</strong> {tab}
             </span>
-            {items.length < total && (
+            {next && (
               <button type="button" className="dl" onClick={loadMore} disabled={loadingMore}>
                 {loadingMore ? "Loading…" : `Load ${Math.min(PAGE, total - items.length)} more`}
               </button>

@@ -10,8 +10,8 @@ Phase 2 read endpoints:
 - ``GET /clade/{taxid}/breakdown``     — descendants at a target rank (Q2).
 - ``GET /clade/{taxid}/export.tsv``    — the full breakdown as a TSV download.
 - ``GET /taxon/{taxid}/children``      — direct children for the interactive tree.
-- ``GET /taxon/{taxid}/assemblies``    — genome assemblies in the subtree (+ stats).
-- ``GET /taxon/{taxid}/annotations``   — annotations in the subtree (+ BUSCO stats).
+- ``GET /assemblies``                  — genome assemblies, optionally under a taxon.
+- ``GET /annotations``                 — gene annotations, optionally under a taxon.
 - ``GET /search``                      — name search for the root picker.
 
 ``/health`` (liveness) + ``/health/ready`` (DB readiness) and ``/config`` (the dataset
@@ -41,16 +41,16 @@ from eukahub_api.clade_sets import SetTaxon, clade_set, resolve_groups, set_meta
 from eukahub_api.db import Conn
 from eukahub_api.db import lifespan as db_lifespan
 from eukahub_api.logging_config import configure_logging
+from eukahub_api.pagination import InvalidCursor, Page
 from eukahub_api.queries import (
     AnnotationSort,
     AssemblySort,
     FilterLogic,
     MetricFilter,
     SortColumn,
+    SortOrder,
     TargetRank,
     TaxonNotFound,
-    fetch_annotation_records,
-    fetch_assembly_records,
     fetch_breakdown,
     fetch_breakdown_quality,
     fetch_children,
@@ -65,16 +65,17 @@ from eukahub_api.queries import (
     fetch_set_taxa,
     fetch_taxon,
     iter_export_tsv,
+    list_records,
     search_taxa,
 )
 from eukahub_api.schemas import (
     MAX_CLADES_PER_GROUP,
     Aggregate,
-    AnnotationList,
+    AnnotationPage,
     AnnotationRecord,
     AppConfig,
     AssemblyComposition,
-    AssemblyList,
+    AssemblyPage,
     AssemblyRecord,
     Breakdown,
     BucketQuality,
@@ -695,59 +696,76 @@ def taxon_children(
     )
 
 
-@app.get("/taxon/{taxid}/assemblies", response_model=AssemblyList)
-def taxon_assemblies(
-    taxid: int,
-    conn: Conn,
-    sort: AssemblySort = AssemblySort.release_date,
-    limit: Annotated[int, Query(ge=1, le=200)] = 50,
-    offset: Annotated[int, Query(ge=0)] = 0,
-) -> AssemblyList:
-    """Genome assemblies anywhere under a taxon (the whole subtree), for the
-    drill-down list + the live assembly-quality stats (median genome size /
-    contig N50). One indexed `ltree` subtree join to the small `assembly` table,
-    paginated. 404 if the taxid is unknown; an empty subtree returns `[]`."""
+def _within_path(conn: psycopg.Connection, taxid: int | None) -> str | None:
+    """The path of the ``within`` taxon, or a 404 when it is unknown."""
+    if taxid is None:
+        return None
     try:
-        root_ref, total, stats, records = fetch_assembly_records(
-            conn, taxid=taxid, sort=sort.value, limit=limit, offset=offset
-        )
+        return fetch_root(conn, taxid)[2]
     except TaxonNotFound:
         raise HTTPException(status_code=404, detail=f"taxon {taxid} not found")
-    r_taxid, r_name, r_rank = root_ref
-    return AssemblyList(
-        root=TaxonRef(taxid=r_taxid, name=r_name, rank=r_rank),
-        total=total,
-        returned=len(records),
-        stats=[QualityStatValue(key=k, value=v) for k, v in stats.items()],
-        items=[AssemblyRecord(**r) for r in records],
+
+
+_Within = Annotated[
+    int | None,
+    Query(description="Only rows on this taxon or below it (e.g. 40674 for mammals)."),
+]
+_Cursor = Annotated[
+    str | None,
+    Query(
+        max_length=1000,
+        description="``next`` or ``previous`` from a page with the same sort, for the "
+        "page after or before it.",
+    ),
+]
+
+
+def _list_records(conn: psycopg.Connection, source: str, **kwargs) -> tuple[int, Page[dict]]:
+    try:
+        return list_records(conn, source=source, **kwargs)
+    except InvalidCursor as e:
+        raise HTTPException(status_code=422, detail=f"cursor: {e}")
+
+
+@app.get("/assemblies", response_model=AssemblyPage)
+def assemblies(
+    conn: Conn,
+    within: _Within = None,
+    sort_by: AssemblySort = AssemblySort.release_date,
+    sort_order: SortOrder = SortOrder.desc,
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+    cursor: _Cursor = None,
+) -> AssemblyPage:
+    """Genome assemblies, newest first by default; records missing the sort field
+    come last. The quality stats of a taxon's assemblies are in ``/taxons/{taxid}``."""
+    total, result = _list_records(
+        conn, "assembly", within_path=_within_path(conn, within), sort=sort_by.value,
+        descending=sort_order is SortOrder.desc, limit=limit, cursor=cursor,
+    )
+    return AssemblyPage(
+        total=total, limit=limit, next=result.next, previous=result.previous,
+        results=[AssemblyRecord(**r) for r in result.rows],
     )
 
 
-@app.get("/taxon/{taxid}/annotations", response_model=AnnotationList)
-def taxon_annotations(
-    taxid: int,
+@app.get("/annotations", response_model=AnnotationPage)
+def annotations(
     conn: Conn,
-    sort: AnnotationSort = AnnotationSort.busco_complete,
+    within: _Within = None,
+    sort_by: AnnotationSort = AnnotationSort.busco_complete,
+    sort_order: SortOrder = SortOrder.desc,
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
-    offset: Annotated[int, Query(ge=0)] = 0,
-) -> AnnotationList:
-    """Functional annotations anywhere under a taxon, for the drill-down list +
-    the live annotation-quality stats (best BUSCO, median protein-coding gene
-    count). Subtree join to the `annotation` table; default sort surfaces the
-    best-annotated genomes first. 404 if the taxid is unknown."""
-    try:
-        root_ref, total, stats, records = fetch_annotation_records(
-            conn, taxid=taxid, sort=sort.value, limit=limit, offset=offset
-        )
-    except TaxonNotFound:
-        raise HTTPException(status_code=404, detail=f"taxon {taxid} not found")
-    r_taxid, r_name, r_rank = root_ref
-    return AnnotationList(
-        root=TaxonRef(taxid=r_taxid, name=r_name, rank=r_rank),
-        total=total,
-        returned=len(records),
-        stats=[QualityStatValue(key=k, value=v) for k, v in stats.items()],
-        items=[AnnotationRecord(**r) for r in records],
+    cursor: _Cursor = None,
+) -> AnnotationPage:
+    """Gene annotations, best BUSCO first by default; records missing the sort field
+    come last. The quality stats of a taxon's annotations are in ``/taxons/{taxid}``."""
+    total, result = _list_records(
+        conn, "annotation", within_path=_within_path(conn, within), sort=sort_by.value,
+        descending=sort_order is SortOrder.desc, limit=limit, cursor=cursor,
+    )
+    return AnnotationPage(
+        total=total, limit=limit, next=result.next, previous=result.previous,
+        results=[AnnotationRecord(**r) for r in result.rows],
     )
 
 

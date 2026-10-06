@@ -35,14 +35,8 @@ _CALLS = {
         logic=FilterLogic.AND, exclude_empty=False, batch_rows=1,
     )),
     "quality source": lambda: queries._fetch_quality_stats(None, HOSTILE, "2759"),
-    "records sort": lambda: queries._fetch_records(
-        None, source="assembly", select="*", key_col="assembly_accession",
-        root_path="2759", sort=HOSTILE, limit=1, offset=0,
-    ),
-    "records source": lambda: queries._fetch_records(
-        None, source=HOSTILE, select="*", key_col="assembly_accession",
-        root_path="2759", sort="release_date", limit=1, offset=0,
-    ),
+    "records sort": lambda: queries._record_keys("assembly", HOSTILE, True),
+    "records source": lambda: queries._record_keys(HOSTILE, "release_date", True),
 }
 
 
@@ -61,4 +55,4 @@ def test_everything_the_api_accepts_passes_the_guard():
         assert queries._breakdown_where("2759", "phylum", False, [key.value], FilterLogic.OR)
     for source, enum in (("assembly", queries.AssemblySort), ("annotation", queries.AnnotationSort)):
         for sort in enum:
-            assert queries._identifier(sort.value, queries._RECORD_SORTS[source])
+            assert queries._record_keys(source, sort.value, True)

@@ -105,17 +105,9 @@ def test_gaps_include_quality_false_omits_stats(client):
     assert all(it["stats"] == [] for it in body["items"])
 
 
-def test_gaps_quality_matches_record_endpoints(client):
-    """A gap clade's quality stats are the same live distribution stats the
-    per-record endpoints serve over that clade's subtree — no separate source of
-    truth. Assembly-source keys match /assemblies, annotation-source keys match
-    /annotations."""
-    source = {q["key"]: q["source"] for q in client.get("/config").json()["quality_stats"]}
+def test_gaps_quality_matches_the_taxon(client):
+    """A gap clade's quality stats are the stats ``/taxons/{taxid}`` serves."""
     body = client.get("/gaps", params={"rank": "class", "resource": "lng"}).json()
     it = body["items"][0]  # Mammalia on both slice and prod
-    gaps_stats = _stats_dict(it["stats"])
-    asm = _stats_dict(client.get(f"/taxon/{it['taxid']}/assemblies").json()["stats"])
-    ann = _stats_dict(client.get(f"/taxon/{it['taxid']}/annotations").json()["stats"])
-    for key, val in gaps_stats.items():
-        expected = asm[key] if source[key] == "assembly" else ann[key]
-        assert val == expected
+    taxon = client.get(f"/taxons/{it['taxid']}").json()
+    assert _stats_dict(it["stats"]) == _stats_dict(taxon["stats"])

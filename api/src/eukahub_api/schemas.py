@@ -452,24 +452,22 @@ class BucketQuality(BaseModel):
     stats: list[QualityStatValue]
 
 
-class AssemblyList(BaseModel):
-    """Assemblies under a taxon: live assembly-quality stats + a paginated list."""
+class Page(BaseModel):
+    """One page of a list. Pass ``next`` or ``previous`` back as ``cursor`` (with
+    the same sort) for the page after or before this one."""
 
-    root: TaxonRef
-    total: int  # records in the subtree, before limit/offset
-    returned: int
-    stats: list[QualityStatValue]  # median genome size / contig N50
-    items: list[AssemblyRecord]
+    total: int  # matching rows across all pages
+    limit: int
+    next: str | None  # null on the last page
+    previous: str | None  # null on the first page
 
 
-class AnnotationList(BaseModel):
-    """Annotations under a taxon: live annotation-quality stats + a paginated list."""
+class AssemblyPage(Page):
+    results: list[AssemblyRecord]
 
-    root: TaxonRef
-    total: int
-    returned: int
-    stats: list[QualityStatValue]  # best BUSCO, median protein-coding gene count
-    items: list[AnnotationRecord]
+
+class AnnotationPage(Page):
+    results: list[AnnotationRecord]
 
 
 class CompareGroup(BaseModel):
