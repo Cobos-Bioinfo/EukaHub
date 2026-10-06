@@ -120,7 +120,7 @@ export const getTaxa = async ({ taxids, ...params }: TaxaParams): Promise<TaxonP
   );
 
 // The quality stats of the taxa getTaxa returns for the same params, page for
-// page (slower: about half a second on the full dataset).
+// page.
 export const getTaxaStats = async ({ taxids, ...params }: TaxaParams): Promise<TaxonStatsPage> =>
   unwrap(
     await api.GET("/taxons/stats", {

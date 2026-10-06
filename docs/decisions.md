@@ -128,9 +128,8 @@ Streamlit app that answered the same questions but was slow to build and to serv
   one list with different filters, so each page's request is cached on its own and
   nothing is computed twice. Quality stats are a resource of their own,
   `/taxons/{taxid}/stats` and `/taxons/stats` (paged with the same parameters and
-  cursors as `/taxons`): a page of them costs about half a second whatever its size
-  (search takes 7 ms without them), so a list that does not show them never pays
-  for them, and no parameter changes a response's shape. Records are their own
+  cursors as `/taxons`), so a list that does not show them never reads them and no
+  parameter changes a response's shape. Records are their own
   collections (`/assemblies`, `/annotations`), filtered by `within`, and
   `/taxons/report` is the whole list as TSV. Names follow Annotrieve's API
   (`/taxons`, `/ancestors`, `sort_by`, `sort_order`, `results`, `/report`), which the

@@ -197,8 +197,8 @@ def taxons_stats(
 ) -> TaxonStatsPage:
     """The quality stats (best BUSCO, median genes, genome size and N50) of the taxa
     ``/taxons`` lists for the same parameters, page for page and with the same
-    cursors, each computed from the records on or below the taxon. Slower than
-    ``/taxons``: about half a second for any page on the full dataset."""
+    cursors, each over the records on or below the taxon. Computed at build time,
+    so a page costs about what the same page of ``/taxons`` does."""
     total, result = _taxa_page(conn, f, sort_by, sort_order, limit, cursor)
     quality = fetch_quality_for_taxids(conn, [r.meta.taxid for r in result.rows])
     return TaxonStatsPage(
@@ -326,8 +326,8 @@ def taxon_ancestors(taxid: int, conn: Conn) -> TaxonPage:
 @router.get("/taxons/{taxid}/stats", response_model=TaxonStats)
 def taxon_stats(taxid: int, conn: Conn) -> TaxonStats:
     """The quality stats (best BUSCO, median genes, genome size and N50) of the
-    records on or below one taxon, the same object ``/taxons/stats`` lists. From a
-    few milliseconds for a genus to about 0.3 s for Eukaryota."""
+    records on or below one taxon, the same object ``/taxons/stats`` lists,
+    computed at build time."""
     name, stats = fetch_taxon_stats(conn, taxid)
     return TaxonStats(
         taxid=taxid, name=name, stats=[QualityStatValue(key=k, value=v) for k, v in stats.items()]

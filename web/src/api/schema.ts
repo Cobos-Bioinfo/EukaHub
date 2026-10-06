@@ -196,8 +196,8 @@ export interface paths {
          * Taxons Stats
          * @description The quality stats (best BUSCO, median genes, genome size and N50) of the taxa
          *     ``/taxons`` lists for the same parameters, page for page and with the same
-         *     cursors, each computed from the records on or below the taxon. Slower than
-         *     ``/taxons``: about half a second for any page on the full dataset.
+         *     cursors, each over the records on or below the taxon. Computed at build time,
+         *     so a page costs about what the same page of ``/taxons`` does.
          */
         get: operations["taxons_stats_taxons_stats_get"];
         put?: never;
@@ -263,8 +263,8 @@ export interface paths {
         /**
          * Taxon Stats
          * @description The quality stats (best BUSCO, median genes, genome size and N50) of the
-         *     records on or below one taxon, the same object ``/taxons/stats`` lists. From a
-         *     few milliseconds for a genus to about 0.3 s for Eukaryota.
+         *     records on or below one taxon, the same object ``/taxons/stats`` lists,
+         *     computed at build time.
          */
         get: operations["taxon_stats_taxons__taxid__stats_get"];
         put?: never;

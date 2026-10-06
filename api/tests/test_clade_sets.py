@@ -289,10 +289,13 @@ def test_aggregate_counts_are_clade_differences(client):
     )
 
 
-def test_aggregate_of_one_clade_matches_the_clade(client):
-    body = _aggregate(client, [40674])
-    assert _counts(body) == _counts(client.get("/taxons/40674").json())
-    assert body["stats"] == client.get("/taxons/40674/stats").json()["stats"]
+@pytest.mark.parametrize("taxid", [2759, 40674, 9606])
+def test_aggregate_of_one_clade_matches_the_clade(client, taxid):
+    """A clade's counts and stats, computed at build time, equal those the API
+    computes from the records for a set holding only that clade."""
+    body = _aggregate(client, [taxid])
+    assert _counts(body) == _counts(client.get(f"/taxons/{taxid}").json())
+    assert body["stats"] == client.get(f"/taxons/{taxid}/stats").json()["stats"]
 
 
 def test_aggregate_can_include_inside_an_excluded_clade(client):

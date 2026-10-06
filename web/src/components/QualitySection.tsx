@@ -15,7 +15,7 @@ const LEVELS = [
  *  gene count, genome size, N50) as stat tiles, plus an assembly contiguity bar
  *  from the additive composition counts. Shown on every dashboard (clade /
  *  species / leaf); the full record lists live in the drill-down browser below.
- *  The counts arrive with the taxon; the stats are a slower request of their own. */
+ *  The counts arrive with the taxon; the stats are a request of their own. */
 export default function QualitySection({
   quality,
   stats,
