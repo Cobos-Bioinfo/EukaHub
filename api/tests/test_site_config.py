@@ -144,16 +144,6 @@ def test_invalid_groups_file_uses_the_defaults(tmp_path, caplog, content):
     assert "groups file" in caplog.text
 
 
-def test_site_config_endpoint(client):
-    body = client.get("/site-config").json()
-    assert set(body) == {"feedback_url", "source_code_url", "privacy_contact_email", "groups"}
-    assert body["feedback_url"].startswith("https://")
-    assert body["source_code_url"].startswith("https://")
-    assert any(g["featured"] for g in body["groups"])
-    for g in body["groups"]:
-        assert set(g) == {"taxid", "label", "featured"}
-
-
 def test_endpoints_follow_the_settings(client, monkeypatch, tmp_path):
     settings = load_settings(
         {
@@ -167,12 +157,11 @@ def test_endpoints_follow_the_settings(client, monkeypatch, tmp_path):
     )
     monkeypatch.setattr(main, "get_settings", lambda: settings)
 
-    links = {m["key"]: m["external_url_template"] for m in client.get("/metrics-config").json()}
+    config = client.get("/config").json()
+    links = {m["key"]: m["external_url_template"] for m in config["metrics"]}
     assert links["ass"] == "https://assemblies.example.org/?taxon={taxid}"
-
-    site = client.get("/site-config").json()
-    assert site["feedback_url"] == "https://example.org/feedback"
-    assert site["groups"] == [{"taxid": 40674, "label": "Mammals", "featured": True}]
+    assert config["feedback_url"] == "https://example.org/feedback"
+    assert config["groups"] == [{"taxid": 40674, "label": "Mammals", "featured": True}]
 
     # Mammalia is in both the full dataset and the CI slice.
     assert [f["taxid"] for f in client.get("/overview").json()["featured"]] == [40674]

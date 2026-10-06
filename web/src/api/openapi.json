@@ -256,6 +256,66 @@
         "title": "AnnotationSort",
         "type": "string"
       },
+      "AppConfig": {
+        "description": "What a client reads once before showing any data (served by ``/config``):\nthe dataset it is looking at, how to present each measure, and the\ndeployment's links and groups.",
+        "properties": {
+          "custom_groups": {
+            "items": {
+              "$ref": "#/components/schemas/CustomGroupItem"
+            },
+            "title": "Custom Groups",
+            "type": "array"
+          },
+          "dataset": {
+            "$ref": "#/components/schemas/DatasetMeta"
+          },
+          "feedback_url": {
+            "title": "Feedback Url",
+            "type": "string"
+          },
+          "groups": {
+            "items": {
+              "$ref": "#/components/schemas/CladeGroup"
+            },
+            "title": "Groups",
+            "type": "array"
+          },
+          "metrics": {
+            "items": {
+              "$ref": "#/components/schemas/MetricConfig"
+            },
+            "title": "Metrics",
+            "type": "array"
+          },
+          "privacy_contact_email": {
+            "title": "Privacy Contact Email",
+            "type": "string"
+          },
+          "quality_stats": {
+            "items": {
+              "$ref": "#/components/schemas/QualityStatConfig"
+            },
+            "title": "Quality Stats",
+            "type": "array"
+          },
+          "source_code_url": {
+            "title": "Source Code Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "dataset",
+          "metrics",
+          "quality_stats",
+          "feedback_url",
+          "source_code_url",
+          "privacy_contact_email",
+          "groups",
+          "custom_groups"
+        ],
+        "title": "AppConfig",
+        "type": "object"
+      },
       "AssemblyComposition": {
         "description": "Additive assembly-composition counts for a clade (from ``clade_features``):\ngenome assemblies split by level, plus the reference/representative count.\nSummed up the lineage like the s_* totals.",
         "properties": {
@@ -751,23 +811,6 @@
         "title": "CustomGroupItem",
         "type": "object"
       },
-      "CustomGroups": {
-        "description": "The deployment's custom groups, in groups-file order (served by\n``/custom-groups``). A group that doesn't fit the current taxonomy is left out.",
-        "properties": {
-          "groups": {
-            "items": {
-              "$ref": "#/components/schemas/CustomGroupItem"
-            },
-            "title": "Groups",
-            "type": "array"
-          }
-        },
-        "required": [
-          "groups"
-        ],
-        "title": "CustomGroups",
-        "type": "object"
-      },
       "DatasetMeta": {
         "description": "Dataset provenance for the \"Data updated\" stamp \u2014 when the served dataset\nwas built and how many records it holds. ``built_at`` is ``null`` before the\nfirst build has stamped the DB, in which case the frontend omits the stamp.",
         "properties": {
@@ -965,7 +1008,7 @@
         "type": "object"
       },
       "MetricConfig": {
-        "description": "Static per-resource card chrome \u2014 served once by ``/metrics-config`` and\njoined client-side to the numbers in each per-clade payload (by ``key``).",
+        "description": "Static per-resource card chrome \u2014 served once in ``/config`` and joined\nclient-side to the numbers in each per-clade payload (by ``key``).",
         "properties": {
           "card_title": {
             "title": "Card Title",
@@ -1141,7 +1184,7 @@
         "type": "object"
       },
       "QualityStatConfig": {
-        "description": "Static chrome for one quality stat \u2014 served once by ``/quality-config``\nand joined client-side to the per-taxon ``QualityStatValue`` by ``key``.\nThe analogue of ``MetricConfig`` for the annotation/assembly-quality\ndimension (BUSCO %, gene count, genome size, N50).",
+        "description": "Static chrome for one quality stat \u2014 served once in ``/config`` and\njoined client-side to the per-taxon ``QualityStatValue`` by ``key``.\nThe analogue of ``MetricConfig`` for the annotation/assembly-quality\ndimension (BUSCO %, gene count, genome size, N50).",
         "properties": {
           "card_title": {
             "title": "Card Title",
@@ -1288,38 +1331,6 @@
           "similar"
         ],
         "title": "SearchHit",
-        "type": "object"
-      },
-      "SiteConfig": {
-        "description": "Deployment settings the web app reads once per page load (served by\n``/site-config``).",
-        "properties": {
-          "feedback_url": {
-            "title": "Feedback Url",
-            "type": "string"
-          },
-          "groups": {
-            "items": {
-              "$ref": "#/components/schemas/CladeGroup"
-            },
-            "title": "Groups",
-            "type": "array"
-          },
-          "privacy_contact_email": {
-            "title": "Privacy Contact Email",
-            "type": "string"
-          },
-          "source_code_url": {
-            "title": "Source Code Url",
-            "type": "string"
-          }
-        },
-        "required": [
-          "feedback_url",
-          "source_code_url",
-          "privacy_contact_email",
-          "groups"
-        ],
-        "title": "SiteConfig",
         "type": "object"
       },
       "SortColumn": {
@@ -2052,23 +2063,23 @@
         "summary": "Compare"
       }
     },
-    "/custom-groups": {
+    "/config": {
       "get": {
-        "description": "The custom groups from the deployment's groups file, in file order, each\nwith the clades it is made of (pass them to ``/aggregate`` for its data). A\ngroup that doesn't fit the current taxonomy is left out and logged.",
-        "operationId": "custom_groups_custom_groups_get",
+        "description": "What a client reads once before showing any data: the dataset being served\n(``built_at`` is ``null`` before the first build has stamped the database), the\npresentation of each measure and quality stat, and the deployment's links,\ncurated groups and custom groups. Pass a custom group's clades to\n``/aggregate`` for its data.",
+        "operationId": "config_config_get",
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/CustomGroups"
+                  "$ref": "#/components/schemas/AppConfig"
                 }
               }
             },
             "description": "Successful Response"
           }
         },
-        "summary": "Custom Groups"
+        "summary": "Config"
       }
     },
     "/gaps": {
@@ -2206,48 +2217,6 @@
         "summary": "Readiness"
       }
     },
-    "/meta": {
-      "get": {
-        "description": "Dataset provenance for the \"Data updated\" stamp: when the served dataset was\nbuilt (UTC) and its record counts. One tiny indexed lookup on ``dataset_meta``;\n``built_at`` is ``null`` before the first build has stamped the DB.",
-        "operationId": "meta_meta_get",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/DatasetMeta"
-                }
-              }
-            },
-            "description": "Successful Response"
-          }
-        },
-        "summary": "Meta"
-      }
-    },
-    "/metrics-config": {
-      "get": {
-        "description": "The tracked metrics \u2014 static card chrome the frontend renders once,\nkeyed by the same metric keys the per-clade payloads use.",
-        "operationId": "metrics_config_metrics_config_get",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/MetricConfig"
-                  },
-                  "title": "Response Metrics Config Metrics Config Get",
-                  "type": "array"
-                }
-              }
-            },
-            "description": "Successful Response"
-          }
-        },
-        "summary": "Metrics Config"
-      }
-    },
     "/overview": {
       "get": {
         "description": "Landing-page \"at a glance\": global totals across the eukaryotic tree plus\na few featured groups with their assembly/annotation coverage \u2014 one cacheable\nrequest so the hero can render live headline numbers + coverage cards.",
@@ -2265,29 +2234,6 @@
           }
         },
         "summary": "Overview"
-      }
-    },
-    "/quality-config": {
-      "get": {
-        "description": "The annotation/assembly-quality stats \u2014 static card chrome rendered once,\nkeyed by the stat keys the per-taxon quality values use (BUSCO, gene count,\ngenome size, N50). The analogue of ``/metrics-config`` for the new dimension.",
-        "operationId": "quality_config_quality_config_get",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/QualityStatConfig"
-                  },
-                  "title": "Response Quality Config Quality Config Get",
-                  "type": "array"
-                }
-              }
-            },
-            "description": "Successful Response"
-          }
-        },
-        "summary": "Quality Config"
       }
     },
     "/search": {
@@ -2348,25 +2294,6 @@
           }
         },
         "summary": "Search"
-      }
-    },
-    "/site-config": {
-      "get": {
-        "description": "Deployment settings for the web app: the feedback, source code and privacy\ncontact links, and the curated groups (friendly labels, the \"Surprise me\"\npool, and the landing-page cards, flagged ``featured``).",
-        "operationId": "site_config_site_config_get",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SiteConfig"
-                }
-              }
-            },
-            "description": "Successful Response"
-          }
-        },
-        "summary": "Site Config"
       }
     },
     "/taxon/{taxid}": {

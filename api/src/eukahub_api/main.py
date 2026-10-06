@@ -5,7 +5,6 @@ Phase 2 read endpoints:
 - ``GET /overview``                    — landing-page totals + featured groups.
 - ``GET /compare``                     — several groups lined up side by side.
 - ``GET /aggregate``                   — data for a set of clades (include minus exclude).
-- ``GET /custom-groups``               — the deployment's custom groups and their clades.
 - ``GET /gaps``                        — the biggest under-sequenced groups.
 - ``GET /clade/{taxid}/summary``       — the Genomic Resource Summary (Q1).
 - ``GET /clade/{taxid}/breakdown``     — descendants at a target rank (Q2).
@@ -17,10 +16,9 @@ Phase 2 read endpoints:
 - ``GET /taxon/{taxid}/about``         — Wikipedia "About" summary (decorative).
 - ``GET /search``                      — name search for the root picker.
 
-``/health`` (liveness) + ``/health/ready`` (DB readiness), ``/metrics-config``,
-``/quality-config``, ``/site-config`` (deployment links and curated groups), and
-``/meta`` (dataset provenance: the "Data updated" stamp) round out the service. Every request is logged as one structured JSON line (see
-``logging_config``).
+``/health`` (liveness) + ``/health/ready`` (DB readiness) and ``/config`` (the dataset
+stamp, measure chrome, deployment links and groups) round out the service. Every
+request is logged as one structured JSON line (see ``logging_config``).
 """
 
 import hashlib
@@ -28,10 +26,11 @@ import itertools
 import logging
 import os
 import time
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Mapping, Sequence
 from contextlib import asynccontextmanager
 from typing import Annotated
 
+import psycopg
 from eukahub_core.metrics import METRICS, QUALITY_STATS
 from eukahub_core.taxonomy import EUKARYOTA_TAXID, UNIT_RANKS
 from fastapi import FastAPI, HTTPException, Query, Request, Response
@@ -76,6 +75,7 @@ from eukahub_api.schemas import (
     Aggregate,
     AnnotationList,
     AnnotationRecord,
+    AppConfig,
     AssemblyComposition,
     AssemblyList,
     AssemblyRecord,
@@ -84,8 +84,8 @@ from eukahub_api.schemas import (
     CladeSummary,
     Compare,
     CompareGroup,
+    CustomGroup,
     CustomGroupItem,
-    CustomGroups,
     DatasetMeta,
     FeaturedClade,
     GapItem,
@@ -97,7 +97,6 @@ from eukahub_api.schemas import (
     QualityStatValue,
     ResourceSummary,
     SearchHit,
-    SiteConfig,
     TaxonAbout,
     TaxonChildren,
     TaxonLineage,
@@ -305,54 +304,60 @@ def readiness(request: Request, response: Response) -> dict[str, str]:
     return {"status": "ready", "database": "ok"}
 
 
-@app.get("/metrics-config", response_model=list[MetricConfig])
-def metrics_config() -> list[MetricConfig]:
-    """The tracked metrics — static card chrome the frontend renders once,
-    keyed by the same metric keys the per-clade payloads use."""
-    templates = get_settings().link_templates
-    return [MetricConfig.from_metric(m, templates[m.key]) for m in METRICS]
-
-
-@app.get("/quality-config", response_model=list[QualityStatConfig])
-def quality_config() -> list[QualityStatConfig]:
-    """The annotation/assembly-quality stats — static card chrome rendered once,
-    keyed by the stat keys the per-taxon quality values use (BUSCO, gene count,
-    genome size, N50). The analogue of ``/metrics-config`` for the new dimension."""
-    return [QualityStatConfig.from_stat(q) for q in QUALITY_STATS]
-
-
-@app.get("/site-config", response_model=SiteConfig)
-def site_config() -> SiteConfig:
-    """Deployment settings for the web app: the feedback, source code and privacy
-    contact links, and the curated groups (friendly labels, the "Surprise me"
-    pool, and the landing-page cards, flagged ``featured``)."""
+@app.get("/config", response_model=AppConfig)
+def config(conn: Conn) -> AppConfig:
+    """What a client reads once before showing any data: the dataset being served
+    (``built_at`` is ``null`` before the first build has stamped the database), the
+    presentation of each measure and quality stat, and the deployment's links,
+    curated groups and custom groups. Pass a custom group's clades to
+    ``/aggregate`` for its data."""
     settings = get_settings()
-    return SiteConfig(
+    row = fetch_dataset_meta(conn)
+    dataset = (
+        DatasetMeta(
+            built_at=None, taxon_count=0, assembly_count=0, annotation_count=0, clade_count=0
+        )
+        if row is None
+        else DatasetMeta(
+            built_at=row[0],
+            taxon_count=row[1],
+            assembly_count=row[2],
+            annotation_count=row[3],
+            clade_count=row[4],
+        )
+    )
+    return AppConfig(
+        dataset=dataset,
+        metrics=[MetricConfig.from_metric(m, settings.link_templates[m.key]) for m in METRICS],
+        quality_stats=[QualityStatConfig.from_stat(q) for q in QUALITY_STATS],
         feedback_url=settings.feedback_url,
         source_code_url=settings.source_code_url,
         privacy_contact_email=settings.privacy_contact_email,
         groups=list(settings.groups),
+        custom_groups=_custom_groups(conn, settings.custom_groups),
     )
 
 
-@app.get("/meta", response_model=DatasetMeta)
-def meta(conn: Conn) -> DatasetMeta:
-    """Dataset provenance for the "Data updated" stamp: when the served dataset was
-    built (UTC) and its record counts. One tiny indexed lookup on ``dataset_meta``;
-    ``built_at`` is ``null`` before the first build has stamped the DB."""
-    row = fetch_dataset_meta(conn)
-    if row is None:
-        return DatasetMeta(
-            built_at=None, taxon_count=0, assembly_count=0, annotation_count=0, clade_count=0
+def _custom_groups(
+    conn: psycopg.Connection, groups: Sequence[CustomGroup]
+) -> list[CustomGroupItem]:
+    """The custom groups that fit the current taxonomy, each with its clades. A
+    group that doesn't fit is left out and logged."""
+    if not groups:
+        return []
+    order = dict.fromkeys(t for g in groups for t in g.include + g.exclude)
+    taxa = fetch_set_taxa(conn, order)
+    return [
+        CustomGroupItem(
+            id=r.group.id,
+            label=r.group.label,
+            parent=r.group.parent,
+            rest=r.group.rest,
+            include=_taxon_refs((t for t in order if r.marks.get(t) is True), taxa),
+            exclude=_taxon_refs((t for t in order if r.marks.get(t) is False), taxa),
         )
-    built_at, taxon_count, assembly_count, annotation_count, clade_count = row
-    return DatasetMeta(
-        built_at=built_at,
-        taxon_count=taxon_count,
-        assembly_count=assembly_count,
-        annotation_count=annotation_count,
-        clade_count=clade_count,
-    )
+        for r in resolve_groups(groups, taxa)
+    ]
 
 
 @app.get("/overview", response_model=Overview)
@@ -475,31 +480,6 @@ def aggregate(
         resources=ResourceSummary.by_metric(meta),
         composition=AssemblyComposition.from_metadata(meta),
         quality=[QualityStatValue(key=q.key, value=quality[q.key]) for q in QUALITY_STATS],
-    )
-
-
-@app.get("/custom-groups", response_model=CustomGroups)
-def custom_groups(conn: Conn) -> CustomGroups:
-    """The custom groups from the deployment's groups file, in file order, each
-    with the clades it is made of (pass them to ``/aggregate`` for its data). A
-    group that doesn't fit the current taxonomy is left out and logged."""
-    groups = get_settings().custom_groups
-    if not groups:
-        return CustomGroups(groups=[])
-    order = dict.fromkeys(t for g in groups for t in g.include + g.exclude)
-    taxa = fetch_set_taxa(conn, order)
-    return CustomGroups(
-        groups=[
-            CustomGroupItem(
-                id=r.group.id,
-                label=r.group.label,
-                parent=r.group.parent,
-                rest=r.group.rest,
-                include=_taxon_refs((t for t in order if r.marks.get(t) is True), taxa),
-                exclude=_taxon_refs((t for t in order if r.marks.get(t) is False), taxa),
-            )
-            for r in resolve_groups(groups, taxa)
-        ]
     )
 
 

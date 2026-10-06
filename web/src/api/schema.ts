@@ -144,7 +144,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/custom-groups": {
+    "/config": {
         parameters: {
             query?: never;
             header?: never;
@@ -152,12 +152,14 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Custom Groups
-         * @description The custom groups from the deployment's groups file, in file order, each
-         *     with the clades it is made of (pass them to ``/aggregate`` for its data). A
-         *     group that doesn't fit the current taxonomy is left out and logged.
+         * Config
+         * @description What a client reads once before showing any data: the dataset being served
+         *     (``built_at`` is ``null`` before the first build has stamped the database), the
+         *     presentation of each measure and quality stat, and the deployment's links,
+         *     curated groups and custom groups. Pass a custom group's clades to
+         *     ``/aggregate`` for its data.
          */
-        get: operations["custom_groups_custom_groups_get"];
+        get: operations["config_config_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -237,49 +239,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/meta": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Meta
-         * @description Dataset provenance for the "Data updated" stamp: when the served dataset was
-         *     built (UTC) and its record counts. One tiny indexed lookup on ``dataset_meta``;
-         *     ``built_at`` is ``null`` before the first build has stamped the DB.
-         */
-        get: operations["meta_meta_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/metrics-config": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Metrics Config
-         * @description The tracked metrics — static card chrome the frontend renders once,
-         *     keyed by the same metric keys the per-clade payloads use.
-         */
-        get: operations["metrics_config_metrics_config_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/overview": {
         parameters: {
             query?: never;
@@ -302,28 +261,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/quality-config": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Quality Config
-         * @description The annotation/assembly-quality stats — static card chrome rendered once,
-         *     keyed by the stat keys the per-taxon quality values use (BUSCO, gene count,
-         *     genome size, N50). The analogue of ``/metrics-config`` for the new dimension.
-         */
-        get: operations["quality_config_quality_config_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/search": {
         parameters: {
             query?: never;
@@ -338,28 +275,6 @@ export interface paths {
          *     When no name contains it, close spellings are returned with `similar` set.
          */
         get: operations["search_search_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/site-config": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Site Config
-         * @description Deployment settings for the web app: the feedback, source code and privacy
-         *     contact links, and the curated groups (friendly labels, the "Surprise me"
-         *     pool, and the landing-page cards, flagged ``featured``).
-         */
-        get: operations["site_config_site_config_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -569,6 +484,29 @@ export interface components {
          */
         AnnotationSort: "busco_complete" | "protein_coding_count" | "release_date";
         /**
+         * AppConfig
+         * @description What a client reads once before showing any data (served by ``/config``):
+         *     the dataset it is looking at, how to present each measure, and the
+         *     deployment's links and groups.
+         */
+        AppConfig: {
+            /** Custom Groups */
+            custom_groups: components["schemas"]["CustomGroupItem"][];
+            dataset: components["schemas"]["DatasetMeta"];
+            /** Feedback Url */
+            feedback_url: string;
+            /** Groups */
+            groups: components["schemas"]["CladeGroup"][];
+            /** Metrics */
+            metrics: components["schemas"]["MetricConfig"][];
+            /** Privacy Contact Email */
+            privacy_contact_email: string;
+            /** Quality Stats */
+            quality_stats: components["schemas"]["QualityStatConfig"][];
+            /** Source Code Url */
+            source_code_url: string;
+        };
+        /**
          * AssemblyComposition
          * @description Additive assembly-composition counts for a clade (from ``clade_features``):
          *     genome assemblies split by level, plus the reference/representative count.
@@ -768,15 +706,6 @@ export interface components {
             rest: boolean;
         };
         /**
-         * CustomGroups
-         * @description The deployment's custom groups, in groups-file order (served by
-         *     ``/custom-groups``). A group that doesn't fit the current taxonomy is left out.
-         */
-        CustomGroups: {
-            /** Groups */
-            groups: components["schemas"]["CustomGroupItem"][];
-        };
-        /**
          * DatasetMeta
          * @description Dataset provenance for the "Data updated" stamp — when the served dataset
          *     was built and how many records it holds. ``built_at`` is ``null`` before the
@@ -874,8 +803,8 @@ export interface components {
         };
         /**
          * MetricConfig
-         * @description Static per-resource card chrome — served once by ``/metrics-config`` and
-         *     joined client-side to the numbers in each per-clade payload (by ``key``).
+         * @description Static per-resource card chrome — served once in ``/config`` and joined
+         *     client-side to the numbers in each per-clade payload (by ``key``).
          */
         MetricConfig: {
             /** Card Title */
@@ -951,8 +880,8 @@ export interface components {
         };
         /**
          * QualityStatConfig
-         * @description Static chrome for one quality stat — served once by ``/quality-config``
-         *     and joined client-side to the per-taxon ``QualityStatValue`` by ``key``.
+         * @description Static chrome for one quality stat — served once in ``/config`` and
+         *     joined client-side to the per-taxon ``QualityStatValue`` by ``key``.
          *     The analogue of ``MetricConfig`` for the annotation/assembly-quality
          *     dimension (BUSCO %, gene count, genome size, N50).
          */
@@ -1022,21 +951,6 @@ export interface components {
             similar: boolean;
             /** Taxid */
             taxid: number;
-        };
-        /**
-         * SiteConfig
-         * @description Deployment settings the web app reads once per page load (served by
-         *     ``/site-config``).
-         */
-        SiteConfig: {
-            /** Feedback Url */
-            feedback_url: string;
-            /** Groups */
-            groups: components["schemas"]["CladeGroup"][];
-            /** Privacy Contact Email */
-            privacy_contact_email: string;
-            /** Source Code Url */
-            source_code_url: string;
         };
         /**
          * SortColumn
@@ -1376,7 +1290,7 @@ export interface operations {
             };
         };
     };
-    custom_groups_custom_groups_get: {
+    config_config_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -1391,7 +1305,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["CustomGroups"];
+                    "application/json": components["schemas"]["AppConfig"];
                 };
             };
         };
@@ -1479,46 +1393,6 @@ export interface operations {
             };
         };
     };
-    meta_meta_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["DatasetMeta"];
-                };
-            };
-        };
-    };
-    metrics_config_metrics_config_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["MetricConfig"][];
-                };
-            };
-        };
-    };
     overview_overview_get: {
         parameters: {
             query?: never;
@@ -1535,26 +1409,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Overview"];
-                };
-            };
-        };
-    };
-    quality_config_quality_config_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["QualityStatConfig"][];
                 };
             };
         };
@@ -1588,26 +1442,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    site_config_site_config_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SiteConfig"];
                 };
             };
         };

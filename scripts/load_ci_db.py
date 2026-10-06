@@ -37,7 +37,7 @@ def main() -> None:
         for table in ("taxon", "clade_features", "assembly", "annotation"):
             counts[table] = conn.execute(f"SELECT count(*) FROM {table}").fetchone()[0]
             print(f"{table}: {counts[table]}")
-        # Stamp dataset_meta so the /meta endpoint (and its test) exercises the
+        # Stamp dataset_meta so /config (and its test) exercises the
         # populated path in CI too, just like a real build's final step.
         conn.execute("TRUNCATE dataset_meta")
         conn.execute(

@@ -1,5 +1,5 @@
 """Sets of clades and custom groups: the groups-file rules, resolution against the
-taxonomy, and the ``/aggregate`` and ``/custom-groups`` endpoints. Only the endpoint
+taxonomy, ``/aggregate``, and the custom groups in ``/config``. Only the endpoint
 tests need the database."""
 
 from __future__ import annotations
@@ -328,13 +328,13 @@ def test_aggregate_rejects_what_is_not_a_set(client, params, detail):
 def custom_groups_body(client, monkeypatch, tmp_path, caplog):
     caplog.set_level(logging.WARNING, logger="eukahub.api.clade_sets")
     monkeypatch.setattr(main, "get_settings", lambda: _settings(tmp_path, ENDPOINT_GROUPS))
-    response = client.get("/custom-groups")
+    response = client.get("/config")
     assert response.status_code == 200
-    return {g["id"]: g for g in response.json()["groups"]}
+    return {g["id"]: g for g in response.json()["custom_groups"]}
 
 
 def test_custom_groups_without_any(client):
-    assert client.get("/custom-groups").json() == {"groups": []}
+    assert client.get("/config").json()["custom_groups"] == []
 
 
 def test_custom_groups_keep_file_order_and_skip_what_does_not_fit(custom_groups_body, caplog):

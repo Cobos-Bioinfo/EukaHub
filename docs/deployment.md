@@ -123,7 +123,7 @@ of these rules, the API logs a warning that says why and uses the built-in list.
 ### Custom groups
 
 Groups that are not a single clade, such as fish (vertebrates without tetrapods), go
-in the same file under `custom_groups`. `/api/custom-groups` lists them with the
+in the same file under `custom_groups`. `/api/config` lists them with the
 clades each is made of, and `/api/aggregate?include=7742&exclude=32523` gives the
 species count, coverage and quality stats of any such set of clades. There are none
 by default, and the web app does not show them yet.
@@ -202,8 +202,8 @@ It logs every decision:
 - `dataset is N days old and no newer release exists`: the monthly rebuild has
   stopped producing Releases; check the Actions tab of `EUKAHUB_REPO`.
 
-`GET /api/meta` returns the build date of the data being served (also shown in the
-site footer).
+`GET /api/config` returns the build date of the data being served under `dataset`
+(also shown in the site footer).
 
 Useful commands (run from the repository root; `C` is shorthand):
 

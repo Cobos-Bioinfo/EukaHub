@@ -1,7 +1,7 @@
 """API response models — derived from the metric config so they can't drift.
 
 The static card chrome (titles, help text, colors, external URLs) lives in
-``eukahub_core.metrics.METRICS`` and is served once via ``/metrics-config``.
+``eukahub_core.metrics.METRICS`` and is served once in ``/config``.
 These per-clade payloads carry only the numbers, keyed by metric key
 ("ass", "ann", "rna", "lng"), so the frontend loops the metric config to
 render one card per resource.
@@ -30,8 +30,8 @@ from pydantic import (
 
 
 class MetricConfig(BaseModel):
-    """Static per-resource card chrome — served once by ``/metrics-config`` and
-    joined client-side to the numbers in each per-clade payload (by ``key``)."""
+    """Static per-resource card chrome — served once in ``/config`` and joined
+    client-side to the numbers in each per-clade payload (by ``key``)."""
 
     key: str
     card_title: str
@@ -238,16 +238,6 @@ class CustomGroup(BaseModel):
         return self
 
 
-class SiteConfig(BaseModel):
-    """Deployment settings the web app reads once per page load (served by
-    ``/site-config``)."""
-
-    feedback_url: str
-    source_code_url: str
-    privacy_contact_email: str
-    groups: list[CladeGroup]
-
-
 class DatasetMeta(BaseModel):
     """Dataset provenance for the "Data updated" stamp — when the served dataset
     was built and how many records it holds. ``built_at`` is ``null`` before the
@@ -400,8 +390,8 @@ class Gaps(BaseModel):
 
 
 class QualityStatConfig(BaseModel):
-    """Static chrome for one quality stat — served once by ``/quality-config``
-    and joined client-side to the per-taxon ``QualityStatValue`` by ``key``.
+    """Static chrome for one quality stat — served once in ``/config`` and
+    joined client-side to the per-taxon ``QualityStatValue`` by ``key``.
     The analogue of ``MetricConfig`` for the annotation/assembly-quality
     dimension (BUSCO %, gene count, genome size, N50)."""
 
@@ -544,8 +534,17 @@ class CustomGroupItem(BaseModel):
     exclude: list[TaxonRef]
 
 
-class CustomGroups(BaseModel):
-    """The deployment's custom groups, in groups-file order (served by
-    ``/custom-groups``). A group that doesn't fit the current taxonomy is left out."""
+class AppConfig(BaseModel):
+    """What a client reads once before showing any data (served by ``/config``):
+    the dataset it is looking at, how to present each measure, and the
+    deployment's links and groups."""
 
-    groups: list[CustomGroupItem]
+    dataset: DatasetMeta
+    metrics: list[MetricConfig]  # in METRICS order
+    quality_stats: list[QualityStatConfig]  # in QUALITY_STATS order
+    feedback_url: str
+    source_code_url: str
+    privacy_contact_email: str
+    groups: list[CladeGroup]  # curated groups; ``featured`` ones are the landing-page cards
+    # In groups-file order; a group that doesn't fit the current taxonomy is left out.
+    custom_groups: list[CustomGroupItem]

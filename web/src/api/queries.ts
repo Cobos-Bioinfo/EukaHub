@@ -4,6 +4,7 @@
 import { api } from "./client";
 import type {
   AnnotationList,
+  AppConfig,
   AnnotationSort,
   AssemblyList,
   AssemblySort,
@@ -19,7 +20,6 @@ import type {
   Overview,
   QualityStatConfig,
   SearchHit,
-  SiteConfig,
   SortColumn,
   TargetRank,
   TaxonAbout,
@@ -59,19 +59,32 @@ function unwrap<T>(res: { data?: T; error?: unknown; response: Response }): T {
   return res.data;
 }
 
-export const getMetricsConfig = async (): Promise<MetricConfig[]> =>
-  unwrap(await api.GET("/metrics-config"));
+// Everything the app reads once (dataset stamp, measure and quality-stat chrome,
+// deployment links and groups), fetched once per page load and shared.
+let config: Promise<AppConfig> | undefined;
 
-// Landing-page "at a glance": global totals + a few featured groups, one request.
-export const getOverview = async (): Promise<Overview> => unwrap(await api.GET("/overview"));
+export function getConfig(): Promise<AppConfig> {
+  config ??= api
+    .GET("/config")
+    .then(unwrap)
+    .catch((err: unknown) => {
+      config = undefined; // the next caller retries
+      throw err;
+    });
+  return config;
+}
+
+export const getMetricsConfig = async (): Promise<MetricConfig[]> => (await getConfig()).metrics;
+
+export const getQualityConfig = async (): Promise<QualityStatConfig[]> =>
+  (await getConfig()).quality_stats;
 
 // Dataset provenance for the app-wide "Data updated" footer stamp. built_at is
 // null before the first build has stamped the DB.
-export const getMeta = async (): Promise<DatasetMeta> => unwrap(await api.GET("/meta"));
+export const getMeta = async (): Promise<DatasetMeta> => (await getConfig()).dataset;
 
-// Deployment settings: header links, privacy contact and the curated groups.
-export const getSiteConfig = async (): Promise<SiteConfig> =>
-  unwrap(await api.GET("/site-config"));
+// Landing-page "at a glance": global totals + a few featured groups, one request.
+export const getOverview = async (): Promise<Overview> => unwrap(await api.GET("/overview"));
 
 // Compare several groups side by side (2-6). Unknown taxids are dropped server-side.
 export const getCompare = async (taxids: number[]): Promise<Compare> =>
@@ -131,11 +144,6 @@ export const getAbout = async (taxid: number): Promise<TaxonAbout | null> => {
 
 export const searchTaxa = async (q: string, limit = 10): Promise<SearchHit[]> =>
   unwrap(await api.GET("/search", { params: { query: { q, limit } } }));
-
-// The annotation/assembly-quality stat chrome (BUSCO, genes, genome size, N50) —
-// the analogue of getMetricsConfig for the enrichment dimension, fetched once.
-export const getQualityConfig = async (): Promise<QualityStatConfig[]> =>
-  unwrap(await api.GET("/quality-config"));
 
 // Per-record drill-down: genome assemblies anywhere under a taxon, with live
 // distribution stats (median genome size / contig N50). Paginated via

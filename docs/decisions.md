@@ -95,7 +95,7 @@ Streamlit app that answered the same questions but was slow to build and to serv
 - **Deployment settings are configuration, not code.** Links, the privacy contact,
   the Wikipedia lookup and the curated groups are read by the API at startup (from
   `infra/.env` and an optional `infra/config/groups.json`), and the web app gets them
-  from `/api/site-config`, so changing one needs a restart, not a new image. Only the
+  from `/api/config`, so changing one needs a restart, not a new image. Only the
   API container reads the groups file, which also feeds the landing-page numbers.
   Every setting has a default, and an invalid one is logged and replaced by its
   default, because a typo should not take an unattended site down. The pipeline's
@@ -106,7 +106,7 @@ Streamlit app that answered the same questions but was slow to build and to serv
   included, minus clades inside them excluded, so its counts are sums and differences
   of `clade_features` rows. Its quality stats are medians and maxima, which cannot be
   subtracted, so they come from the records in the set. The API keeps the two
-  concerns apart: `/custom-groups` lists the deployment's groups and their clades,
+  concerns apart: `/config` lists the deployment's groups and their clades,
   and `/aggregate` computes any set. Nothing is precomputed, so a deployment changes
   its groups with a restart, not a rebuild. Groups under one parent may not overlap,
   so that they and the parent's "rest" group always add up to the parent.

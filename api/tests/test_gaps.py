@@ -84,8 +84,8 @@ def _stats_dict(stats: list[dict]) -> dict[str, float | None]:
 
 def test_gaps_quality_stats_shape(client):
     """By default each item carries the quality of the data it *does* have: one
-    entry per QUALITY_STATS key (from /quality-config), each float-or-null."""
-    keys = {q["key"] for q in client.get("/quality-config").json()}
+    entry per QUALITY_STATS key (from /config), each float-or-null."""
+    keys = {q["key"] for q in client.get("/config").json()["quality_stats"]}
     assert keys  # the quality dimension is configured
     body = client.get("/gaps", params={"rank": "class", "resource": "lng"}).json()
     assert body["items"]
@@ -110,7 +110,7 @@ def test_gaps_quality_matches_record_endpoints(client):
     per-record endpoints serve over that clade's subtree — no separate source of
     truth. Assembly-source keys match /assemblies, annotation-source keys match
     /annotations."""
-    source = {q["key"]: q["source"] for q in client.get("/quality-config").json()}
+    source = {q["key"]: q["source"] for q in client.get("/config").json()["quality_stats"]}
     body = client.get("/gaps", params={"rank": "class", "resource": "lng"}).json()
     it = body["items"][0]  # Mammalia on both slice and prod
     gaps_stats = _stats_dict(it["stats"])
