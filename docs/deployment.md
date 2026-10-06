@@ -122,7 +122,7 @@ of these rules, the API logs a warning that says why and uses the built-in list.
 
 Groups that are not a single clade, such as fish (vertebrates without tetrapods), go
 in the same file under `custom_groups`. `/api/config` lists them with the clades each
-is made of, and `/api/taxons/aggregate?include=7742&exclude=32523` gives the species
+is made of, and `/api/taxons/aggregates?include=7742&exclude=32523` gives the species
 count, coverage and quality stats of any such set of clades. There are none by
 default, and the web app does not show them yet.
 

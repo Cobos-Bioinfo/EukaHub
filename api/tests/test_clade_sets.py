@@ -1,5 +1,5 @@
 """Sets of clades and custom groups: the groups-file rules, resolution against the
-taxonomy, ``/taxons/aggregate``, and the custom groups in ``/config``. Only the endpoint
+taxonomy, ``/taxons/aggregates``, and the custom groups in ``/config``. Only the endpoint
 tests need the database."""
 
 from __future__ import annotations
@@ -246,11 +246,13 @@ def _stats(body: dict) -> dict[str, float | None]:
 
 def _aggregate(client, include: list[int], exclude: list[int] = ()) -> dict:
     response = client.get(
-        "/taxons/aggregate",
+        "/taxons/aggregates",
         params={"include": ",".join(map(str, include)), "exclude": ",".join(map(str, exclude))},
     )
     assert response.status_code == 200, response.text
-    return response.json()
+    body = response.json()
+    assert body["total"] == 1 and body["next"] is None
+    return body["results"][0]
 
 
 def _expected_quality(where: str, paths: list[str]) -> dict[str, float | None]:
@@ -318,7 +320,7 @@ def test_aggregate_can_include_inside_an_excluded_clade(client):
     ],
 )
 def test_aggregate_rejects_what_is_not_a_set(client, params, detail):
-    response = client.get("/taxons/aggregate", params=params)
+    response = client.get("/taxons/aggregates", params=params)
     assert response.status_code == 422
     assert detail in response.json()["detail"]
 

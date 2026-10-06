@@ -107,7 +107,7 @@ Streamlit app that answered the same questions but was slow to build and to serv
   of `clade_features` rows. Its quality stats are medians and maxima, which cannot be
   subtracted, so they come from the records in the set. The API keeps the two
   concerns apart: `/config` lists the deployment's groups and their clades, and
-  `/taxons/aggregate` computes any set. Nothing is precomputed, so a deployment
+  `/taxons/aggregates` computes any set. Nothing is precomputed, so a deployment
   changes its groups with a restart, not a rebuild. Groups under one parent may not
   overlap, so that they and the parent's "rest" group always add up to the parent.
 - **The API has one main resource, taxons, named like Annotrieve's.** A taxon is

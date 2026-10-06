@@ -8,7 +8,7 @@ Resources:
   with their counts; sorted, filtered and paged.
 - ``GET /taxons/stats``                — the quality stats of the same taxa, page for page.
 - ``GET /taxons/report``               — every taxon the same list would page through, as TSV.
-- ``GET /taxons/aggregate``            — data for a set of clades (include minus exclude).
+- ``GET /taxons/aggregates``           — data for a set of clades (include minus exclude).
 - ``GET /taxons/{taxid}``              — one taxon, the same object ``/taxons`` lists.
 - ``GET /taxons/{taxid}/ancestors``    — the root down to the taxon, as taxa.
 - ``GET /taxons/{taxid}/stats``        — the quality stats of one taxon.
@@ -69,6 +69,7 @@ from eukahub_api.queries import (
 from eukahub_api.schemas import (
     MAX_CLADES_PER_GROUP,
     Aggregate,
+    AggregatePage,
     AnnotationPage,
     AnnotationRecord,
     AppConfig,
@@ -277,7 +278,7 @@ def config(conn: Conn) -> AppConfig:
     (``built_at`` is ``null`` before the first build has stamped the database), the
     presentation of each measure and quality stat, and the deployment's links,
     Wikipedia summary endpoint, curated groups and custom groups. Pass a custom
-    group's clades to ``/taxons/aggregate`` for its data."""
+    group's clades to ``/taxons/aggregates`` for its data."""
     settings = get_settings()
     row = fetch_dataset_meta(conn)
     dataset = (
@@ -564,7 +565,7 @@ def taxons_report(
     )
 
 
-@app.get("/taxons/aggregate", response_model=Aggregate)
+@app.get("/taxons/aggregates", response_model=AggregatePage)
 def aggregate(
     conn: Conn,
     include: Annotated[
@@ -574,12 +575,13 @@ def aggregate(
         str,
         Query(description="Comma-separated taxids of clades inside them to leave out (e.g. 32523)."),
     ] = "",
-) -> Aggregate:
+) -> AggregatePage:
     """Species count, per-resource coverage and quality stats for a set of clades:
     the clades in ``include`` minus the clades inside them in ``exclude`` (e.g.
     fish as Vertebrata minus Tetrapoda). A clade inside an excluded one can be
     included again. Counts are sums and differences of the clades' rollups;
-    quality stats are computed from the records in the set."""
+    quality stats are computed from the records in the set. A list, like every
+    collection, holding the one set asked for."""
     inc = _parse_taxids(include, "include", MAX_CLADES_PER_GROUP)
     exc = _parse_taxids(exclude, "exclude", MAX_CLADES_PER_GROUP)
     if not inc:
@@ -596,7 +598,7 @@ def aggregate(
         [(path[i], [path[o] for o in outside]) for i, outside in set_pieces(marks, taxa)],
     )
     meta = set_metadata(marks, taxa)
-    return Aggregate(
+    aggregate = Aggregate(
         include=_taxon_refs((t for t in inc if marks.get(t) is True), taxa),
         exclude=_taxon_refs((t for t in exc if marks.get(t) is False), taxa),
         n_rows=meta.n_rows,
@@ -604,6 +606,7 @@ def aggregate(
         composition=AssemblyComposition.from_metadata(meta),
         stats=[QualityStatValue(key=q.key, value=quality[q.key]) for q in QUALITY_STATS],
     )
+    return AggregatePage(total=1, limit=1, next=None, previous=None, results=[aggregate])
 
 
 @app.get("/taxons/{taxid}", response_model=Taxon)

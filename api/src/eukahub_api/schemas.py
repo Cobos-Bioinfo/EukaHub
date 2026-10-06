@@ -366,7 +366,7 @@ class TaxonStatsPage(Page):
 
 class Aggregate(BaseModel):
     """Species count, per-resource coverage and quality stats for a set of clades
-    (served by ``/taxons/aggregate``): a taxon is in the set when the nearest listed
+    (served by ``/taxons/aggregates``): a taxon is in the set when the nearest listed
     clade above it (or the taxon itself) is in ``include``."""
 
     include: list[TaxonRef]
@@ -379,10 +379,14 @@ class Aggregate(BaseModel):
     )
 
 
+class AggregatePage(Page):
+    results: list[Aggregate]
+
+
 class CustomGroupItem(BaseModel):
     """One custom group from the groups file. ``include`` and ``exclude`` are the
     clades it is made of, worked out from the parent's other groups for a
-    ``rest`` group, so they can be passed to ``/taxons/aggregate`` as they are. A rest
+    ``rest`` group, so they can be passed to ``/taxons/aggregates`` as they are. A rest
     group with nothing left lists no clades."""
 
     id: str

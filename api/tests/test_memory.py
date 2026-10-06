@@ -224,7 +224,7 @@ REQUESTS = {
     "stats of the root": "/taxons/2759/stats",
     "stats of 50 phyla": "/taxons/stats?within=2759&rank=phylum&limit=50",
     "stats of 1000 genera": "/taxons/stats?within=2759&rank=genus&limit=1000",
-    "set of clades": f"/taxons/aggregate?include=2759&exclude={PHYLUM}",
+    "set of clades": f"/taxons/aggregates?include=2759&exclude={PHYLUM}",
     "report of every species": "/taxons/report?within=2759&rank=species",
     "assemblies, first page": "/assemblies?within=2759&limit=200",
     "assemblies, deep page": "/assemblies?within=2759&limit=200&cursor="

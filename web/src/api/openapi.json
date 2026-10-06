@@ -2,7 +2,7 @@
   "components": {
     "schemas": {
       "Aggregate": {
-        "description": "Species count, per-resource coverage and quality stats for a set of clades\n(served by ``/taxons/aggregate``): a taxon is in the set when the nearest listed\nclade above it (or the taxon itself) is in ``include``.",
+        "description": "Species count, per-resource coverage and quality stats for a set of clades\n(served by ``/taxons/aggregates``): a taxon is in the set when the nearest listed\nclade above it (or the taxon itself) is in ``include``.",
         "properties": {
           "composition": {
             "$ref": "#/components/schemas/AssemblyComposition"
@@ -50,6 +50,56 @@
           "stats"
         ],
         "title": "Aggregate",
+        "type": "object"
+      },
+      "AggregatePage": {
+        "properties": {
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "next": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next"
+          },
+          "previous": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Previous"
+          },
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/Aggregate"
+            },
+            "title": "Results",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total",
+          "limit",
+          "next",
+          "previous",
+          "results"
+        ],
+        "title": "AggregatePage",
         "type": "object"
       },
       "AnnotationPage": {
@@ -609,7 +659,7 @@
         "type": "object"
       },
       "CustomGroupItem": {
-        "description": "One custom group from the groups file. ``include`` and ``exclude`` are the\nclades it is made of, worked out from the parent's other groups for a\n``rest`` group, so they can be passed to ``/taxons/aggregate`` as they are. A rest\ngroup with nothing left lists no clades.",
+        "description": "One custom group from the groups file. ``include`` and ``exclude`` are the\nclades it is made of, worked out from the parent's other groups for a\n``rest`` group, so they can be passed to ``/taxons/aggregates`` as they are. A rest\ngroup with nothing left lists no clades.",
         "properties": {
           "exclude": {
             "items": {
@@ -1480,7 +1530,7 @@
     },
     "/config": {
       "get": {
-        "description": "What a client reads once before showing any data: the dataset being served\n(``built_at`` is ``null`` before the first build has stamped the database), the\npresentation of each measure and quality stat, and the deployment's links,\nWikipedia summary endpoint, curated groups and custom groups. Pass a custom\ngroup's clades to ``/taxons/aggregate`` for its data.",
+        "description": "What a client reads once before showing any data: the dataset being served\n(``built_at`` is ``null`` before the first build has stamped the database), the\npresentation of each measure and quality stat, and the deployment's links,\nWikipedia summary endpoint, curated groups and custom groups. Pass a custom\ngroup's clades to ``/taxons/aggregates`` for its data.",
         "operationId": "config_config_get",
         "responses": {
           "200": {
@@ -1780,10 +1830,10 @@
         "summary": "Taxons"
       }
     },
-    "/taxons/aggregate": {
+    "/taxons/aggregates": {
       "get": {
-        "description": "Species count, per-resource coverage and quality stats for a set of clades:\nthe clades in ``include`` minus the clades inside them in ``exclude`` (e.g.\nfish as Vertebrata minus Tetrapoda). A clade inside an excluded one can be\nincluded again. Counts are sums and differences of the clades' rollups;\nquality stats are computed from the records in the set.",
-        "operationId": "aggregate_taxons_aggregate_get",
+        "description": "Species count, per-resource coverage and quality stats for a set of clades:\nthe clades in ``include`` minus the clades inside them in ``exclude`` (e.g.\nfish as Vertebrata minus Tetrapoda). A clade inside an excluded one can be\nincluded again. Counts are sums and differences of the clades' rollups;\nquality stats are computed from the records in the set. A list, like every\ncollection, holding the one set asked for.",
+        "operationId": "aggregate_taxons_aggregates_get",
         "parameters": [
           {
             "description": "Comma-separated taxids of the clades to add up (1-20, e.g. 7742).",
@@ -1814,7 +1864,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Aggregate"
+                  "$ref": "#/components/schemas/AggregatePage"
                 }
               }
             },

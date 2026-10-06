@@ -59,7 +59,7 @@ export interface paths {
          *     (``built_at`` is ``null`` before the first build has stamped the database), the
          *     presentation of each measure and quality stat, and the deployment's links,
          *     Wikipedia summary endpoint, curated groups and custom groups. Pass a custom
-         *     group's clades to ``/taxons/aggregate`` for its data.
+         *     group's clades to ``/taxons/aggregates`` for its data.
          */
         get: operations["config_config_get"];
         put?: never;
@@ -137,7 +137,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/taxons/aggregate": {
+    "/taxons/aggregates": {
         parameters: {
             query?: never;
             header?: never;
@@ -150,9 +150,10 @@ export interface paths {
          *     the clades in ``include`` minus the clades inside them in ``exclude`` (e.g.
          *     fish as Vertebrata minus Tetrapoda). A clade inside an excluded one can be
          *     included again. Counts are sums and differences of the clades' rollups;
-         *     quality stats are computed from the records in the set.
+         *     quality stats are computed from the records in the set. A list, like every
+         *     collection, holding the one set asked for.
          */
-        get: operations["aggregate_taxons_aggregate_get"];
+        get: operations["aggregate_taxons_aggregates_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -280,7 +281,7 @@ export interface components {
         /**
          * Aggregate
          * @description Species count, per-resource coverage and quality stats for a set of clades
-         *     (served by ``/taxons/aggregate``): a taxon is in the set when the nearest listed
+         *     (served by ``/taxons/aggregates``): a taxon is in the set when the nearest listed
          *     clade above it (or the taxon itself) is in ``include``.
          */
         Aggregate: {
@@ -300,6 +301,19 @@ export interface components {
              * @description As for a taxon, over the records in the set.
              */
             stats: components["schemas"]["QualityStatValue"][];
+        };
+        /** AggregatePage */
+        AggregatePage: {
+            /** Limit */
+            limit: number;
+            /** Next */
+            next: string | null;
+            /** Previous */
+            previous: string | null;
+            /** Results */
+            results: components["schemas"]["Aggregate"][];
+            /** Total */
+            total: number;
         };
         /** AnnotationPage */
         AnnotationPage: {
@@ -474,7 +488,7 @@ export interface components {
          * CustomGroupItem
          * @description One custom group from the groups file. ``include`` and ``exclude`` are the
          *     clades it is made of, worked out from the parent's other groups for a
-         *     ``rest`` group, so they can be passed to ``/taxons/aggregate`` as they are. A rest
+         *     ``rest`` group, so they can be passed to ``/taxons/aggregates`` as they are. A rest
          *     group with nothing left lists no clades.
          */
         CustomGroupItem: {
@@ -963,7 +977,7 @@ export interface operations {
             };
         };
     };
-    aggregate_taxons_aggregate_get: {
+    aggregate_taxons_aggregates_get: {
         parameters: {
             query: {
                 /** @description Comma-separated taxids of the clades to add up (1-20, e.g. 7742). */
@@ -983,7 +997,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Aggregate"];
+                    "application/json": components["schemas"]["AggregatePage"];
                 };
             };
             /** @description Validation Error */
