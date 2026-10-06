@@ -16,6 +16,7 @@ from eukahub_core.metrics import (
     METRIC_KEYS,
     CladeMetadata,
     Metric,
+    QualityAgg,
     QualityStat,
 )
 from pydantic import (
@@ -82,11 +83,12 @@ class MetricConfig(BaseModel):
 
 
 class ResourceSummary(BaseModel):
-    """Per-resource rollup for one clade."""
+    """One resource's counts for a taxon, summed over the taxon and everything
+    below it when the dataset is built."""
 
-    covered: int  # c_<key>: species in the subtree with >=1 of this resource
-    total: int  # s_<key>: resource count summed across the subtree
-    percent: float  # covered / n_rows * 100 (0.0 when n_rows == 0)
+    covered: int = Field(description="Species on or below the taxon with at least one record.")
+    total: int = Field(description="Records on or below the taxon, at any rank.")
+    percent: float = Field(description="covered / n_rows * 100, or 0 when n_rows is 0.")
 
     @classmethod
     def by_metric(cls, meta: CladeMetadata) -> dict[str, ResourceSummary]:
@@ -102,15 +104,15 @@ class ResourceSummary(BaseModel):
 
 
 class AssemblyComposition(BaseModel):
-    """Additive assembly-composition counts for a clade (from ``clade_features``):
-    genome assemblies split by level, plus the reference/representative count.
-    Summed up the lineage like the s_* totals."""
+    """The genome assemblies on or below a taxon by assembly level, and how many
+    are NCBI reference or representative genomes; summed when the dataset is
+    built, like the resource totals."""
 
     complete: int
     chromosome: int
     scaffold: int
     contig: int
-    reference: int  # assemblies with a refseq_category set
+    reference: int = Field(description="Assemblies NCBI marks as reference or representative.")
 
     @classmethod
     def from_metadata(cls, meta: CladeMetadata) -> AssemblyComposition:
@@ -129,17 +131,23 @@ class CladeSummary(BaseModel):
     taxid: int
     name: str
     rank: str
-    n_rows: int  # species in the subtree
-    # True for below-species taxa (subspecies/strains/varietas/...): a single
-    # unit (n_rows == 1) whose data also counts for its species. The frontend
-    # renders these as leaf detail (resource counts + source links), not a clade
-    # coverage summary.
-    is_infraspecific: bool = False
-    resources: dict[str, ResourceSummary]  # keyed by metric key, in METRICS order
-    composition: AssemblyComposition  # assembly-level split + reference count
-    # Species and finer taxa only: records attached to this taxon itself, keyed by
-    # metric key; the rest of each total sits on the finer taxa below it.
-    direct: dict[str, int] | None = None
+    n_rows: int = Field(
+        description="Species on or below the taxon (1 for a species or a finer taxon)."
+    )
+    is_infraspecific: bool = Field(
+        False,
+        description="Below a species (subspecies, strain, ...): one unit whose data also "
+        "counts for its species.",
+    )
+    resources: dict[str, ResourceSummary] = Field(
+        description="Per resource, keyed by the metric keys in /config."
+    )
+    composition: AssemblyComposition
+    direct: dict[str, int] | None = Field(
+        None,
+        description="Species and finer taxa only: per resource, the records on the taxon "
+        "itself; the rest of each total is on the taxa below it.",
+    )
 
     @classmethod
     def from_metadata(
@@ -229,18 +237,20 @@ class Taxon(CladeSummary):
     """One taxon (served by ``/taxons/{taxid}``): its lineage, its counts, and the
     quality stats of every record under it."""
 
-    lineage: list[TaxonRef]  # root first, this taxon last
+    lineage: list[TaxonRef] = Field(description="The root first, this taxon last.")
     has_children: bool
-    stats: list[QualityStatValue]  # in QUALITY_STATS order; null where no record has the field
+    stats: list[QualityStatValue] = Field(
+        description="Computed per request from every record on or below the taxon; "
+        "/config says which aggregation each one is."
+    )
 
 
 class QualityStatValue(BaseModel):
-    """A quality stat computed live over a taxon's subtree records (median or
-    max per QUALITY_STATS). ``value`` is ``null`` when the subtree has no records
-    carrying that field."""
+    """A quality stat of a taxon: the median or the maximum (see ``aggregation`` in
+    ``/config``) of one field over the records on or below it."""
 
     key: str
-    value: float | None
+    value: float | None = Field(description="Null when no record under the taxon has the field.")
 
 
 # --- Quality dimension (per-record drill-down + live distribution stats) -----
@@ -254,6 +264,9 @@ class QualityStatConfig(BaseModel):
 
     key: str
     source: str  # "assembly" | "annotation" — which per-record table it comes from
+    aggregation: QualityAgg = Field(
+        description="How the records' values are summarized: their median or their maximum."
+    )
     card_title: str
     help: str
     unit: str | None  # "%", "bp", "genes", ...
@@ -265,6 +278,7 @@ class QualityStatConfig(BaseModel):
         return cls(
             key=q.key,
             source=q.source,
+            aggregation=q.agg,
             card_title=q.card_title,
             help=q.help,
             unit=q.unit,
@@ -338,8 +352,9 @@ class TaxonItem(CladeSummary):
         description="Nearest class, phylum or kingdom above the taxon, to tell homonyms apart."
     )
     has_children: bool
-    # With ``stats=true``: the quality stats of the records under the taxon.
-    stats: list[QualityStatValue] | None = None
+    stats: list[QualityStatValue] | None = Field(
+        None, description="With stats=true: as in /taxons/{taxid}; otherwise null."
+    )
 
 
 class TaxonPage(Page):

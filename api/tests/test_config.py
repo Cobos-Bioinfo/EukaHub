@@ -66,6 +66,7 @@ def test_config_quality_stats(client):
         assert q["help"]
         assert q["source"] in {"assembly", "annotation"}
         assert q["fmt"] in {"percent", "integer", "basepairs"}
+        assert q["aggregation"] == ("max" if q["key"] == "busco" else "median")
     # The headline stats compare groups on the Gaps page, so they are medians, and
     # every label says which summary it shows.
     assert {q["key"] for q in stats if q["headline"]} == {"genes", "genome_size"}

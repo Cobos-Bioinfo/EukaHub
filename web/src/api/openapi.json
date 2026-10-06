@@ -333,7 +333,7 @@
         "type": "object"
       },
       "AssemblyComposition": {
-        "description": "Additive assembly-composition counts for a clade (from ``clade_features``):\ngenome assemblies split by level, plus the reference/representative count.\nSummed up the lineage like the s_* totals.",
+        "description": "The genome assemblies on or below a taxon by assembly level, and how many\nare NCBI reference or representative genomes; summed when the dataset is\nbuilt, like the resource totals.",
         "properties": {
           "chromosome": {
             "title": "Chromosome",
@@ -348,6 +348,7 @@
             "type": "integer"
           },
           "reference": {
+            "description": "Assemblies NCBI marks as reference or representative.",
             "title": "Reference",
             "type": "integer"
           },
@@ -841,6 +842,15 @@
       "QualityStatConfig": {
         "description": "Static chrome for one quality stat \u2014 served once in ``/config`` and\njoined client-side to the per-taxon ``QualityStatValue`` by ``key``.\nThe analogue of ``MetricConfig`` for the annotation/assembly-quality\ndimension (BUSCO %, gene count, genome size, N50).",
         "properties": {
+          "aggregation": {
+            "description": "How the records' values are summarized: their median or their maximum.",
+            "enum": [
+              "median",
+              "max"
+            ],
+            "title": "Aggregation",
+            "type": "string"
+          },
           "card_title": {
             "title": "Card Title",
             "type": "string"
@@ -880,6 +890,7 @@
         "required": [
           "key",
           "source",
+          "aggregation",
           "card_title",
           "help",
           "unit",
@@ -890,7 +901,7 @@
         "type": "object"
       },
       "QualityStatValue": {
-        "description": "A quality stat computed live over a taxon's subtree records (median or\nmax per QUALITY_STATS). ``value`` is ``null`` when the subtree has no records\ncarrying that field.",
+        "description": "A quality stat of a taxon: the median or the maximum (see ``aggregation`` in\n``/config``) of one field over the records on or below it.",
         "properties": {
           "key": {
             "title": "Key",
@@ -905,6 +916,7 @@
                 "type": "null"
               }
             ],
+            "description": "Null when no record under the taxon has the field.",
             "title": "Value"
           }
         },
@@ -916,17 +928,20 @@
         "type": "object"
       },
       "ResourceSummary": {
-        "description": "Per-resource rollup for one clade.",
+        "description": "One resource's counts for a taxon, summed over the taxon and everything\nbelow it when the dataset is built.",
         "properties": {
           "covered": {
+            "description": "Species on or below the taxon with at least one record.",
             "title": "Covered",
             "type": "integer"
           },
           "percent": {
+            "description": "covered / n_rows * 100, or 0 when n_rows is 0.",
             "title": "Percent",
             "type": "number"
           },
           "total": {
+            "description": "Records on or below the taxon, at any rank.",
             "title": "Total",
             "type": "integer"
           }
@@ -977,6 +992,7 @@
                 "type": "null"
               }
             ],
+            "description": "Species and finer taxa only: per resource, the records on the taxon itself; the rest of each total is on the taxa below it.",
             "title": "Direct"
           },
           "has_children": {
@@ -985,10 +1001,12 @@
           },
           "is_infraspecific": {
             "default": false,
+            "description": "Below a species (subspecies, strain, ...): one unit whose data also counts for its species.",
             "title": "Is Infraspecific",
             "type": "boolean"
           },
           "lineage": {
+            "description": "The root first, this taxon last.",
             "items": {
               "$ref": "#/components/schemas/TaxonRef"
             },
@@ -996,6 +1014,7 @@
             "type": "array"
           },
           "n_rows": {
+            "description": "Species on or below the taxon (1 for a species or a finer taxon).",
             "title": "N Rows",
             "type": "integer"
           },
@@ -1011,10 +1030,12 @@
             "additionalProperties": {
               "$ref": "#/components/schemas/ResourceSummary"
             },
+            "description": "Per resource, keyed by the metric keys in /config.",
             "title": "Resources",
             "type": "object"
           },
           "stats": {
+            "description": "Computed per request from every record on or below the taxon; /config says which aggregation each one is.",
             "items": {
               "$ref": "#/components/schemas/QualityStatValue"
             },
@@ -1070,6 +1091,7 @@
                 "type": "null"
               }
             ],
+            "description": "Species and finer taxa only: per resource, the records on the taxon itself; the rest of each total is on the taxa below it.",
             "title": "Direct"
           },
           "has_children": {
@@ -1078,10 +1100,12 @@
           },
           "is_infraspecific": {
             "default": false,
+            "description": "Below a species (subspecies, strain, ...): one unit whose data also counts for its species.",
             "title": "Is Infraspecific",
             "type": "boolean"
           },
           "n_rows": {
+            "description": "Species on or below the taxon (1 for a species or a finer taxon).",
             "title": "N Rows",
             "type": "integer"
           },
@@ -1097,6 +1121,7 @@
             "additionalProperties": {
               "$ref": "#/components/schemas/ResourceSummary"
             },
+            "description": "Per resource, keyed by the metric keys in /config.",
             "title": "Resources",
             "type": "object"
           },
@@ -1112,6 +1137,7 @@
                 "type": "null"
               }
             ],
+            "description": "With stats=true: as in /taxons/{taxid}; otherwise null.",
             "title": "Stats"
           },
           "taxid": {

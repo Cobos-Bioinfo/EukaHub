@@ -311,9 +311,9 @@ export interface components {
         };
         /**
          * AssemblyComposition
-         * @description Additive assembly-composition counts for a clade (from ``clade_features``):
-         *     genome assemblies split by level, plus the reference/representative count.
-         *     Summed up the lineage like the s_* totals.
+         * @description The genome assemblies on or below a taxon by assembly level, and how many
+         *     are NCBI reference or representative genomes; summed when the dataset is
+         *     built, like the resource totals.
          */
         AssemblyComposition: {
             /** Chromosome */
@@ -322,7 +322,10 @@ export interface components {
             complete: number;
             /** Contig */
             contig: number;
-            /** Reference */
+            /**
+             * Reference
+             * @description Assemblies NCBI marks as reference or representative.
+             */
             reference: number;
             /** Scaffold */
             scaffold: number;
@@ -503,6 +506,12 @@ export interface components {
          *     dimension (BUSCO %, gene count, genome size, N50).
          */
         QualityStatConfig: {
+            /**
+             * Aggregation
+             * @description How the records' values are summarized: their median or their maximum.
+             * @enum {string}
+             */
+            aggregation: "median" | "max";
             /** Card Title */
             card_title: string;
             /** Fmt */
@@ -520,26 +529,38 @@ export interface components {
         };
         /**
          * QualityStatValue
-         * @description A quality stat computed live over a taxon's subtree records (median or
-         *     max per QUALITY_STATS). ``value`` is ``null`` when the subtree has no records
-         *     carrying that field.
+         * @description A quality stat of a taxon: the median or the maximum (see ``aggregation`` in
+         *     ``/config``) of one field over the records on or below it.
          */
         QualityStatValue: {
             /** Key */
             key: string;
-            /** Value */
+            /**
+             * Value
+             * @description Null when no record under the taxon has the field.
+             */
             value: number | null;
         };
         /**
          * ResourceSummary
-         * @description Per-resource rollup for one clade.
+         * @description One resource's counts for a taxon, summed over the taxon and everything
+         *     below it when the dataset is built.
          */
         ResourceSummary: {
-            /** Covered */
+            /**
+             * Covered
+             * @description Species on or below the taxon with at least one record.
+             */
             covered: number;
-            /** Percent */
+            /**
+             * Percent
+             * @description covered / n_rows * 100, or 0 when n_rows is 0.
+             */
             percent: number;
-            /** Total */
+            /**
+             * Total
+             * @description Records on or below the taxon, at any rank.
+             */
             total: number;
         };
         /**
@@ -559,7 +580,10 @@ export interface components {
          */
         Taxon: {
             composition: components["schemas"]["AssemblyComposition"];
-            /** Direct */
+            /**
+             * Direct
+             * @description Species and finer taxa only: per resource, the records on the taxon itself; the rest of each total is on the taxa below it.
+             */
             direct?: {
                 [key: string]: number;
             } | null;
@@ -567,22 +591,35 @@ export interface components {
             has_children: boolean;
             /**
              * Is Infraspecific
+             * @description Below a species (subspecies, strain, ...): one unit whose data also counts for its species.
              * @default false
              */
             is_infraspecific: boolean;
-            /** Lineage */
+            /**
+             * Lineage
+             * @description The root first, this taxon last.
+             */
             lineage: components["schemas"]["TaxonRef"][];
-            /** N Rows */
+            /**
+             * N Rows
+             * @description Species on or below the taxon (1 for a species or a finer taxon).
+             */
             n_rows: number;
             /** Name */
             name: string;
             /** Rank */
             rank: string;
-            /** Resources */
+            /**
+             * Resources
+             * @description Per resource, keyed by the metric keys in /config.
+             */
             resources: {
                 [key: string]: components["schemas"]["ResourceSummary"];
             };
-            /** Stats */
+            /**
+             * Stats
+             * @description Computed per request from every record on or below the taxon; /config says which aggregation each one is.
+             */
             stats: components["schemas"]["QualityStatValue"][];
             /** Taxid */
             taxid: number;
@@ -598,7 +635,10 @@ export interface components {
              * @description Nearest class, phylum or kingdom above the taxon, to tell homonyms apart.
              */
             context: string | null;
-            /** Direct */
+            /**
+             * Direct
+             * @description Species and finer taxa only: per resource, the records on the taxon itself; the rest of each total is on the taxa below it.
+             */
             direct?: {
                 [key: string]: number;
             } | null;
@@ -606,20 +646,30 @@ export interface components {
             has_children: boolean;
             /**
              * Is Infraspecific
+             * @description Below a species (subspecies, strain, ...): one unit whose data also counts for its species.
              * @default false
              */
             is_infraspecific: boolean;
-            /** N Rows */
+            /**
+             * N Rows
+             * @description Species on or below the taxon (1 for a species or a finer taxon).
+             */
             n_rows: number;
             /** Name */
             name: string;
             /** Rank */
             rank: string;
-            /** Resources */
+            /**
+             * Resources
+             * @description Per resource, keyed by the metric keys in /config.
+             */
             resources: {
                 [key: string]: components["schemas"]["ResourceSummary"];
             };
-            /** Stats */
+            /**
+             * Stats
+             * @description With stats=true: as in /taxons/{taxid}; otherwise null.
+             */
             stats?: components["schemas"]["QualityStatValue"][] | null;
             /** Taxid */
             taxid: number;
