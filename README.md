@@ -38,8 +38,9 @@ production-grade stack (PostgreSQL + FastAPI + a React/TypeScript SPA).
 
 - **Genomic Resource Summary**: assemblies, annotations, and short/long-read
   RNA-Seq for any clade, with coverage meters over the full species count.
-- **Quality dimension**: live BUSCO completeness, contig N50, genome size, and
-  protein-coding gene counts, computed on demand from per-record tables.
+- **Quality dimension**: best BUSCO completeness and median contig N50, genome
+  size and protein-coding gene counts for every clade, computed at build time from
+  per-record tables.
 - **Interactive radial Tree of Life**: a lazily-expanded dendrogram where node
   size scales with species count and colour encodes coverage for a chosen
   resource, with search-to-locate and a keyboard/screen-reader outline fallback.
@@ -70,8 +71,8 @@ so a rebuild is reproducible and re-runnable.
 - **Database**: PostgreSQL 17. The NCBI taxonomy is stored as an adjacency list
   (`parent_id`) plus an `ltree` lineage path, so a whole-subtree breakdown for
   any root is one indexed query. Feature counts are pre-rolled into a
-  `clade_features` table; per-record `assembly`/`annotation` tables back the
-  live quality statistics.
+  `clade_features` table and each clade's quality statistics into `clade_stats`;
+  per-record `assembly`/`annotation` tables back the record lists.
 - **Backend**: FastAPI (Python), a read-only REST API with auto-generated
   OpenAPI. Pooled `psycopg`, SQL kept in one module, Pydantic response models
   derived from a single metric/quality config.

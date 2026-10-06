@@ -64,10 +64,12 @@ For a clade and a resource:
 - **Assembly composition**: the clade's assemblies by level (complete genome,
   chromosome, scaffold, contig) and how many are NCBI reference or representative
   genomes.
-- **Quality statistics** are computed when requested, over every record in the
-  clade: best BUSCO completeness, and the median protein-coding gene count, genome
-  size and contig N50. Medians cannot be summed up a tree, so they are not
-  precomputed.
+- **Quality statistics**, over every record in the clade: best BUSCO completeness,
+  and the median protein-coding gene count, genome size and contig N50. Medians
+  cannot be summed up a tree, so the build computes each clade's from its own
+  records, counting every record for each of its ancestors. Those of a set of
+  clades (include minus exclude) are computed when requested, from the records in
+  the set.
 
 A species, an informal species or a below-species taxon is a single unit: its row
 has `n_rows = 1`, and `c_<key> = 1` when it has that resource. Its page lists the
@@ -80,6 +82,7 @@ and those on finer taxa (`direct` in the summary API).
 |---|---|---|
 | `taxon` | taxon | `taxid`, `name`, `rank` (NCBI's, or `informal species`), `parent_id`, and `path`, the lineage from the root as an `ltree` of taxids (`1.131567.2759.33208...`). |
 | `clade_features` | taxon with species or data below it | The precomputed counts above: `n_rows`, `c_*`, `s_*`, `n_ass_*`, `n_reference`. |
+| `clade_stats` | taxon with records below it | The quality statistics above: `busco`, `genes`, `genome_size`, `contig_n50`; null when none of its records has the value. |
 | `assembly` | genome assembly | Level, N50s, genome size, GC, reference category, release date, submitter, BioProjects, NCBI link. |
 | `annotation` | genome annotation | Source database, provider, GFF link, gene and protein-coding counts, BUSCO scores. |
 | `dataset_meta` | (single row) | When the dataset was built and its row counts; written last, so its presence marks a complete build. |
@@ -88,15 +91,16 @@ There are no foreign keys: the data is bulk-loaded and never modified afterwards
 
 ## How queries use it
 
-- **Summary of a clade:** one primary-key lookup in `clade_features`.
+- **Summary of a clade:** one primary-key lookup in `clade_features`, and one in
+  `clade_stats` for its quality statistics.
 - **Breakdown** (the data map and the gaps leaderboard): the clade's descendants at
   a rank, `taxon.path <@ <clade path> AND rank = ...`, joined to `clade_features`.
 - **Lineage / breadcrumb:** ancestors via `path @> ...`.
 - **Tree of Life:** direct children via `parent_id`.
 - **Name search:** trigram index on `taxon.name`.
-- **Record lists and quality statistics:** records whose taxon lies in the clade's
-  subtree. For per-bucket statistics, each record's ancestors are read from the
-  labels of its own `path`.
+- **Record lists:** records whose taxon lies in the clade's subtree.
+- **Quality statistics of a set of clades:** the records in the set, one subtree
+  filter per included clade.
 
 The breakdown needs no precomputed per-root tables: any taxon can be the root.
 
@@ -104,8 +108,9 @@ The breakdown needs no precomputed per-root tables: any taxon can be the root.
 
 The pipeline (`pipeline/src/eukahub_pipeline/build.py`) parses the taxonomy, trims
 it to Eukaryota, fetches the three sources, drops records on unknown taxids, drops
-placeholder taxa without data, rolls the counts up every lineage with Polars, and
-loads Postgres. Before a dataset is published or installed,
+placeholder taxa without data, rolls the counts up every lineage with Polars,
+computes each clade's quality statistics from its records the same way (each
+record's ancestors are the labels of its taxon's `path`), and loads Postgres. Before a dataset is published or installed,
 `validate.check_invariants` requires that:
 
 1. no core table is empty;
@@ -113,10 +118,14 @@ loads Postgres. Before a dataset is published or installed,
 3. Eukaryota's assembly and annotation totals equal the rows in those tables;
 4. every informal species carries data;
 5. no clade has more species with data than species;
-6. the assembly-level counts at Eukaryota are positive and do not exceed its total.
+6. the assembly-level counts at Eukaryota are positive and do not exceed its total;
+7. `clade_stats` has a row for exactly the clades with records below them;
+8. the stored statistics of a few large clades (Eukaryota, Metazoa, Mammalia,
+   Primates, Fungi, plants) equal Postgres' own median and maximum over their
+   records.
 
 ## Sizes (full dataset, September 2026)
 
 Database about 950 MB on disk: `taxon` 290 MB plus 410 MB for its `path` index,
-`clade_features` 107 MB. About 70,500 assemblies and 19,500 annotations. The
+`clade_features` 107 MB, `clade_stats` 4 MB (about 52,600 clades). About 70,500 assemblies and 19,500 annotations. The
 published dump is about 30 MB.

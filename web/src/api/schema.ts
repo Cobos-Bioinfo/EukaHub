@@ -514,7 +514,7 @@ export interface components {
         };
         /**
          * AnnotationList
-         * @description Annotations under a taxon: live annotation-quality stats + a paginated list.
+         * @description Annotations under a taxon: annotation-quality stats + a paginated list.
          */
         AnnotationList: {
             /** Items */
@@ -587,7 +587,7 @@ export interface components {
         };
         /**
          * AssemblyList
-         * @description Assemblies under a taxon: live assembly-quality stats + a paginated list.
+         * @description Assemblies under a taxon: assembly-quality stats + a paginated list.
          */
         AssemblyList: {
             /** Items */
@@ -727,7 +727,7 @@ export interface components {
         /**
          * CompareGroup
          * @description One group in the compare view: its species count, per-resource coverage,
-         *     and live quality stats — enough to line several groups up side by side.
+         *     and quality stats — enough to line several groups up side by side.
          */
         CompareGroup: {
             /** N Rows */
@@ -971,8 +971,8 @@ export interface components {
         };
         /**
          * QualityStatValue
-         * @description A quality stat computed live over a taxon's subtree records (median or
-         *     max per QUALITY_STATS). ``value`` is ``null`` when the subtree has no records
+         * @description A quality stat over a taxon's subtree records (median or max per
+         *     QUALITY_STATS), computed at build time. ``value`` is ``null`` when the subtree has no records
          *     carrying that field.
          */
         QualityStatValue: {

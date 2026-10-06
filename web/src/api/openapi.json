@@ -52,7 +52,7 @@
         "type": "object"
       },
       "AnnotationList": {
-        "description": "Annotations under a taxon: live annotation-quality stats + a paginated list.",
+        "description": "Annotations under a taxon: annotation-quality stats + a paginated list.",
         "properties": {
           "items": {
             "items": {
@@ -291,7 +291,7 @@
         "type": "object"
       },
       "AssemblyList": {
-        "description": "Assemblies under a taxon: live assembly-quality stats + a paginated list.",
+        "description": "Assemblies under a taxon: assembly-quality stats + a paginated list.",
         "properties": {
           "items": {
             "items": {
@@ -655,7 +655,7 @@
         "type": "object"
       },
       "CompareGroup": {
-        "description": "One group in the compare view: its species count, per-resource coverage,\nand live quality stats \u2014 enough to line several groups up side by side.",
+        "description": "One group in the compare view: its species count, per-resource coverage,\nand quality stats \u2014 enough to line several groups up side by side.",
         "properties": {
           "n_rows": {
             "title": "N Rows",
@@ -1187,7 +1187,7 @@
         "type": "object"
       },
       "QualityStatValue": {
-        "description": "A quality stat computed live over a taxon's subtree records (median or\nmax per QUALITY_STATS). ``value`` is ``null`` when the subtree has no records\ncarrying that field.",
+        "description": "A quality stat over a taxon's subtree records (median or max per\nQUALITY_STATS), computed at build time. ``value`` is ``null`` when the subtree has no records\ncarrying that field.",
         "properties": {
           "key": {
             "title": "Key",

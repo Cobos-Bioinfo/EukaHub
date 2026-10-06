@@ -18,6 +18,7 @@ from eukahub_core.metrics import (
     COVERAGE_KEYS,
     METRIC_KEYS,
     METRICS,
+    QUALITY_KEYS,
     QUALITY_STATS,
     TOTAL_KEYS,
     CladeMetadata,
@@ -202,7 +203,7 @@ def fetch_compare(
 
     Each entry is ``(taxid, name, rank, metadata, quality)`` where ``metadata`` is
     the clade's rollup (species count + per-resource coverage/total) and
-    ``quality`` merges the live assembly + annotation distribution stats (median
+    ``quality`` merges the assembly + annotation distribution stats (median
     genome size / contig N50, best BUSCO, median genes) over the subtree — the
     same stats the drill-down endpoints expose, computed once per group. An
     unknown taxid is skipped (a stale shared link degrades gracefully rather than
@@ -210,12 +211,12 @@ def fetch_compare(
     groups: list[tuple[int, str, str, CladeMetadata, dict[str, float | None]]] = []
     for taxid in taxids:
         try:
-            name, rank, path = fetch_root(conn, taxid)
+            name, rank, _path = fetch_root(conn, taxid)
         except TaxonNotFound:
             continue
         _n, _r, meta, _inf = fetch_summary(conn, taxid)
-        _ass_total, ass_stats = _fetch_quality_stats(conn, "assembly", path)
-        _ann_total, ann_stats = _fetch_quality_stats(conn, "annotation", path)
+        _ass_total, ass_stats = _fetch_quality_stats(conn, "assembly", taxid)
+        _ann_total, ann_stats = _fetch_quality_stats(conn, "annotation", taxid)
         groups.append((taxid, name, rank, meta, {**ass_stats, **ann_stats}))
     return groups
 
@@ -525,11 +526,9 @@ def search_taxa(
 
 
 # --- Per-record drill-down (assemblies / annotations) -----------------------
-# The per-record tables are small (~68k / ~18k rows) and independently sourced,
-# so "everything under clade X" is a cheap subtree join to `taxon`, and the
-# distribution stats (median N50 / genome size / gene count, best BUSCO) are
-# computed live per request rather than precomputed — a subtree median is not
-# the sum of child medians, so it can't ride the additive rollup (data-model.md).
+# "Everything under clade X" is a subtree join to `taxon`. A clade's distribution
+# stats (median N50 / genome size / gene count, best BUSCO) are computed at build
+# time from its records (`clade_stats`); only a set of clades needs its records here.
 
 # SELECT lists alias every column to the response-model field name, so the
 # endpoint can build the Pydantic model straight from a dict_row.
@@ -564,22 +563,28 @@ def _quality_stats_agg(source: str) -> str:
     return ", ".join(parts)
 
 
+# The clade_features total that counts each per-record table's rows in a subtree.
+_RECORD_TOTAL: dict[str, str] = {"assembly": "s_ass", "annotation": "s_ann"}
+
+
 def _fetch_quality_stats(
-    conn: psycopg.Connection, source: str, root_path: str
+    conn: psycopg.Connection, source: str, taxid: int
 ) -> tuple[int, dict[str, float | None]]:
-    """Return ``(record_count, {stat_key: value})`` for a source over the subtree
-    rooted at ``root_path``. ``source`` is a per-record table name."""
-    source = _identifier(source, _RECORD_SORTS)
+    """``(record_count, {stat_key: value})`` of one source's records on or below
+    ``taxid``, both computed at build time (``clade_features``, ``clade_stats``).
+    ``source`` is a per-record table name."""
+    source = _identifier(source, _RECORD_TOTAL)
     keys = [q.key for q in QUALITY_STATS if q.source == source]
-    agg = _quality_stats_agg(source)
     row = conn.execute(
-        f"SELECT count(*), {agg} FROM {source} r JOIN taxon t USING (taxid) "
-        "WHERE t.path <@ %s::ltree",
-        (root_path,),
+        f"SELECT coalesce(f.{_RECORD_TOTAL[source]}, 0), {', '.join('s.' + k for k in keys)} "
+        "FROM taxon t LEFT JOIN clade_features f USING (taxid) "
+        "LEFT JOIN clade_stats s USING (taxid) WHERE t.taxid = %s",
+        (taxid,),
     ).fetchone()
-    count = row[0]
+    if row is None:
+        return 0, dict.fromkeys(keys)
     values = {k: (float(v) if v is not None else None) for k, v in zip(keys, row[1:])}
-    return count, values
+    return row[0], values
 
 
 def _fetch_records(
@@ -613,10 +618,10 @@ def fetch_assembly_records(
     conn: psycopg.Connection, *, taxid: int, sort: str, limit: int, offset: int
 ) -> tuple[tuple[int, str, str], int, dict[str, float | None], list[dict]]:
     """Assemblies under ``taxid`` (whole subtree) — ``(root_ref, total, stats,
-    records)``. ``stats`` are the live assembly-source distribution stats (median
+    records)``. ``stats`` are the assembly-source distribution stats (median
     genome size / contig N50). Raises ``TaxonNotFound`` for an unknown taxid."""
     root_name, root_rank, root_path = fetch_root(conn, taxid)
-    total, stats = _fetch_quality_stats(conn, "assembly", root_path)
+    total, stats = _fetch_quality_stats(conn, "assembly", taxid)
     records = _fetch_records(
         conn, source="assembly", select=_ASSEMBLY_RECORD_SELECT,
         key_col="assembly_accession",
@@ -629,10 +634,10 @@ def fetch_annotation_records(
     conn: psycopg.Connection, *, taxid: int, sort: str, limit: int, offset: int
 ) -> tuple[tuple[int, str, str], int, dict[str, float | None], list[dict]]:
     """Annotations under ``taxid`` (whole subtree) — ``(root_ref, total, stats,
-    records)``. ``stats`` are the live annotation-source stats (best BUSCO, median
+    records)``. ``stats`` are the annotation-source stats (best BUSCO, median
     protein-coding gene count). Raises ``TaxonNotFound`` for an unknown taxid."""
     root_name, root_rank, root_path = fetch_root(conn, taxid)
-    total, stats = _fetch_quality_stats(conn, "annotation", root_path)
+    total, stats = _fetch_quality_stats(conn, "annotation", taxid)
     records = _fetch_records(
         conn, source="annotation", select=_ANNOTATION_RECORD_SELECT,
         key_col="annotation_id",
@@ -641,42 +646,23 @@ def fetch_annotation_records(
     return (taxid, root_name, root_rank), total, stats, records
 
 
-def _quality_by_bucket(
-    conn: psycopg.Connection, bucket_filter: str, params: Sequence[object]
+def _clade_stats(
+    conn: psycopg.Connection, taxids: Sequence[int]
 ) -> dict[int, dict[str, float | None]]:
-    """QUALITY_STATS per bucket, attributing each record to every ancestor taxon
-    ``b`` that matches ``bucket_filter`` (SQL over ``b``, a trusted literal).
-
-    Ancestors are read from the record taxon's own path labels (they are taxids),
-    so buckets are found by primary key instead of an ltree containment scan over
-    the whole GiST index. Returns ``{bucket_taxid: {stat_key: value|None}}`` for
-    buckets that carry records.
-    """
-    all_keys = [q.key for q in QUALITY_STATS]
-    result: dict[int, dict[str, float | None]] = {}
-    for source in ("assembly", "annotation"):
-        keys = [q.key for q in QUALITY_STATS if q.source == source]
-        if not keys:
-            continue
-        sql = (
-            "WITH mp AS MATERIALIZED ("
-            "  SELECT rec.taxid AS rec_taxid, b.taxid AS bucket_taxid"
-            f"  FROM (SELECT DISTINCT taxid FROM {source}) d"
-            "  JOIN taxon rec ON rec.taxid = d.taxid"
-            "  CROSS JOIN LATERAL"
-            "    unnest(string_to_array(ltree2text(rec.path), '.')::int[]) AS anc(taxid)"
-            "  JOIN taxon b ON b.taxid = anc.taxid"
-            f"  WHERE {bucket_filter}"
-            ") "
-            f"SELECT mp.bucket_taxid, {_quality_stats_agg(source)} "
-            f"FROM {source} r JOIN mp ON mp.rec_taxid = r.taxid "
-            "GROUP BY mp.bucket_taxid"
-        )
-        for row in conn.execute(sql, params).fetchall():
-            entry = result.setdefault(row[0], {k: None for k in all_keys})
-            for k, v in zip(keys, row[1:], strict=True):
-                entry[k] = float(v) if v is not None else None
-    return result
+    """QUALITY_STATS of the given clades, computed at build time over the records on
+    or below each (``clade_stats``), keyed by taxid. Clades without records are
+    absent. Callers bound ``taxids`` to one page."""
+    rows = conn.execute(
+        f"SELECT taxid, {', '.join(QUALITY_KEYS)} FROM clade_stats WHERE taxid = ANY(%s)",
+        (list(taxids),),
+    ).fetchall()
+    return {
+        row[0]: {
+            k: (float(v) if v is not None else None)
+            for k, v in zip(QUALITY_KEYS, row[1:], strict=True)
+        }
+        for row in rows
+    }
 
 
 def fetch_breakdown_quality(
@@ -705,7 +691,7 @@ def fetch_breakdown_quality(
             [*params, limit],
         ).fetchall()
     ]
-    return _quality_by_bucket(conn, "b.taxid = ANY(%s)", (taxids,))
+    return _clade_stats(conn, taxids)
 
 
 def fetch_quality_for_taxids(
@@ -718,7 +704,7 @@ def fetch_quality_for_taxids(
         int(t): {k: None for k in all_keys} for t in taxids
     }
     if taxids:
-        result.update(_quality_by_bucket(conn, "b.taxid = ANY(%s)", (list(taxids),)))
+        result.update(_clade_stats(conn, taxids))
     return result
 
 

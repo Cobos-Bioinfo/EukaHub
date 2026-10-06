@@ -16,10 +16,12 @@ Two jobs:
 from __future__ import annotations
 
 import logging
+import math
 import os
 import sqlite3
 
 import psycopg
+from eukahub_core.metrics import QUALITY_KEYS, QUALITY_STATS
 from eukahub_core.taxonomy import EUKARYOTA_TAXID, INFORMAL_SPECIES_RANK
 
 log = logging.getLogger("eukahub.validate")
@@ -48,8 +50,9 @@ def check_invariants(conn: psycopg.Connection) -> None:
     The checks are deliberately structural (not pinned magic numbers), so they
     hold across rebuilds as the sources drift: non-empty tables, the species
     universe matches the rollup, the totals match the record tables, no informal
-    species is kept without data, coverage never exceeds the species count, and the
-    additive assembly-composition split reconciles with the assembly total.
+    species is kept without data, coverage never exceeds the species count, the
+    additive assembly-composition split reconciles with the assembly total, and the
+    per-clade quality stats cover the clades with records and match them.
     """
     with conn.cursor() as cur:
 
@@ -60,7 +63,7 @@ def check_invariants(conn: psycopg.Connection) -> None:
 
         # 1. Nothing came back empty — the most common "the fetch silently failed"
         #    failure mode. Every core table must have rows.
-        for table in ("taxon", "clade_features", "assembly", "annotation"):
+        for table in ("taxon", "clade_features", "clade_stats", "assembly", "annotation"):
             n = scalar(f"SELECT count(*) FROM {table}")
             if n == 0:
                 raise DataValidationError(f"{table} is empty after build")
@@ -127,7 +130,56 @@ def check_invariants(conn: psycopg.Connection) -> None:
             )
         log.info("invariant: composition split %d <= s_ass %d", level_sum, s_ass)
 
+        # 7. Quality stats exist for exactly the clades with records on or below them.
+        mismatched = scalar(
+            "SELECT count(*) FROM clade_stats s "
+            "FULL JOIN (SELECT taxid FROM clade_features WHERE s_ass + s_ann > 0) f "
+            "USING (taxid) WHERE s.taxid IS NULL OR f.taxid IS NULL"
+        )
+        if mismatched:
+            raise DataValidationError(
+                f"{mismatched} clades have quality stats but no records, or the reverse"
+            )
+
+        # 8. The stored stats of the common clades equal Postgres' own aggregates
+        #    over their records (absent clades are skipped: the CI slice lacks some).
+        for taxid, name in COMMON:
+            cur.execute("SELECT path::text FROM taxon WHERE taxid = %s", (taxid,))
+            row = cur.fetchone()
+            if row is None:
+                continue
+            expected = _stats_from_records(cur, row[0])
+            cur.execute(
+                f"SELECT {', '.join(QUALITY_KEYS)} FROM clade_stats WHERE taxid = %s", (taxid,)
+            )
+            stored = dict(zip(QUALITY_KEYS, cur.fetchone() or [None] * len(QUALITY_KEYS)))
+            for key in QUALITY_KEYS:
+                a, b = stored[key], expected[key]
+                if (a is None) != (b is None) or (a is not None and not math.isclose(a, b)):
+                    raise DataValidationError(f"{name} {key}: stored {a}, its records give {b}")
+        log.info("invariant: clade_stats match their records")
+
     log.info("all invariants passed")
+
+
+def _stats_from_records(cur: psycopg.Cursor, path: str) -> dict[str, float | None]:
+    """QUALITY_STATS over the records on or below ``path``, computed by Postgres."""
+    out: dict[str, float | None] = {}
+    for source in ("assembly", "annotation"):
+        stats = [q for q in QUALITY_STATS if q.source == source]
+        aggregates = ", ".join(
+            f"percentile_cont(0.5) WITHIN GROUP (ORDER BY {q.column})"
+            if q.agg == "median"
+            else f"max({q.column})"
+            for q in stats
+        )
+        cur.execute(
+            f"SELECT {aggregates} FROM {source} r JOIN taxon t USING (taxid) "
+            "WHERE t.path <@ %s::ltree",
+            (path,),
+        )
+        out |= dict(zip((q.key for q in stats), cur.fetchone(), strict=True))
+    return out
 
 
 def _old(sqlite_path: str) -> dict[int, tuple | None]:

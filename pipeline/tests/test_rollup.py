@@ -4,7 +4,12 @@ the per-metric derivations without a database or the real taxdump.
 
 import polars as pl
 from eukahub_core.metrics import COMPOSITION_COLUMNS
-from eukahub_pipeline.rollup import assemble_leaf_features, carrying_taxids, rollup_from_frames
+from eukahub_pipeline.rollup import (
+    assemble_leaf_features,
+    carrying_taxids,
+    rollup_from_frames,
+    stats_from_records,
+)
 
 # Output column order of rollup_from_frames (for the full-row tuple asserts):
 # taxid, n_rows, c_ass, c_ann, c_rna, c_lng, s_ass, s_ann, s_rna, s_lng,
@@ -246,3 +251,64 @@ def test_assemble_leaf_features() -> None:
     assert (m["ass"], m["ann"], m["short"], m["long"]) == (1, 0, 0, 0)
     assert m["n_ass_contig"] == 1
     assert m["n_reference"] == 0
+
+
+def _stats_taxon() -> pl.DataFrame:
+    # 1 > 2759 > genus 100 > species 9606 (subspecies 9607 below it) and 10090;
+    # species 7227 has no records; 2 sits outside Eukaryota.
+    return pl.DataFrame(
+        {
+            "taxid": [1, 2, 2759, 100, 9606, 9607, 10090, 7227],
+            "path": [
+                "1", "1.2", "1.2759", "1.2759.100", "1.2759.100.9606",
+                "1.2759.100.9606.9607", "1.2759.100.10090", "1.2759.7227",
+            ],
+        }
+    )
+
+
+def test_stats_from_records() -> None:
+    assemblies = pl.DataFrame(
+        {
+            "taxid": [9606, 9606, 9607, 10090, 2],
+            "total_sequence_length": [10, 30, 40, 20, 999],
+            "contig_n50": [5, None, None, None, 999],
+        }
+    )
+    annotations = pl.DataFrame(
+        {
+            "taxid": [9606, 9606],
+            "protein_coding_count": [100, None],
+            "busco_complete": [90.0, 95.5],
+        }
+    )
+    out = stats_from_records(
+        _stats_taxon(), {"assembly": assemblies, "annotation": annotations}, root_taxid=2759
+    )
+    assert out.columns == ["taxid", "busco", "genes", "genome_size", "contig_n50"]
+    rows = {r[0]: r[1:] for r in out.iter_rows()}
+
+    # The subspecies' record counts for its species; nulls are ignored.
+    assert rows[9606] == (95.5, 100.0, 30.0, 5.0)
+    assert rows[9607] == (None, None, 40.0, None)
+    # A clade without annotations keeps its assembly stats, the rest null.
+    assert rows[10090] == (None, None, 20.0, None)
+    # An even count takes the midpoint, like percentile_cont(0.5).
+    assert rows[100] == (95.5, 100.0, 25.0, 5.0)
+    assert rows[2759] == rows[1] == rows[100]
+    # No row without records, and nothing outside the root.
+    assert 7227 not in rows and 2 not in rows
+
+
+def test_stats_from_records_with_annotations_only() -> None:
+    assemblies = pl.DataFrame(
+        {"taxid": [], "total_sequence_length": [], "contig_n50": []},
+        schema={"taxid": pl.Int64, "total_sequence_length": pl.Int64, "contig_n50": pl.Int64},
+    )
+    annotations = pl.DataFrame(
+        {"taxid": [10090], "protein_coding_count": [7], "busco_complete": [80.0]}
+    )
+    out = stats_from_records(_stats_taxon(), {"assembly": assemblies, "annotation": annotations})
+    rows = {r[0]: r[1:] for r in out.iter_rows()}
+    assert set(rows) == {1, 2759, 100, 10090}
+    assert rows[10090] == (80.0, 7.0, None, None)
