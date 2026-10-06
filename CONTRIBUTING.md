@@ -62,6 +62,16 @@ DATABASE_URL=postgresql://eukahub:eukahub@localhost:5432/eukahub_ci uv run pytes
 `scripts/generate_ci_seed.py` regenerates the slice from a full database; only
 needed when the schema or the taxa the tests rely on change.
 
+The memory tests run every API query on a synthetic dataset about twice the real
+taxonomy and 30 to 50 times its records, and fail if the API process passes 256 MB.
+They are left out of a plain `uv run pytest`; CI runs them. The first run builds the
+dataset into a database named `eukahub_huge` (about 1.5 minutes, 2 GB) and later runs
+reuse it:
+
+```bash
+uv run pytest -m ram -rP api/tests/test_memory.py
+```
+
 ## Changing the API
 
 The web app's TypeScript types are generated from the API's OpenAPI description.

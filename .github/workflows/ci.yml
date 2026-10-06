@@ -52,6 +52,10 @@ jobs:
         # DB alongside the pipeline/core unit tests. Regenerate the seed with
         # scripts/generate_ci_seed.py when the schema or needed taxids change.
         run: uv run pytest -q
+      - name: API memory under every query (large synthetic dataset)
+        # Builds a 2 GB synthetic dataset (about 2 minutes) and fails if the API
+        # process passes 256 MB answering any query. See api/tests/test_memory.py.
+        run: uv run pytest -q -m ram -rP api/tests/test_memory.py
       - name: Dependency audit (pip-audit)
         # Informational: dependencies are pinned in uv.lock; a fresh advisory
         # should surface here without blocking every merge.
