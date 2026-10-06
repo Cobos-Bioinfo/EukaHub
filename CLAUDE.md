@@ -57,6 +57,18 @@ changes. Put personal or machine-specific notes in a gitignored `CLAUDE.local.md
 - Tests pass on both the full dataset and the CI slice (`api/tests/seed.sql`): assert
   relationships, never fixed counts.
 
+## Memory and scale
+- The project is in early development and there is no production data to protect, so every
+  change must be fast, scalable and efficient as written, not only fine at today's size.
+- Production has plenty of disk and very little RAM: prefer disk over RAM (stream, spill,
+  precompute into tables), and keep every process's memory bounded to a few hundred MB
+  whatever the data size.
+- For large tables, read rollups computed at build time rather than aggregating per request.
+- No unbounded output: cap every list and every response (at most 100 MB, with a clear
+  error), and stream large ones.
+- Every new query or endpoint gets a case in `api/tests/test_memory.py` (`uv run pytest -m
+  ram`, fails over 256 MB); check memory use whenever a query changes.
+
 ## Performance rules
 - API connections have a 15 s statement timeout, a 4-connection pool and
   `plan_cache_mode=force_custom_plan`: generic plans lose the literal root path and scan the
