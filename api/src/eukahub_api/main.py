@@ -16,7 +16,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from eukahub_api import errors
 from eukahub_api.db import lifespan as db_lifespan
 from eukahub_api.logging_config import configure_logging
-from eukahub_api.middleware import add_response_headers, log_requests
+from eukahub_api.middleware import HeadAsGet, add_response_headers, log_requests
 from eukahub_api.router import router
 from eukahub_api.settings import get_settings
 
@@ -68,8 +68,10 @@ app.add_middleware(
     allow_headers=["*"],
     allow_credentials=False,
 )
-# Added in this order, so log_requests is the outermost layer and times everything.
+# Added in this order, so HeadAsGet is the outermost layer: a HEAD gets the same
+# headers as a GET, and log_requests times everything else.
 app.middleware("http")(add_response_headers)
 app.middleware("http")(log_requests)
+app.add_middleware(HeadAsGet)
 
 app.include_router(router)

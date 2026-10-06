@@ -7,6 +7,7 @@ import os
 import time
 
 from fastapi import Request, Response
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 log = logging.getLogger("eukahub.api")
 
@@ -76,6 +77,27 @@ async def add_response_headers(request: Request, call_next):
     if _if_none_match(request.headers.get("if-none-match"), etag):
         return Response(status_code=304, headers=headers)
     return Response(content=body, status_code=response.status_code, headers=headers)
+
+
+class HeadAsGet:
+    """Answers HEAD as GET without the body: every general-purpose HTTP server
+    supports HEAD (RFC 9110), while FastAPI routes only the methods declared."""
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http" or scope["method"] != "HEAD":
+            await self.app(scope, receive, send)
+            return
+
+        async def send_headers_only(message: Message) -> None:
+            if message["type"] != "http.response.body":
+                await send(message)
+            elif not message.get("more_body", False):
+                await send({"type": "http.response.body", "body": b""})
+
+        await self.app({**scope, "method": "GET"}, receive, send_headers_only)
 
 
 async def log_requests(request: Request, call_next):

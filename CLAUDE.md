@@ -21,7 +21,7 @@ changes. Put personal or machine-specific notes in a gitignored `CLAUDE.local.md
 |---|---|
 | `core/src/eukahub_core/metrics.py` | `METRICS`, `QUALITY_STATS`, `CladeMetadata`, shared by pipeline and API and exported to the web app via OpenAPI. The schema SQL, `rollup._subtree_totals` and `validate._COLS` are kept in sync by hand. |
 | `pipeline/src/eukahub_pipeline/build.py` | taxdump → Eukaryota trim → fetch (parquet cache in `data/sources/`) → `drop_duplicate_assemblies` → `prune_placeholders` → rollup (Polars) → load → `check_invariants` → `dataset_meta` last |
-| `api/src/eukahub_api/` | `main.py` the app (CORS, middleware, error handlers); `router.py` maps `resources/` (one module per resource, routes only); `params.py` query parameters shared by resources; `errors.py` error responses; `middleware.py` headers, ETags, request log; `queries.py` all SQL (`_quality_by_bucket` is the per-bucket stats helper); `pagination.py` keyset cursors for every list; `totals.py` list totals cached per dataset build; `schemas.py`; `db.py` connection pool; `settings.py` deployment settings (env + `infra/config/groups.json`, served by `/config`); `clade_sets.py` sets of clades (include minus exclude) and the custom groups built from them |
+| `api/src/eukahub_api/` | `main.py` the app (CORS, middleware, error handlers); `router.py` maps `resources/` (one module per resource, routes only); `params.py` query parameters shared by resources; `errors.py` error responses; `middleware.py` headers, ETags, HEAD, request log; `queries.py` all SQL (`_quality_by_bucket` is the per-bucket stats helper); `pagination.py` keyset cursors for every list; `totals.py` list totals cached per dataset build; `schemas.py`; `db.py` connection pool; `settings.py` deployment settings (env + `infra/config/groups.json`, served by `/config`); `clade_sets.py` sets of clades (include minus exclude) and the custom groups built from them |
 | `web/src/` | `api/queries.ts` (all fetches), generated `api/openapi.json` + `schema.ts`; `hooks/useAsync` (results keyed by deps, `reload()`); `hooks/useTree` (visible-node cap); colours are CSS variables in `index.css` |
 | `infra/` | `docker-compose.yml` (dev DB), `docker-compose.prod.yml` (db, api, web, refresher), `postgres/init/001_schema.sql` (schema of record), `lowmem-test/` (1 GB / one-core harness) |
 | `scripts/` | `restore_snapshot.py` (stage, verify, rename swap, `--rollback`), `auto_refresh.py`, `generate_ci_seed.py` + `load_ci_db.py` (CI dataset) |
@@ -73,6 +73,8 @@ changes. Put personal or machine-specific notes in a gitignored `CLAUDE.local.md
 - API connections have a 15 s statement timeout, a 4-connection pool and
   `plan_cache_mode=force_custom_plan`: generic plans lose the literal root path and scan the
   whole 400 MB path index.
+- `Conn` goes back to the pool when the endpoint returns, before the response is sent: a
+  streamed response must read from its own pool connection (see `iter_report_tsv`).
 - Subtree filters take the root's path as a literal parameter (`path <@ %s::ltree`), never a
   subquery. Don't join records to buckets by ltree containment; resolve ancestors from the
   path labels (see `_quality_by_bucket`).
