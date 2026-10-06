@@ -1,4 +1,4 @@
-"""Tests for GET /clade/{taxid}/export.tsv — the full-breakdown TSV download."""
+"""Tests for GET /taxons/report: every taxon a /taxons query matches, as TSV."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ import dataclasses
 import math
 
 from eukahub_api import main, queries
-from eukahub_api.queries import EXPORT_HEADER, FilterLogic
+from eukahub_api.queries import EXPORT_HEADER, TaxonFilter
 from eukahub_api.settings import get_settings
 
 
@@ -17,8 +17,8 @@ def _parse(text: str) -> tuple[list[str], list[list[str]]]:
     return header, rows
 
 
-def test_export_headers_and_schema(client):
-    resp = client.get("/clade/2759/export.tsv?rank=phylum")
+def test_report_headers_and_schema(client):
+    resp = client.get("/taxons/report?within=2759&rank=phylum")
     assert resp.status_code == 200
     assert resp.headers["content-type"].startswith("text/tab-separated-values")
     assert resp.headers["content-disposition"] == (
@@ -30,56 +30,53 @@ def test_export_headers_and_schema(client):
     assert rows, "Eukaryota should have phyla"
     assert all(len(r) == len(header) for r in rows)
     # A well-known phylum is present, and taxon_id/total_species are integers.
-    names = {r[1] for r in rows}
-    assert "Chordata" in names
+    assert "Chordata" in {r[1] for r in rows}
     assert all(r[0].isdigit() and r[2].isdigit() for r in rows)
 
 
-def test_export_full_matches_breakdown_total(client):
-    # Default export = exclude_empty False → every phylum-rank taxon.
-    _, rows = _parse(client.get("/clade/2759/export.tsv?rank=phylum").text)
-    listed = client.get("/taxons?within=2759&rank=phylum&limit=1").json()
-    assert len(rows) == listed["total"]
+def test_report_matches_the_list(client):
+    """The report holds every taxon /taxons pages through, in the same order."""
+    for query in (
+        "within=2759&rank=phylum",
+        "within=2759&rank=phylum&exclude_empty=true",
+        "within=40674&rank=order&sort_by=gap_ass&sort_order=asc",
+        "parent=2759&sort_by=name",
+    ):
+        _, rows = _parse(client.get(f"/taxons/report?{query}").text)
+        listed = client.get(f"/taxons?{query}&limit=1000").json()
+        assert [int(r[0]) for r in rows] == [it["taxid"] for it in listed["results"]], query
+        assert len(rows) == listed["total"]
 
 
-def test_export_exclude_empty_matches_filtered_total(client):
-    _, rows = _parse(
-        client.get("/clade/2759/export.tsv?rank=phylum&exclude_empty=true").text
-    )
-    listed = client.get("/taxons?within=2759&rank=phylum&exclude_empty=true&limit=1").json()
-    assert len(rows) == listed["total"]
+def test_report_without_within_is_named_after_the_taxa(client):
+    resp = client.get("/taxons/report?taxids=40674,9606")
+    assert resp.headers["content-disposition"] == 'attachment; filename="taxa_all_data.tsv"'
+    assert len(_parse(resp.text)[1]) == 2
 
 
-def test_export_bad_root_404(client):
-    assert client.get("/clade/999999999/export.tsv?rank=phylum").status_code == 404
+def test_report_bad_filters(client):
+    assert client.get("/taxons/report?within=999999999&rank=phylum").status_code == 404
+    assert client.get("/taxons/report?within=2759&rank=kingdom").status_code == 422
 
 
-def test_export_invalid_rank_422(client):
-    assert client.get("/clade/2759/export.tsv?rank=kingdom").status_code == 422
-
-
-def test_export_streams_one_chunk_per_batch(client, monkeypatch):
+def test_report_streams_one_chunk_per_batch(client, monkeypatch):
     """The batch size changes how rows are chunked, never which rows are sent."""
-    url = "/clade/40674/export.tsv?rank=species"  # Mammalia: in the full DB and the CI slice
+    url = "/taxons/report?within=40674&rank=species"  # Mammalia: in the full DB and the CI slice
     whole = client.get(url).text.splitlines()
 
     small_batches = dataclasses.replace(get_settings(), export_batch_rows=3)
     monkeypatch.setattr(main, "get_settings", lambda: small_batches)
     small = client.get(url).text.splitlines()
-    assert small[0] == whole[0]
-    assert sorted(small[1:]) == sorted(whole[1:])
+    assert small == whole
 
     with main.app.state.pool.connection() as conn:
         _name, _rank, root_path = queries.fetch_root(conn, 40674)
     chunks = list(
-        queries.iter_export_tsv(
+        queries.iter_report_tsv(
             main.app.state.pool,
-            root_path=root_path,
-            rank="species",
-            sort="n_rows",
-            filter_keys=[],
-            logic=FilterLogic.AND,
-            exclude_empty=False,
+            TaxonFilter(within_path=root_path, rank="species"),
+            sort=None,
+            descending=True,
             batch_rows=3,
         )
     )

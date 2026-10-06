@@ -2,7 +2,7 @@
   "components": {
     "schemas": {
       "Aggregate": {
-        "description": "Species count, per-resource coverage and quality stats for a set of clades\n(served by ``/aggregate``): a taxon is in the set when the nearest listed\nclade above it (or the taxon itself) is in ``include``.",
+        "description": "Species count, per-resource coverage and quality stats for a set of clades\n(served by ``/taxons/aggregate``): a taxon is in the set when the nearest listed\nclade above it (or the taxon itself) is in ``include``.",
         "properties": {
           "composition": {
             "$ref": "#/components/schemas/AssemblyComposition"
@@ -607,7 +607,7 @@
         "type": "object"
       },
       "CustomGroupItem": {
-        "description": "One custom group from the groups file. ``include`` and ``exclude`` are the\nclades it is made of, worked out from the parent's other groups for a\n``rest`` group, so they can be passed to ``/aggregate`` as they are. A rest\ngroup with nothing left lists no clades.",
+        "description": "One custom group from the groups file. ``include`` and ``exclude`` are the\nclades it is made of, worked out from the parent's other groups for a\n``rest`` group, so they can be passed to ``/taxons/aggregate`` as they are. A rest\ngroup with nothing left lists no clades.",
         "properties": {
           "exclude": {
             "items": {
@@ -938,26 +938,6 @@
         ],
         "title": "ResourceSummary",
         "type": "object"
-      },
-      "SortColumn": {
-        "enum": [
-          "n_rows",
-          "c_ass",
-          "c_ann",
-          "c_rna",
-          "c_lng",
-          "s_ass",
-          "s_ann",
-          "s_rna",
-          "s_lng",
-          "n_ass_complete",
-          "n_ass_chromosome",
-          "n_ass_scaffold",
-          "n_ass_contig",
-          "n_reference"
-        ],
-        "title": "SortColumn",
-        "type": "string"
       },
       "SortOrder": {
         "enum": [
@@ -1299,60 +1279,6 @@
   },
   "openapi": "3.1.0",
   "paths": {
-    "/aggregate": {
-      "get": {
-        "description": "Species count, per-resource coverage and quality stats for a set of clades:\nthe clades in ``include`` minus the clades inside them in ``exclude`` (e.g.\nfish as Vertebrata minus Tetrapoda). A clade inside an excluded one can be\nincluded again. Counts are sums and differences of the clades' rollups;\nquality stats are computed from the records in the set.",
-        "operationId": "aggregate_aggregate_get",
-        "parameters": [
-          {
-            "description": "Comma-separated taxids of the clades to add up (1-20, e.g. 7742).",
-            "in": "query",
-            "name": "include",
-            "required": true,
-            "schema": {
-              "description": "Comma-separated taxids of the clades to add up (1-20, e.g. 7742).",
-              "title": "Include",
-              "type": "string"
-            }
-          },
-          {
-            "description": "Comma-separated taxids of clades inside them to leave out (e.g. 32523).",
-            "in": "query",
-            "name": "exclude",
-            "required": false,
-            "schema": {
-              "default": "",
-              "description": "Comma-separated taxids of clades inside them to leave out (e.g. 32523).",
-              "title": "Exclude",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Aggregate"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Aggregate"
-      }
-    },
     "/annotations": {
       "get": {
         "description": "Gene annotations, best BUSCO first by default; records missing the sort field\ncome last. The quality stats of a taxon's annotations are in ``/taxons/{taxid}``.",
@@ -1549,104 +1475,9 @@
         "summary": "Assemblies"
       }
     },
-    "/clade/{taxid}/export.tsv": {
-      "get": {
-        "description": "The full breakdown at `rank` as a streamed TSV download.\n\nSame subtree query as `breakdown` but unlimited and streamed via a\nserver-side cursor. Defaults to the complete breakdown (empties included);\npass filter/exclude_empty/sort to export exactly what the table shows.",
-        "operationId": "clade_export_clade__taxid__export_tsv_get",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "taxid",
-            "required": true,
-            "schema": {
-              "title": "Taxid",
-              "type": "integer"
-            }
-          },
-          {
-            "description": "Rank to break the root down by.",
-            "in": "query",
-            "name": "rank",
-            "required": true,
-            "schema": {
-              "$ref": "#/components/schemas/TargetRank",
-              "description": "Rank to break the root down by."
-            }
-          },
-          {
-            "in": "query",
-            "name": "sort",
-            "required": false,
-            "schema": {
-              "$ref": "#/components/schemas/SortColumn",
-              "default": "n_rows"
-            }
-          },
-          {
-            "in": "query",
-            "name": "filter",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "items": {
-                    "$ref": "#/components/schemas/MetricFilter"
-                  },
-                  "type": "array"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Filter"
-            }
-          },
-          {
-            "in": "query",
-            "name": "logic",
-            "required": false,
-            "schema": {
-              "$ref": "#/components/schemas/FilterLogic",
-              "default": "AND"
-            }
-          },
-          {
-            "in": "query",
-            "name": "exclude_empty",
-            "required": false,
-            "schema": {
-              "default": false,
-              "title": "Exclude Empty",
-              "type": "boolean"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Clade Export"
-      }
-    },
     "/config": {
       "get": {
-        "description": "What a client reads once before showing any data: the dataset being served\n(``built_at`` is ``null`` before the first build has stamped the database), the\npresentation of each measure and quality stat, and the deployment's links,\nWikipedia summary endpoint, curated groups and custom groups. Pass a custom\ngroup's clades to ``/aggregate`` for its data.",
+        "description": "What a client reads once before showing any data: the dataset being served\n(``built_at`` is ``null`` before the first build has stamped the database), the\npresentation of each measure and quality stat, and the deployment's links,\nWikipedia summary endpoint, curated groups and custom groups. Pass a custom\ngroup's clades to ``/taxons/aggregate`` for its data.",
         "operationId": "config_config_get",
         "responses": {
           "200": {
@@ -1956,6 +1787,264 @@
           }
         },
         "summary": "Taxons"
+      }
+    },
+    "/taxons/aggregate": {
+      "get": {
+        "description": "Species count, per-resource coverage and quality stats for a set of clades:\nthe clades in ``include`` minus the clades inside them in ``exclude`` (e.g.\nfish as Vertebrata minus Tetrapoda). A clade inside an excluded one can be\nincluded again. Counts are sums and differences of the clades' rollups;\nquality stats are computed from the records in the set.",
+        "operationId": "aggregate_taxons_aggregate_get",
+        "parameters": [
+          {
+            "description": "Comma-separated taxids of the clades to add up (1-20, e.g. 7742).",
+            "in": "query",
+            "name": "include",
+            "required": true,
+            "schema": {
+              "description": "Comma-separated taxids of the clades to add up (1-20, e.g. 7742).",
+              "title": "Include",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Comma-separated taxids of clades inside them to leave out (e.g. 32523).",
+            "in": "query",
+            "name": "exclude",
+            "required": false,
+            "schema": {
+              "default": "",
+              "description": "Comma-separated taxids of clades inside them to leave out (e.g. 32523).",
+              "title": "Exclude",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Aggregate"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Aggregate"
+      }
+    },
+    "/taxons/report": {
+      "get": {
+        "description": "Every taxon ``/taxons`` lists for the same filters and sort, as a streamed\nTSV download: taxid, name, species count, then the species with each resource\nand the total of each resource.",
+        "operationId": "taxons_report_taxons_report_get",
+        "parameters": [
+          {
+            "description": "A count column, `gap_<resource>` (species without that resource) or `name`. Without it: relevance for `q`, else species count (`n_rows`).",
+            "in": "query",
+            "name": "sort_by",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/TaxonSort"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "A count column, `gap_<resource>` (species without that resource) or `name`. Without it: relevance for `q`, else species count (`n_rows`).",
+              "title": "Sort By"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sort_order",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/SortOrder",
+              "default": "desc"
+            }
+          },
+          {
+            "description": "Only taxa whose name contains this text, ignoring case (or is spelled like it, with `fuzzy`). The root and 'cellular organisms' are left out.",
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 100,
+                  "minLength": 3,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only taxa whose name contains this text, ignoring case (or is spelled like it, with `fuzzy`). The root and 'cellular organisms' are left out.",
+              "title": "Q"
+            }
+          },
+          {
+            "description": "Match `q` by spelling instead, for a misspelt name.",
+            "in": "query",
+            "name": "fuzzy",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "Match `q` by spelling instead, for a misspelt name.",
+              "title": "Fuzzy",
+              "type": "boolean"
+            }
+          },
+          {
+            "description": "Only the direct children of this taxon.",
+            "in": "query",
+            "name": "parent",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only the direct children of this taxon.",
+              "title": "Parent"
+            }
+          },
+          {
+            "description": "Only rows on this taxon or below it (e.g. 40674 for mammals).",
+            "in": "query",
+            "name": "within",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only rows on this taxon or below it (e.g. 40674 for mammals).",
+              "title": "Within"
+            }
+          },
+          {
+            "description": "Only taxa of this rank.",
+            "in": "query",
+            "name": "rank",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/TargetRank"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only taxa of this rank.",
+              "title": "Rank"
+            }
+          },
+          {
+            "description": "Only these taxa: comma-separated taxids, at most 100.",
+            "in": "query",
+            "name": "taxids",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only these taxa: comma-separated taxids, at most 100.",
+              "title": "Taxids"
+            }
+          },
+          {
+            "description": "Only taxa with data for these resources.",
+            "in": "query",
+            "name": "filter",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "$ref": "#/components/schemas/MetricFilter"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only taxa with data for these resources.",
+              "title": "Filter"
+            }
+          },
+          {
+            "description": "Whether `filter` needs every resource (AND) or any (OR).",
+            "in": "query",
+            "name": "logic",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/FilterLogic",
+              "default": "AND",
+              "description": "Whether `filter` needs every resource (AND) or any (OR)."
+            }
+          },
+          {
+            "description": "Only taxa with data for at least one resource.",
+            "in": "query",
+            "name": "exclude_empty",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "Only taxa with data for at least one resource.",
+              "title": "Exclude Empty",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Taxons Report"
       }
     },
     "/taxons/{taxid}": {

@@ -27,7 +27,6 @@ export type AnnotationRecord = components["schemas"]["AnnotationRecord"];
 
 // Breakdown (Q2) query-param enums — the closed sets the API validates against.
 export type TargetRank = components["schemas"]["TargetRank"];
-export type SortColumn = components["schemas"]["SortColumn"];
 export type MetricFilter = components["schemas"]["MetricFilter"];
 export type TaxonSort = components["schemas"]["TaxonSort"];
 export type FilterLogic = components["schemas"]["FilterLogic"];

@@ -10,7 +10,8 @@ def _search(client, q: str, **params) -> list[dict]:
 
 
 def test_search_finds_species(client):
-    assert any(h["taxid"] == 9606 and h["rank"] == "species" for h in _search(client, "Homo sapiens"))
+    hits = _search(client, "Homo sapiens")
+    assert any(h["taxid"] == 9606 and h["rank"] == "species" for h in hits)
 
 
 def test_search_is_case_insensitive_and_substring(client):

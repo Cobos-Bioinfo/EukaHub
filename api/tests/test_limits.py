@@ -57,12 +57,12 @@ def test_cancelled_query_is_a_clean_504(client, monkeypatch):
 
 
 def test_export_timeout_fails_before_the_download_starts(client, monkeypatch):
-    def _cancelled_export(pool, **kwargs):
+    def _cancelled_export(pool, f, **kwargs):
         yield "header\n"
         raise QueryCanceled("canceling statement due to statement timeout")
 
-    monkeypatch.setattr(main, "iter_export_tsv", _cancelled_export)
-    resp = client.get("/clade/2759/export.tsv?rank=species")
+    monkeypatch.setattr(main, "iter_report_tsv", _cancelled_export)
+    resp = client.get("/taxons/report?within=2759&rank=species")
     assert resp.status_code == 504
     assert resp.headers["content-type"].startswith("application/json")
 

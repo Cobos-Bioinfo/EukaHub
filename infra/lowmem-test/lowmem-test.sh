@@ -38,18 +38,18 @@ hit "quality Insecta order (map)"         "$API/taxons?within=50557&rank=order&l
 hit "children Eukaryota (tree)"           "$API/taxons?parent=2759&limit=100"
 hit "gaps order (gaps page)"              "$API/taxons?within=2759&rank=order&sort_by=gap_ass&limit=25&stats=true"
 hit "compare 6 groups"                    "$API/taxons?taxids=40674,8782,50557,4751,33090,7898&limit=6&stats=true"
-hit "export Eukaryota phylum (download)"  "$API/clade/2759/export.tsv?rank=phylum"
+hit "report Eukaryota phylum (download)"  "$API/taxons/report?within=2759&rank=phylum"
 
 echo "== Heaviest requests (expect 200 within seconds; a clean 504 after ~15s is acceptable, a hang or a crash is not)"
 hit "quality Eukaryota genus"             "$API/taxons?within=2759&rank=genus&limit=1000&stats=true"
 hit "every eukaryote species, a page"     "$API/taxons?within=2759&rank=species&limit=1000"
-hit "export every eukaryote species"      "$API/clade/2759/export.tsv?rank=species"
+hit "report every eukaryote species"      "$API/taxons/report?within=2759&rank=species"
 
 echo "== Six different requests at once (expect all 200, slower than alone)"
 hit "quality Metazoa genus"   "$API/taxons?within=33208&rank=genus&limit=1000&stats=true" &
 hit "quality Fungi genus"     "$API/taxons?within=4751&rank=genus&limit=1000&stats=true" &
 hit "gaps family"             "$API/taxons?within=2759&rank=family&sort_by=gap_ass&limit=200&stats=true" &
-hit "export Insecta species"  "$API/clade/50557/export.tsv?rank=species" &
+hit "report Insecta species"  "$API/taxons/report?within=50557&rank=species" &
 hit "summary Mammalia"        "$API/taxons/40674" &
 hit "children Metazoa"        "$API/taxons?parent=33208&limit=100" &
 wait

@@ -15,7 +15,6 @@ import type {
   MetricFilter,
   QualityStatConfig,
   QualityStatValue,
-  SortColumn,
   SortOrder,
   TargetRank,
   Taxon,
@@ -328,7 +327,7 @@ export const getAnnotations = async (
 // defaults when omitted.
 export interface BreakdownParams {
   rank: TargetRank;
-  sort?: SortColumn;
+  sort?: TaxonSort;
   filter?: MetricFilter[];
   logic?: FilterLogic;
   exclude_empty?: boolean;
@@ -374,16 +373,14 @@ export async function getBreakdownQuality(
     .map((t) => ({ taxid: t.taxid, stats: t.stats ?? [] }));
 }
 
-// Direct URL for the streamed full-breakdown TSV (a browser download, not a
-// fetch). Mirrors the export endpoint's params; `filter` repeats per value,
-// which is how FastAPI parses a list query param. Empties are included by
-// default server-side, so `exclude_empty` is only sent when the caller sets it.
+// Direct URL for the whole breakdown as TSV (a browser download, not a fetch):
+// every taxon the list would page through. `filter` repeats per value, which is
+// how FastAPI parses a list query param.
 export function exportTsvUrl(taxid: number, params: BreakdownParams): string {
-  const q = new URLSearchParams();
-  q.set("rank", params.rank);
-  if (params.sort) q.set("sort", params.sort);
+  const q = new URLSearchParams({ within: String(taxid), rank: params.rank });
+  if (params.sort) q.set("sort_by", params.sort);
   for (const f of params.filter ?? []) q.append("filter", f);
   if (params.logic) q.set("logic", params.logic);
   if (params.exclude_empty !== undefined) q.set("exclude_empty", String(params.exclude_empty));
-  return `/api/clade/${taxid}/export.tsv?${q.toString()}`;
+  return `/api/taxons/report?${q.toString()}`;
 }

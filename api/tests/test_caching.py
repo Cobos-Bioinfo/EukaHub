@@ -70,7 +70,7 @@ def test_etag_matches_across_identical_requests(client):
 
 def test_streamed_export_has_no_etag(client):
     """The streamed TSV export is not buffered/fingerprinted (only JSON is)."""
-    r = client.get("/clade/2759/export.tsv", params={"rank": "phylum"})
+    r = client.get("/taxons/report", params={"within": 2759, "rank": "phylum"})
     assert r.status_code == 200
     assert r.headers.get("content-type", "").startswith("text/tab-separated-values")
     assert "etag" not in r.headers

@@ -6,9 +6,9 @@ Resources:
   chrome, deployment links and groups.
 - ``GET /taxons``                      — taxa by name, parent, rank under a taxon or taxid,
   with their counts; sorted, filtered and paged.
+- ``GET /taxons/report``               — every taxon the same list would page through, as TSV.
+- ``GET /taxons/aggregate``            — data for a set of clades (include minus exclude).
 - ``GET /taxons/{taxid}``              — one taxon: lineage, counts and quality stats.
-- ``GET /aggregate``                   — data for a set of clades (include minus exclude).
-- ``GET /clade/{taxid}/export.tsv``    — the full breakdown as a TSV download.
 - ``GET /assemblies``                  — genome assemblies, optionally under a taxon.
 - ``GET /annotations``                 — gene annotations, optionally under a taxon.
 
@@ -45,7 +45,6 @@ from eukahub_api.queries import (
     AssemblySort,
     FilterLogic,
     MetricFilter,
-    SortColumn,
     SortOrder,
     TargetRank,
     TaxonFilter,
@@ -58,7 +57,7 @@ from eukahub_api.queries import (
     fetch_set_quality,
     fetch_set_taxa,
     fetch_taxon,
-    iter_export_tsv,
+    iter_report_tsv,
     list_records,
     list_taxa,
 )
@@ -272,7 +271,7 @@ def config(conn: Conn) -> AppConfig:
     (``built_at`` is ``null`` before the first build has stamped the database), the
     presentation of each measure and quality stat, and the deployment's links,
     Wikipedia summary endpoint, curated groups and custom groups. Pass a custom
-    group's clades to ``/aggregate`` for its data."""
+    group's clades to ``/taxons/aggregate`` for its data."""
     settings = get_settings()
     row = fetch_dataset_meta(conn)
     dataset = (
@@ -340,48 +339,6 @@ def _taxon_refs(taxids: Iterable[int], taxa: Mapping[int, SetTaxon]) -> list[Tax
     return [TaxonRef(taxid=t, name=taxa[t].name, rank=taxa[t].rank) for t in taxids]
 
 
-@app.get("/aggregate", response_model=Aggregate)
-def aggregate(
-    conn: Conn,
-    include: Annotated[
-        str, Query(description="Comma-separated taxids of the clades to add up (1-20, e.g. 7742).")
-    ],
-    exclude: Annotated[
-        str,
-        Query(description="Comma-separated taxids of clades inside them to leave out (e.g. 32523)."),
-    ] = "",
-) -> Aggregate:
-    """Species count, per-resource coverage and quality stats for a set of clades:
-    the clades in ``include`` minus the clades inside them in ``exclude`` (e.g.
-    fish as Vertebrata minus Tetrapoda). A clade inside an excluded one can be
-    included again. Counts are sums and differences of the clades' rollups;
-    quality stats are computed from the records in the set."""
-    inc = _parse_taxids(include, "include", MAX_CLADES_PER_GROUP)
-    exc = _parse_taxids(exclude, "exclude", MAX_CLADES_PER_GROUP)
-    if not inc:
-        raise HTTPException(status_code=422, detail="include: at least one taxid")
-    if set(inc) & set(exc):
-        raise HTTPException(status_code=422, detail="a taxid cannot be both included and excluded")
-    taxa = fetch_set_taxa(conn, inc + exc)
-    marks = clade_set(inc, exc, taxa)
-    if isinstance(marks, str):
-        raise HTTPException(status_code=422, detail=marks)
-    path = {t: ".".join(map(str, taxa[t].path)) for t in marks}
-    quality = fetch_set_quality(
-        conn,
-        [(path[i], [path[o] for o in outside]) for i, outside in set_pieces(marks, taxa)],
-    )
-    meta = set_metadata(marks, taxa)
-    return Aggregate(
-        include=_taxon_refs((t for t in inc if marks.get(t) is True), taxa),
-        exclude=_taxon_refs((t for t in exc if marks.get(t) is False), taxa),
-        n_rows=meta.n_rows,
-        resources=ResourceSummary.by_metric(meta),
-        composition=AssemblyComposition.from_metadata(meta),
-        quality=[QualityStatValue(key=q.key, value=quality[q.key]) for q in QUALITY_STATS],
-    )
-
-
 def _within_path(conn: psycopg.Connection, taxid: int | None) -> str | None:
     """The path of the ``within`` taxon, or a 404 when it is unknown."""
     if taxid is None:
@@ -431,7 +388,9 @@ def taxon_filter(
     fuzzy: Annotated[
         bool, Query(description="Match `q` by spelling instead, for a misspelt name.")
     ] = False,
-    parent: Annotated[int | None, Query(description="Only the direct children of this taxon.")] = None,
+    parent: Annotated[
+        int | None, Query(description="Only the direct children of this taxon.")
+    ] = None,
     within: _Within = None,
     rank: Annotated[TargetRank | None, Query(description="Only taxa of this rank.")] = None,
     taxids: Annotated[
@@ -461,6 +420,7 @@ def taxon_filter(
         q=q,
         fuzzy=fuzzy,
         parent=parent,
+        within=within,
         within_path=_within_path(conn, within),
         rank=rank.value if rank else None,
         taxids=_parse_taxids(taxids, "taxids", MAX_TAXIDS) if taxids is not None else (),
@@ -521,7 +481,9 @@ def taxons(
         previous=result.previous,
         results=[
             TaxonItem(
-                **CladeSummary.from_metadata(r.name, r.rank, r.meta, r.is_infraspecific).model_dump(),
+                **CladeSummary.from_metadata(
+                    r.name, r.rank, r.meta, r.is_infraspecific
+                ).model_dump(),
                 context=r.context,
                 has_children=r.has_children,
                 stats=(
@@ -532,6 +494,79 @@ def taxons(
             )
             for r in result.rows
         ],
+    )
+
+
+@app.get("/taxons/report")
+def taxons_report(
+    conn: Conn,
+    request: Request,
+    f: _TaxonFilter,
+    sort_by: _TaxonSortBy = None,
+    sort_order: SortOrder = SortOrder.desc,
+) -> StreamingResponse:
+    """Every taxon ``/taxons`` lists for the same filters and sort, as a streamed
+    TSV download: taxid, name, species count, then the species with each resource
+    and the total of each resource."""
+    rows = iter_report_tsv(
+        request.app.state.pool,
+        f,
+        sort=sort_by.value if sort_by else None,
+        descending=sort_order is SortOrder.desc,
+        batch_rows=get_settings().export_batch_rows,
+    )
+    # Pull the header and first batch of rows now: that runs the query (its sort
+    # is the expensive part) before any byte is sent, so a statement timeout on a
+    # huge report is a clean 504 instead of a 200 that stops mid-download.
+    head = list(itertools.islice(rows, 2))
+    name = fetch_root(conn, f.within)[0] if f.within is not None else "taxa"
+    filename = f"{name.replace(' ', '_')}_{f.rank or 'all'}_data.tsv"
+    return StreamingResponse(
+        itertools.chain(head, rows),
+        media_type="text/tab-separated-values",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@app.get("/taxons/aggregate", response_model=Aggregate)
+def aggregate(
+    conn: Conn,
+    include: Annotated[
+        str, Query(description="Comma-separated taxids of the clades to add up (1-20, e.g. 7742).")
+    ],
+    exclude: Annotated[
+        str,
+        Query(description="Comma-separated taxids of clades inside them to leave out (e.g. 32523)."),
+    ] = "",
+) -> Aggregate:
+    """Species count, per-resource coverage and quality stats for a set of clades:
+    the clades in ``include`` minus the clades inside them in ``exclude`` (e.g.
+    fish as Vertebrata minus Tetrapoda). A clade inside an excluded one can be
+    included again. Counts are sums and differences of the clades' rollups;
+    quality stats are computed from the records in the set."""
+    inc = _parse_taxids(include, "include", MAX_CLADES_PER_GROUP)
+    exc = _parse_taxids(exclude, "exclude", MAX_CLADES_PER_GROUP)
+    if not inc:
+        raise HTTPException(status_code=422, detail="include: at least one taxid")
+    if set(inc) & set(exc):
+        raise HTTPException(status_code=422, detail="a taxid cannot be both included and excluded")
+    taxa = fetch_set_taxa(conn, inc + exc)
+    marks = clade_set(inc, exc, taxa)
+    if isinstance(marks, str):
+        raise HTTPException(status_code=422, detail=marks)
+    path = {t: ".".join(map(str, taxa[t].path)) for t in marks}
+    quality = fetch_set_quality(
+        conn,
+        [(path[i], [path[o] for o in outside]) for i, outside in set_pieces(marks, taxa)],
+    )
+    meta = set_metadata(marks, taxa)
+    return Aggregate(
+        include=_taxon_refs((t for t in inc if marks.get(t) is True), taxa),
+        exclude=_taxon_refs((t for t in exc if marks.get(t) is False), taxa),
+        n_rows=meta.n_rows,
+        resources=ResourceSummary.by_metric(meta),
+        composition=AssemblyComposition.from_metadata(meta),
+        quality=[QualityStatValue(key=q.key, value=quality[q.key]) for q in QUALITY_STATS],
     )
 
 
@@ -596,51 +631,4 @@ def annotations(
     return AnnotationPage(
         total=total, limit=limit, next=result.next, previous=result.previous,
         results=[AnnotationRecord(**r) for r in result.rows],
-    )
-
-
-@app.get("/clade/{taxid}/export.tsv")
-def clade_export(
-    taxid: int,
-    conn: Conn,
-    request: Request,
-    rank: Annotated[TargetRank, Query(description="Rank to break the root down by.")],
-    sort: SortColumn = SortColumn.n_rows,
-    filter: Annotated[list[MetricFilter] | None, Query()] = None,
-    logic: FilterLogic = FilterLogic.AND,
-    exclude_empty: bool = False,
-) -> StreamingResponse:
-    """The full breakdown at `rank` as a streamed TSV download.
-
-    Same subtree query as `breakdown` but unlimited and streamed via a
-    server-side cursor. Defaults to the complete breakdown (empties included);
-    pass filter/exclude_empty/sort to export exactly what the table shows.
-    """
-    # Resolve the root first so a bad taxid is a clean 404 (can't change the
-    # status once the stream has started) and to name the download.
-    try:
-        root_name, _root_rank, root_path = fetch_root(conn, taxid)
-    except TaxonNotFound:
-        raise HTTPException(status_code=404, detail=f"taxon {taxid} not found")
-
-    filter_keys = [f.value for f in (filter or [])]
-    rows = iter_export_tsv(
-        request.app.state.pool,
-        root_path=root_path,
-        rank=rank.value,
-        sort=sort.value,
-        filter_keys=filter_keys,
-        logic=logic,
-        exclude_empty=exclude_empty,
-        batch_rows=get_settings().export_batch_rows,
-    )
-    # Pull the header and first batch of rows now: that runs the query (its sort
-    # is the expensive part) before any byte is sent, so a statement timeout on a
-    # huge export is a clean 504 instead of a 200 that stops mid-download.
-    head = list(itertools.islice(rows, 2))
-    filename = f"{root_name.replace(' ', '_')}_{rank.value}_data.tsv"
-    return StreamingResponse(
-        itertools.chain(head, rows),
-        media_type="text/tab-separated-values",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )

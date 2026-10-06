@@ -106,10 +106,10 @@ Streamlit app that answered the same questions but was slow to build and to serv
   included, minus clades inside them excluded, so its counts are sums and differences
   of `clade_features` rows. Its quality stats are medians and maxima, which cannot be
   subtracted, so they come from the records in the set. The API keeps the two
-  concerns apart: `/config` lists the deployment's groups and their clades,
-  and `/aggregate` computes any set. Nothing is precomputed, so a deployment changes
-  its groups with a restart, not a rebuild. Groups under one parent may not overlap,
-  so that they and the parent's "rest" group always add up to the parent.
+  concerns apart: `/config` lists the deployment's groups and their clades, and
+  `/taxons/aggregate` computes any set. Nothing is precomputed, so a deployment
+  changes its groups with a restart, not a rebuild. Groups under one parent may not
+  overlap, so that they and the parent's "rest" group always add up to the parent.
 - **The API has one main resource, taxons, named like Annotrieve's.**
   `/taxons/{taxid}` is a taxon with its lineage, counts and quality stats, and
   `/taxons` lists taxa by name, parent, rank under a taxon or taxid, sorted by any
@@ -117,8 +117,9 @@ Streamlit app that answered the same questions but was slow to build and to serv
   children, the data map, the gaps list, compare and the landing numbers are that
   one list with different filters, so each page's request is cached on its own and
   nothing is computed twice. Records are their own collections (`/assemblies`,
-  `/annotations`), filtered by `within`. Names follow Annotrieve's API (`/taxons`,
-  `sort_by`, `sort_order`, `results`), which the same people maintain and use.
+  `/annotations`), filtered by `within`, and `/taxons/report` is the whole list as
+  TSV. Names follow Annotrieve's API (`/taxons`, `sort_by`, `sort_order`, `results`,
+  `/report`), which the same people maintain and use.
 - **Lists page with a cursor, not an offset.** Each list sorts on keys that end in
   a unique one (the taxid or the record's accession), and a page's `next` and
   `previous` cursors hold the key values of its last and first rows. The next query

@@ -43,8 +43,6 @@ _FEATURE_COLS: tuple[str, ...] = (
 # types generated from it) can't drift from the tracked resources. They also
 # make the identifiers interpolated into SQL below a closed, safe set.
 
-# Valid sort columns: species count + every c_*/s_* feature column.
-SortColumn = Enum("SortColumn", {c: c for c in _FEATURE_COLS}, type=str)
 # Resource-presence filter keys ("ass", "ann", "rna", "lng").
 MetricFilter = Enum("MetricFilter", {k: k for k in METRIC_KEYS}, type=str)
 
@@ -215,38 +213,6 @@ def _secondary_sort_key(sort_by_key: str) -> str:
     return "c_ass"
 
 
-def _breakdown_order(sort: str) -> str:
-    """ORDER BY for a breakdown sorted by ``sort`` (a SortColumn value). The taxid
-    makes it a total order, so a LIMIT picks the same clades on every query."""
-    sort = _identifier(sort, _FEATURE_COLS)
-    return f"ORDER BY f.{sort} DESC, f.{_secondary_sort_key(sort)} DESC, t.taxid"
-
-
-def _breakdown_where(
-    root_path: str,
-    rank: str,
-    exclude_empty: bool,
-    filter_keys: list[str],
-    logic: FilterLogic,
-) -> tuple[list[str], list]:
-    """Build the shared WHERE for the breakdown/export subtree query.
-
-    ``path <@ root_path`` = the whole subtree; the rank filter picks the level
-    (both ride indexes: GiST on path, btree on rank). ``exclude_empty`` and the
-    resource filters push down as ``f.<col> > 0`` predicates; the filter keys
-    are interpolated and must be MetricFilter values.
-    """
-    where = ["t.path <@ %s::ltree", "t.rank = %s"]
-    params: list = [root_path, rank]
-    if exclude_empty:
-        where.append("(" + " OR ".join(f"f.{c} > 0" for c in COVERAGE_KEYS) + ")")
-    if filter_keys:
-        filter_keys = [_identifier(k, METRIC_KEYS) for k in filter_keys]
-        joiner = " AND " if logic is FilterLogic.AND else " OR "
-        where.append("(" + joiner.join(f"f.c_{k} > 0" for k in filter_keys) + ")")
-    return where, params
-
-
 @dataclass(frozen=True, slots=True)
 class TaxonFilter:
     """Which taxa ``/taxons`` lists; every field set narrows the list further."""
@@ -254,7 +220,8 @@ class TaxonFilter:
     q: str | None = None  # name contains it, or with ``fuzzy`` is spelled like it
     fuzzy: bool = False
     parent: int | None = None  # direct children of this taxon
-    within_path: str | None = None  # this taxon (a path) and everything below it
+    within: int | None = None  # this taxon and everything below it
+    within_path: str | None = None  # the path of ``within``
     rank: str | None = None
     taxids: Sequence[int] = ()
     filter_keys: Sequence[str] = ()  # MetricFilter values: has data for these resources
@@ -451,9 +418,8 @@ EXPORT_HEADER: tuple[str, ...] = (
 )
 # SELECT columns matching EXPORT_HEADER position-for-position.
 _EXPORT_COLS: str = ", ".join(
-    ("t.taxid", "t.name", "f.n_rows")
-    + tuple(f"f.{c}" for c in COVERAGE_KEYS)
-    + tuple(f"f.{c}" for c in TOTAL_KEYS)
+    ("t.taxid", "t.name")
+    + tuple(f"COALESCE(f.{c}, 0)" for c in ("n_rows",) + COVERAGE_KEYS + TOTAL_KEYS)
 )
 
 
@@ -462,40 +428,35 @@ def _tsv_cell(value: object) -> str:
     return str(value).replace("\t", " ").replace("\n", " ").replace("\r", " ")
 
 
-def iter_export_tsv(
+def iter_report_tsv(
     pool: ConnectionPool,
+    f: TaxonFilter,
     *,
-    root_path: str,
-    rank: str,
-    sort: str,
-    filter_keys: list[str],
-    logic: FilterLogic,
-    exclude_empty: bool,
+    sort: str | None,
+    descending: bool,
     batch_rows: int,
 ) -> Iterator[str]:
-    """Stream the full breakdown at ``rank`` as TSV: the header, then one chunk
-    per ``batch_rows`` rows, each a single server-side FETCH (no limit).
+    """Stream every taxon matching ``f`` as TSV, in the order ``/taxons`` lists
+    them: the header, then one chunk per ``batch_rows`` rows, each a single
+    server-side FETCH.
 
     The generator owns its pooled connection and a **server-side** cursor for
-    the whole stream, so even a huge export (e.g. a big root at species rank,
-    >700k rows) never materializes in memory. ``sort``/``filter_keys`` must be
-    SortColumn / MetricFilter values; ``root_path`` comes from ``fetch_root``.
+    the whole stream, so even a huge report (every eukaryote species, >700k rows)
+    never materializes in memory.
     """
-    order = _breakdown_order(sort)
-    where, params = _breakdown_where(root_path, rank, exclude_empty, filter_keys, logic)
+    _ordering, keys, key_params = _taxon_keys(sort, descending, f)
+    where, where_params = _taxon_where(f)
+    order = ", ".join(f"{k.sql} {'DESC' if k.descending else 'ASC'}" for k in keys)
     sql = (
-        f"SELECT {_EXPORT_COLS} "
-        "FROM taxon t "
-        "JOIN clade_features f USING (taxid) "
-        f"WHERE {' AND '.join(where)} "
-        f"{order}"
+        f"SELECT {_EXPORT_COLS} FROM taxon t LEFT JOIN clade_features f USING (taxid) "
+        f"{'WHERE ' + ' AND '.join(where) if where else ''} ORDER BY {order}"
     )
 
     yield "\t".join(EXPORT_HEADER) + "\n"
-    with pool.connection() as conn, conn.cursor(name="export") as cur:
-        cur.execute(sql, params)
+    with pool.connection() as conn, conn.cursor(name="report") as cur:
+        cur.execute(sql, [*where_params, *key_params])
         # Each chunk costs a thread hop through the ASGI stack; one chunk per row
-        # would take ~40x longer than the query itself on a full-species export.
+        # would take ~40x longer than the query itself on a full-species report.
         while rows := cur.fetchmany(batch_rows):
             yield "".join("\t".join(_tsv_cell(v) for v in row) + "\n" for row in rows)
 
@@ -696,7 +657,7 @@ _SET_TAXA_SQL = (
 def fetch_set_taxa(conn: psycopg.Connection, taxids: Collection[int]) -> dict[int, SetTaxon]:
     """The given taxids that are in the taxonomy, with their path and rollup row
     (zero-filled when they have none). Callers bound ``taxids``: at most 40 from
-    ``/aggregate``, and what the groups file names for ``/custom-groups``."""
+    ``/taxons/aggregate``, and what the groups file names for ``/config``."""
     taxa: dict[int, SetTaxon] = {}
     for taxid, name, rank, path, infraspecific, *features in conn.execute(
         _SET_TAXA_SQL, (list(taxids),)

@@ -4,30 +4,6 @@
  */
 
 export interface paths {
-    "/aggregate": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Aggregate
-         * @description Species count, per-resource coverage and quality stats for a set of clades:
-         *     the clades in ``include`` minus the clades inside them in ``exclude`` (e.g.
-         *     fish as Vertebrata minus Tetrapoda). A clade inside an excluded one can be
-         *     included again. Counts are sums and differences of the clades' rollups;
-         *     quality stats are computed from the records in the set.
-         */
-        get: operations["aggregate_aggregate_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/annotations": {
         parameters: {
             query?: never;
@@ -70,30 +46,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/clade/{taxid}/export.tsv": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Clade Export
-         * @description The full breakdown at `rank` as a streamed TSV download.
-         *
-         *     Same subtree query as `breakdown` but unlimited and streamed via a
-         *     server-side cursor. Defaults to the complete breakdown (empties included);
-         *     pass filter/exclude_empty/sort to export exactly what the table shows.
-         */
-        get: operations["clade_export_clade__taxid__export_tsv_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/config": {
         parameters: {
             query?: never;
@@ -107,7 +59,7 @@ export interface paths {
          *     (``built_at`` is ``null`` before the first build has stamped the database), the
          *     presentation of each measure and quality stat, and the deployment's links,
          *     Wikipedia summary endpoint, curated groups and custom groups. Pass a custom
-         *     group's clades to ``/aggregate`` for its data.
+         *     group's clades to ``/taxons/aggregate`` for its data.
          */
         get: operations["config_config_get"];
         put?: never;
@@ -184,6 +136,52 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/taxons/aggregate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Aggregate
+         * @description Species count, per-resource coverage and quality stats for a set of clades:
+         *     the clades in ``include`` minus the clades inside them in ``exclude`` (e.g.
+         *     fish as Vertebrata minus Tetrapoda). A clade inside an excluded one can be
+         *     included again. Counts are sums and differences of the clades' rollups;
+         *     quality stats are computed from the records in the set.
+         */
+        get: operations["aggregate_taxons_aggregate_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/taxons/report": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Taxons Report
+         * @description Every taxon ``/taxons`` lists for the same filters and sort, as a streamed
+         *     TSV download: taxid, name, species count, then the species with each resource
+         *     and the total of each resource.
+         */
+        get: operations["taxons_report_taxons_report_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/taxons/{taxid}": {
         parameters: {
             query?: never;
@@ -215,7 +213,7 @@ export interface components {
         /**
          * Aggregate
          * @description Species count, per-resource coverage and quality stats for a set of clades
-         *     (served by ``/aggregate``): a taxon is in the set when the nearest listed
+         *     (served by ``/taxons/aggregate``): a taxon is in the set when the nearest listed
          *     clade above it (or the taxon itself) is in ``include``.
          */
         Aggregate: {
@@ -403,7 +401,7 @@ export interface components {
          * CustomGroupItem
          * @description One custom group from the groups file. ``include`` and ``exclude`` are the
          *     clades it is made of, worked out from the parent's other groups for a
-         *     ``rest`` group, so they can be passed to ``/aggregate`` as they are. A rest
+         *     ``rest`` group, so they can be passed to ``/taxons/aggregate`` as they are. A rest
          *     group with nothing left lists no clades.
          */
         CustomGroupItem: {
@@ -545,11 +543,6 @@ export interface components {
             total: number;
         };
         /**
-         * SortColumn
-         * @enum {string}
-         */
-        SortColumn: "n_rows" | "c_ass" | "c_ann" | "c_rna" | "c_lng" | "s_ass" | "s_ann" | "s_rna" | "s_lng" | "n_ass_complete" | "n_ass_chromosome" | "n_ass_scaffold" | "n_ass_contig" | "n_reference";
-        /**
          * SortOrder
          * @enum {string}
          */
@@ -683,40 +676,6 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
-    aggregate_aggregate_get: {
-        parameters: {
-            query: {
-                /** @description Comma-separated taxids of the clades to add up (1-20, e.g. 7742). */
-                include: string;
-                /** @description Comma-separated taxids of clades inside them to leave out (e.g. 32523). */
-                exclude?: string;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Aggregate"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     annotations_annotations_get: {
         parameters: {
             query?: {
@@ -778,44 +737,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AssemblyPage"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    clade_export_clade__taxid__export_tsv_get: {
-        parameters: {
-            query: {
-                /** @description Rank to break the root down by. */
-                rank: components["schemas"]["TargetRank"];
-                sort?: components["schemas"]["SortColumn"];
-                filter?: components["schemas"]["MetricFilter"][] | null;
-                logic?: components["schemas"]["FilterLogic"];
-                exclude_empty?: boolean;
-            };
-            header?: never;
-            path: {
-                taxid: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
@@ -936,6 +857,91 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TaxonPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    aggregate_taxons_aggregate_get: {
+        parameters: {
+            query: {
+                /** @description Comma-separated taxids of the clades to add up (1-20, e.g. 7742). */
+                include: string;
+                /** @description Comma-separated taxids of clades inside them to leave out (e.g. 32523). */
+                exclude?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Aggregate"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    taxons_report_taxons_report_get: {
+        parameters: {
+            query?: {
+                /** @description A count column, `gap_<resource>` (species without that resource) or `name`. Without it: relevance for `q`, else species count (`n_rows`). */
+                sort_by?: components["schemas"]["TaxonSort"] | null;
+                sort_order?: components["schemas"]["SortOrder"];
+                /** @description Only taxa whose name contains this text, ignoring case (or is spelled like it, with `fuzzy`). The root and 'cellular organisms' are left out. */
+                q?: string | null;
+                /** @description Match `q` by spelling instead, for a misspelt name. */
+                fuzzy?: boolean;
+                /** @description Only the direct children of this taxon. */
+                parent?: number | null;
+                /** @description Only rows on this taxon or below it (e.g. 40674 for mammals). */
+                within?: number | null;
+                /** @description Only taxa of this rank. */
+                rank?: components["schemas"]["TargetRank"] | null;
+                /** @description Only these taxa: comma-separated taxids, at most 100. */
+                taxids?: string | null;
+                /** @description Only taxa with data for these resources. */
+                filter?: components["schemas"]["MetricFilter"][] | null;
+                /** @description Whether `filter` needs every resource (AND) or any (OR). */
+                logic?: components["schemas"]["FilterLogic"];
+                /** @description Only taxa with data for at least one resource. */
+                exclude_empty?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
