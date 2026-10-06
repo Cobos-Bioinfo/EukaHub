@@ -10,7 +10,9 @@ import {
 import AboutCard from "../components/AboutCard";
 import Breadcrumb from "../components/Breadcrumb";
 import BreakdownMap from "../components/BreakdownMap";
+import { TaxonError } from "../components/ErrorPage";
 import MetricCard from "../components/MetricCard";
+import NoDataNotice from "../components/NoDataNotice";
 import QualitySection from "../components/QualitySection";
 import RecordBrowser from "../components/RecordBrowser";
 import SpeciesLinks from "../components/SpeciesLinks";
@@ -34,8 +36,20 @@ export default function Dashboard() {
   // resolves to a summary, its error deliberately ignored.
   const about = useAsync(() => getAbout(taxid), [taxid]);
 
-  if (!validId) return <p className="notice notice--error">Invalid taxon id.</p>;
-  if (summary.error) return <p className="notice notice--error">{summary.error}</p>;
+  if (!validId) return <TaxonError taxid={taxidParam} />;
+  if (summary.error) {
+    return (
+      <TaxonError
+        taxid={taxidParam}
+        status={summary.status}
+        message={summary.error}
+        retry={summary.reload}
+      />
+    );
+  }
+  if (metrics.error) {
+    return <TaxonError taxid={taxidParam} message={metrics.error} retry={metrics.reload} />;
+  }
   if (summary.loading || metrics.loading || !summary.data || !metrics.data) {
     return <p className="notice">Loading…</p>;
   }
@@ -50,6 +64,7 @@ export default function Dashboard() {
   // Per-record drill-down only when the clade actually has assemblies or
   // annotations (avoids an empty browser + its fetches for data-less taxa).
   const hasRecords = s.resources.ass.total > 0 || s.resources.ann.total > 0;
+  const noData = Object.values(s.resources).every((r) => r.total === 0);
   const rankWord = s.rank && s.rank !== "no rank" ? s.rank : "infraspecific taxon";
   const belowLabel = isInfra ? "from finer subdivisions" : "from subspecies and strains";
 
@@ -85,32 +100,43 @@ export default function Dashboard() {
           </header>
           {about.data && <AboutCard about={about.data} />}
           {!isUnit && <ViewSwitcher taxid={taxid} name={s.name} current="dashboard" />}
-          {isUnit && <SpeciesLinks metrics={metrics.data} taxid={taxid} />}
+          {isUnit && !noData && <SpeciesLinks metrics={metrics.data} taxid={taxid} />}
         </aside>
 
         <div className="dashboard__content">
-          <div className="card-grid">
-            {metrics.data.map((m) => {
-              const value = s.resources[m.key];
-              return value ? (
-                <MetricCard
-                  key={m.key}
-                  config={m}
-                  value={value}
-                  taxid={taxid}
-                  mode={isUnit ? "count" : "coverage"}
-                  direct={s.direct?.[m.key]}
-                  belowLabel={belowLabel}
-                />
-              ) : null;
-            })}
-          </div>
+          {noData ? (
+            <NoDataNotice
+              taxid={taxid}
+              name={s.name}
+              rank={s.rank}
+              isUnit={isUnit}
+              species={s.n_rows}
+              ncbiUrlTemplate={metrics.data.find((m) => m.key === "ass")?.external_url_template}
+            />
+          ) : (
+            <div className="card-grid">
+              {metrics.data.map((m) => {
+                const value = s.resources[m.key];
+                return value ? (
+                  <MetricCard
+                    key={m.key}
+                    config={m}
+                    value={value}
+                    taxid={taxid}
+                    mode={isUnit ? "count" : "coverage"}
+                    direct={s.direct?.[m.key]}
+                    belowLabel={belowLabel}
+                  />
+                ) : null;
+              })}
+            </div>
+          )}
 
-          {quality.data && (
+          {quality.data && !noData && (
             <QualitySection taxid={taxid} quality={quality.data} composition={s.composition} />
           )}
 
-          {!isUnit && !lineage.loading && (
+          {!isUnit && !noData && !lineage.loading && (
             <BreakdownMap
               key={`bmap-${taxid}`}
               root={{ taxid, name: s.name, rank: s.rank }}

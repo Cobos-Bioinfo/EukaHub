@@ -15,6 +15,7 @@
   --ink-2: #4b5563; /* secondary text */
   --muted: #6b7280; /* labels / captions */
   --link: #1f6feb; /* interactive text/icons */
+  --link-strong: #1a5bc4; /* links on tinted surfaces (--track), 5.3:1 */
   --cta: #1f6feb; /* filled-button surface (white text sits on it — keep it dark enough) */
   /* Secondary filled-button surfaces — distinct hues, each dark enough for white
      text (contrast on par with --cta). Tree = green, Surprise = violet, Data map =
@@ -37,7 +38,7 @@
   /* "Missing data" magnitude bar on the gaps leaderboard — a warm amber that
      reads as attention/incompleteness and stays clear of the blue/green coverage
      hues (a single-series sequential bar, legible on the card surface). */
-  --gap: #c76a1c;
+  --gap: #a85412; /* 5.3:1 on white, so the missing counts read as text too */
   --bar-bg: rgba(252, 252, 251, 0.85); /* sticky app bar (translucent) */
   --overlay-bg: rgba(255, 255, 255, 0.92); /* floating tree panels/legend/zoom */
   --tree-center: #ffffff; /* radial-canvas gradient centre */
@@ -80,8 +81,9 @@
   --ink-2: #b3b9c2;
   --muted: #8b929c;
   --link: #6ba5f7;
+  --link-strong: #6ba5f7;
   --cta: #2563eb;
-  --cta-tree: #2b8a3e;
+  --cta-tree: #237a35;
   --cta-surprise: #7048e8;
   --cta-map: #7c46b0;
   --cov-annotated: #37b24d;
@@ -292,31 +294,58 @@ a:hover {
   z-index: 40;
 }
 
+.picker__menu[hidden] {
+  display: none;
+}
+.picker__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.picker__note {
+  margin: 0;
+  padding: 0.45rem 0.65rem;
+  font-size: 0.82rem;
+  color: var(--ink-2);
+}
 .picker__item {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   gap: 0.75rem;
-  width: 100%;
   padding: 0.5rem 0.65rem;
-  background: none;
-  border: none;
   border-radius: 7px;
-  text-align: left;
   cursor: pointer;
-  font: inherit;
   color: var(--ink);
 }
-.picker__item:hover {
+.picker__item--active {
   background: var(--track);
+}
+.picker__main {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.45rem;
+  min-width: 0;
+}
+.picker__dot {
+  flex: none;
+  width: 0.5rem;
+  height: 0.5rem;
+  border: 1.5px solid var(--muted);
+  border-radius: 50%;
+}
+.picker__dot--data {
+  background: var(--link);
+  border-color: var(--link);
 }
 .picker__name {
   font-weight: 500;
 }
 .picker__rank {
+  flex: none;
   font-size: 0.78rem;
-  color: var(--muted);
-  text-transform: lowercase;
+  color: var(--ink-2);
+  text-align: right;
 }
 
 /* ---- Dashboard ------------------------------------------------------- */
@@ -333,6 +362,10 @@ a:hover {
   font-weight: 600;
   color: var(--ink-2);
   margin-right: 0.4rem;
+}
+.breadcrumb a {
+  display: inline-block;
+  padding-block: 0.15rem;
 }
 .breadcrumb__sep {
   margin: 0 0.4rem;
@@ -390,6 +423,8 @@ a:hover {
 .dashboard__note a {
   font-weight: 600;
   white-space: nowrap;
+  color: var(--link-strong);
+  text-decoration: underline;
 }
 
 /* Two-column body: a context rail (About + tree CTA) beside the metrics +
@@ -757,6 +792,9 @@ a:hover {
   gap: 0.4rem;
 }
 .comp__key[data-zero="true"] {
+  color: var(--muted);
+}
+.comp__key[data-zero="true"] .comp__dot {
   opacity: 0.45;
 }
 .comp__dot {
@@ -852,7 +890,7 @@ a:hover {
   padding: 0.05rem 0.4rem;
   font-size: 0.7rem;
   font-weight: 600;
-  color: var(--muted);
+  color: var(--ink-2);
   background: var(--track);
   border-radius: 999px;
 }
@@ -2834,10 +2872,10 @@ button.tree-outline__name:hover {
   color: var(--ink-2);
 }
 .bmap-level__rank--now {
-  color: var(--link);
+  color: var(--link-strong);
 }
 .bmap-level__cap {
-  color: var(--muted);
+  color: var(--ink-2);
 }
 .bmap-level__name {
   color: var(--ink);
@@ -2929,7 +2967,6 @@ button.tree-outline__name:hover {
 }
 .bmap-tile__stat {
   font-size: 0.72rem;
-  opacity: 0.85;
   font-variant-numeric: tabular-nums;
 }
 .bmap-tile__dive {
@@ -2975,13 +3012,13 @@ button.tree-outline__name:hover {
   box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.08);
 }
 .bmap-legend__cap {
-  color: var(--muted);
+  color: var(--ink-2);
 }
 .bmap-legend__hint {
   display: flex;
   align-items: center;
   gap: 5px;
-  color: var(--muted);
+  color: var(--ink-2);
 }
 .bmap-legend__chip {
   width: 11px;
@@ -3583,4 +3620,114 @@ button.tree-outline__name:hover {
   .gaps-teaser__bar {
     display: none;
   }
+}
+
+/* ---- Accessibility helpers -------------------------------------------- */
+.skip-link {
+  position: absolute;
+  left: 1rem;
+  top: -3rem;
+  z-index: 100;
+  padding: 0.5rem 0.9rem;
+  border-radius: 8px;
+  background: var(--card);
+  color: var(--link);
+  font-weight: 600;
+  box-shadow: var(--shadow);
+}
+.skip-link:focus {
+  top: 0.75rem;
+}
+.app__main:focus {
+  outline: none;
+}
+/* Links inside running text are underlined, so colour is not the only cue. */
+.faq__a a,
+.legal a,
+.nodata__text a {
+  text-decoration: underline;
+}
+
+/* ---- No data yet ------------------------------------------------------- */
+.card__empty {
+  margin: 0.35rem 0 0;
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--ink-2);
+}
+.nodata {
+  display: grid;
+  gap: 0.5rem;
+  padding: 1.25rem 1.4rem;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--link);
+  border-radius: var(--radius);
+}
+.nodata__title {
+  margin: 0;
+  font-size: 1.2rem;
+}
+.nodata__text {
+  margin: 0;
+  max-width: var(--measure);
+  color: var(--ink-2);
+}
+.nodata__link {
+  font-weight: 600;
+  justify-self: start;
+}
+.nodata__list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr));
+  gap: 0.4rem 1.5rem;
+  margin: 0.75rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+.nodata__meta,
+.nodata__more {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+.nodata__more {
+  margin: 0.75rem 0 0;
+}
+
+/* ---- Error pages -------------------------------------------------------- */
+.errpage {
+  display: grid;
+  gap: 0.9rem;
+  max-width: 40rem;
+  margin: 3rem auto;
+}
+.errpage__title {
+  margin: 0;
+  font-size: 1.8rem;
+}
+.errpage__text {
+  margin: 0;
+  color: var(--ink-2);
+}
+.errpage__text p {
+  margin: 0;
+}
+.errpage__search .picker {
+  width: 100%;
+  margin: 0;
+}
+.errpage__home {
+  justify-self: start;
+  font-weight: 600;
+}
+.errpage__retry {
+  justify-self: start;
+  padding: 0.5rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--card);
+  color: var(--ink);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
 }

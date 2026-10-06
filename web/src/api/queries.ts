@@ -18,13 +18,13 @@ import type {
   MetricFilter,
   Overview,
   QualityStatConfig,
+  SearchHit,
   SiteConfig,
   SortColumn,
   TargetRank,
   TaxonAbout,
   TaxonChildren,
   TaxonLineage,
-  TaxonRef,
 } from "./types";
 
 function extractDetail(error: unknown): string | undefined {
@@ -41,9 +41,20 @@ function extractDetail(error: unknown): string | undefined {
   return undefined;
 }
 
+/** A failed API request; ``status`` tells a missing taxon (404) from a busy server. */
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
+  }
+}
+
 function unwrap<T>(res: { data?: T; error?: unknown; response: Response }): T {
   if (res.error !== undefined || res.data === undefined) {
-    throw new Error(extractDetail(res.error) ?? `Request failed (${res.response.status})`);
+    const status = res.response.status;
+    throw new ApiError(extractDetail(res.error) ?? `Request failed (${status})`, status);
   }
   return res.data;
 }
@@ -118,7 +129,7 @@ export const getAbout = async (taxid: number): Promise<TaxonAbout | null> => {
   return data ?? null;
 };
 
-export const searchTaxa = async (q: string, limit = 10): Promise<TaxonRef[]> =>
+export const searchTaxa = async (q: string, limit = 10): Promise<SearchHit[]> =>
   unwrap(await api.GET("/search", { params: { query: { q, limit } } }));
 
 // The annotation/assembly-quality stat chrome (BUSCO, genes, genome size, N50) —

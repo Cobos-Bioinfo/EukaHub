@@ -990,6 +990,10 @@
             "title": "Coverage Column",
             "type": "string"
           },
+          "empty_text": {
+            "title": "Empty Text",
+            "type": "string"
+          },
           "external_source_name": {
             "title": "External Source Name",
             "type": "string"
@@ -1050,6 +1054,7 @@
           "species_help",
           "total_label",
           "total_help",
+          "empty_text",
           "color",
           "external_source_name",
           "external_url_template",
@@ -1234,6 +1239,55 @@
           "percent"
         ],
         "title": "ResourceSummary",
+        "type": "object"
+      },
+      "SearchHit": {
+        "description": "A name-search result, with what the picker needs to tell look-alike names apart.",
+        "properties": {
+          "context": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Nearest class, phylum or kingdom above the taxon, to tell homonyms apart.",
+            "title": "Context"
+          },
+          "has_data": {
+            "description": "Whether any assembly, annotation or RNA-Seq run sits on the taxon or below it.",
+            "title": "Has Data",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "rank": {
+            "title": "Rank",
+            "type": "string"
+          },
+          "similar": {
+            "description": "True when no name contains the query and this is a close spelling instead.",
+            "title": "Similar",
+            "type": "boolean"
+          },
+          "taxid": {
+            "title": "Taxid",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "taxid",
+          "name",
+          "rank",
+          "context",
+          "has_data",
+          "similar"
+        ],
+        "title": "SearchHit",
         "type": "object"
       },
       "SiteConfig": {
@@ -2238,7 +2292,7 @@
     },
     "/search": {
       "get": {
-        "description": "Case-insensitive taxon-name search for the root picker. Substring match,\nprefix-matches first (served by the `pg_trgm` GIN index on `taxon.name`).",
+        "description": "Case-insensitive taxon-name search for the search box. Names starting with\nthe query come first, the best-covered taxa ahead; then names containing it.\nWhen no name contains it, close spellings are returned with `similar` set.",
         "operationId": "search_search_get",
         "parameters": [
           {
@@ -2273,7 +2327,7 @@
               "application/json": {
                 "schema": {
                   "items": {
-                    "$ref": "#/components/schemas/TaxonRef"
+                    "$ref": "#/components/schemas/SearchHit"
                   },
                   "title": "Response Search Search Get",
                   "type": "array"

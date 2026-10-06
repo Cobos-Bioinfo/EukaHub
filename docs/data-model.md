@@ -93,7 +93,11 @@ There are no foreign keys: the data is bulk-loaded and never modified afterwards
   a rank, `taxon.path <@ <clade path> AND rank = ...`, joined to `clade_features`.
 - **Lineage / breadcrumb:** ancestors via `path @> ...`.
 - **Tree of Life:** direct children via `parent_id`.
-- **Name search:** trigram index on `taxon.name`.
+- **Name search:** trigram index on `taxon.name`. Names starting with the query are
+  ranked by their records, then species; names containing it fill the remaining
+  slots, shortest first (ranking every mid-word match by data is too slow for short
+  queries). When nothing matches, close spellings come from trigram similarity. Each
+  hit's nearest class, phylum or kingdom is read from its path labels.
 - **Record lists and quality statistics:** records whose taxon lies in the clade's
   subtree. For per-bucket statistics, each record's ancestors are read from the
   labels of its own `path`.

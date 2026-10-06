@@ -39,6 +39,7 @@ class MetricConfig(BaseModel):
     species_help: str
     total_label: str
     total_help: str
+    empty_text: str  # shown instead of a zero count
     color: str
     external_source_name: str
     external_url_template: str  # contains "{taxid}"; the client substitutes
@@ -65,6 +66,7 @@ class MetricConfig(BaseModel):
             species_help=m.species_help,
             total_label=m.total_label,
             total_help=m.total_help,
+            empty_text=m.empty_text,
             color=m.color,
             external_source_name=m.external_source_name,
             external_url_template=external_url_template,
@@ -266,6 +268,20 @@ class TaxonRef(BaseModel):
     rank: str
 
 
+class SearchHit(TaxonRef):
+    """A name-search result, with what the picker needs to tell look-alike names apart."""
+
+    context: str | None = Field(
+        description="Nearest class, phylum or kingdom above the taxon, to tell homonyms apart."
+    )
+    has_data: bool = Field(
+        description="Whether any assembly, annotation or RNA-Seq run sits on the taxon or below it."
+    )
+    similar: bool = Field(
+        description="True when no name contains the query and this is a close spelling instead."
+    )
+
+
 class TaxonLineage(BaseModel):
     """A taxon plus its root→node lineage (for the header breadcrumb)."""
 
@@ -395,7 +411,7 @@ class QualityStatConfig(BaseModel):
     help: str
     unit: str | None  # "%", "bp", "genes", ...
     fmt: str  # "percent" | "integer" | "basepairs" — how the frontend renders it
-    headline: bool  # True for the surfaced annotation-quality figures
+    headline: bool  # True for the figures shown beside each group on the Gaps page
 
     @classmethod
     def from_stat(cls, q: QualityStat) -> QualityStatConfig:

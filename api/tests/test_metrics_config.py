@@ -10,6 +10,7 @@ def test_metrics_config(client):
     assert [m["key"] for m in body] == list(METRIC_KEYS)
     for m in body:
         assert m["card_title"]
+        assert m["empty_text"].startswith("No ")
         assert m["color"].startswith("#")
         assert "{taxid}" in m["external_url_template"]  # client substitutes
         assert m["coverage_column"] == f"c_{m['key']}"

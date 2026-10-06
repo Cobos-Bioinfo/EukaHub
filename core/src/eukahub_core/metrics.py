@@ -44,7 +44,8 @@ class Metric:
     - filter / sort controls: ``filter_label``, ``sort_count_label``,
       ``sort_total_label``.
     - summary card: ``card_title``, ``card_title_help``, ``species_help``,
-      ``total_label``, ``total_help``, ``external_source_name``,
+      ``total_label``, ``total_help``, ``empty_text`` (shown instead of a zero),
+      ``external_source_name``,
       ``external_url_template`` (the default; a deployment can override it, see
       ``eukahub_api.settings``).
     - TSV export: ``tsv_count_column``, ``tsv_total_column`` — the
@@ -67,6 +68,7 @@ class Metric:
     external_url_template: str
     tsv_count_column: str
     tsv_total_column: str
+    empty_text: str
     # Optional — only `lng` carries a tooltip on the card title today.
     card_title_help: str | None = None
 
@@ -101,6 +103,7 @@ METRICS: tuple[Metric, ...] = (
         external_url_template="https://www.ncbi.nlm.nih.gov/datasets/genome/?taxon={taxid}",
         tsv_count_column="species_with_assemblies",
         tsv_total_column="total_assemblies",
+        empty_text="No genome assemblies yet",
     ),
     Metric(
         key="ann",
@@ -119,6 +122,7 @@ METRICS: tuple[Metric, ...] = (
         external_url_template="https://genome.crg.es/annotrieve/annotations/?taxids={taxid}",
         tsv_count_column="species_with_annotations",
         tsv_total_column="total_annotations",
+        empty_text="No functional annotations yet",
     ),
     Metric(
         key="rna",
@@ -142,6 +146,7 @@ METRICS: tuple[Metric, ...] = (
         ),
         tsv_count_column="species_with_rna_seq",
         tsv_total_column="total_rna_seq",
+        empty_text="No RNA-Seq runs yet",
     ),
     Metric(
         key="lng",
@@ -167,6 +172,7 @@ METRICS: tuple[Metric, ...] = (
         ),
         tsv_count_column="species_with_long_read_rna_seq",
         tsv_total_column="total_long_read_rna_seq",
+        empty_text="No long-read RNA-Seq runs yet",
     ),
 )
 
@@ -236,8 +242,9 @@ class QualityStat:
     - ``source`` + ``column`` locate the value in a per-record table.
     - ``agg`` is how it is summarized across a clade's subtree records.
     - ``fmt`` tells the frontend how to render the number.
-    - ``headline`` marks the surfaced *annotation-quality* figures (BUSCO, gene
-      count) versus secondary assembly-quality figures (genome size, N50).
+    - ``headline`` marks the figures shown beside each group on the Gaps page:
+      medians, which compare across groups (the best BUSCO is 100% almost
+      everywhere).
     """
 
     key: str
@@ -259,9 +266,8 @@ QUALITY_STATS: tuple[QualityStat, ...] = (
         agg="max",  # the clade's best-annotated genome
         unit="%",
         fmt="percent",
-        card_title="BUSCO completeness",
+        card_title="Best BUSCO completeness",
         help="Best BUSCO complete % among this clade's functional annotations",
-        headline=True,
     ),
     QualityStat(
         key="genes",
@@ -270,7 +276,7 @@ QUALITY_STATS: tuple[QualityStat, ...] = (
         agg="median",
         unit="genes",
         fmt="integer",
-        card_title="Protein-coding genes",
+        card_title="Median protein-coding genes",
         help="Median protein-coding gene count across this clade's annotations",
         headline=True,
     ),
@@ -281,8 +287,9 @@ QUALITY_STATS: tuple[QualityStat, ...] = (
         agg="median",
         unit="bp",
         fmt="basepairs",
-        card_title="Genome size",
+        card_title="Median genome size",
         help="Median assembly length across this clade's genome assemblies",
+        headline=True,
     ),
     QualityStat(
         key="contig_n50",
@@ -291,7 +298,7 @@ QUALITY_STATS: tuple[QualityStat, ...] = (
         agg="median",
         unit="bp",
         fmt="basepairs",
-        card_title="Contig N50",
+        card_title="Median contig N50",
         help="Median contig N50 across this clade's genome assemblies",
     ),
 )

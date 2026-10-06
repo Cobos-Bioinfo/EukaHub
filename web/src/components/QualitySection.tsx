@@ -105,10 +105,11 @@ function QualityTile({
   loaded: boolean;
   failed: boolean;
 }) {
-  const noun = config.source === "annotation" ? "annotations" : "assemblies";
+  const noun = config.source === "annotation" ? "annotation" : "assembly";
+  const nouns = config.source === "annotation" ? "annotations" : "assemblies";
   const valueStr = !loaded ? "…" : failed ? "—" : fmtQuality(value, config.fmt);
   const has = loaded && !failed && value !== null;
-  const caption = failed ? "unavailable" : total > 0 ? `over ${fmt(total)} ${noun}` : `no ${noun} yet`;
+  const caption = failed ? "unavailable" : total > 0 ? `over ${fmt(total)} ${total === 1 ? noun : nouns}` : `no ${nouns} yet`;
   return (
     <article className="qtile" title={config.help}>
       <span className="qtile__label">{config.card_title}</span>
@@ -134,7 +135,9 @@ function CompositionBar({ composition }: { composition: AssemblyComposition }) {
     <div className="comp">
       <div className="comp__head">
         <span className="comp__title">Assembly contiguity</span>
-        <span className="comp__total">{fmt(total)} assemblies</span>
+        <span className="comp__total">
+          {fmt(total)} {total === 1 ? "assembly" : "assemblies"}
+        </span>
       </div>
 
       <div
