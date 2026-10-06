@@ -9,7 +9,9 @@ Resources:
 - ``GET /taxons/stats``                — the quality stats of the same taxa, page for page.
 - ``GET /taxons/report``               — every taxon the same list would page through, as TSV.
 - ``GET /taxons/aggregate``            — data for a set of clades (include minus exclude).
-- ``GET /taxons/{taxid}``              — one taxon: lineage, counts and quality stats.
+- ``GET /taxons/{taxid}``              — one taxon, the same object ``/taxons`` lists.
+- ``GET /taxons/{taxid}/ancestors``    — the root down to the taxon, as taxa.
+- ``GET /taxons/{taxid}/stats``        — the quality stats of one taxon.
 - ``GET /assemblies``                  — genome assemblies, optionally under a taxon.
 - ``GET /annotations``                 — gene annotations, optionally under a taxon.
 
@@ -29,7 +31,6 @@ from typing import Annotated
 
 import psycopg
 from eukahub_core.metrics import METRICS, QUALITY_STATS
-from eukahub_core.taxonomy import UNIT_RANKS
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -52,13 +53,14 @@ from eukahub_api.queries import (
     TaxonListRow,
     TaxonNotFound,
     TaxonSort,
+    fetch_ancestors,
     fetch_dataset_meta,
-    fetch_direct_totals,
     fetch_quality_for_taxids,
     fetch_root,
     fetch_set_quality,
     fetch_set_taxa,
     fetch_taxon,
+    fetch_taxon_stats,
     iter_report_tsv,
     list_records,
     list_taxa,
@@ -81,7 +83,6 @@ from eukahub_api.schemas import (
     QualityStatValue,
     ResourceSummary,
     Taxon,
-    TaxonItem,
     TaxonPage,
     TaxonRef,
     TaxonStats,
@@ -447,6 +448,12 @@ _TaxonSortBy = Annotated[
 _Limit = Annotated[int, Query(ge=1, le=1000)]
 
 
+def _taxon(r: TaxonListRow) -> Taxon:
+    summary = CladeSummary.from_metadata(r.name, r.rank, r.meta, r.is_infraspecific)
+    summary.direct = r.direct
+    return Taxon(**summary.model_dump(), context=r.context, has_children=r.has_children)
+
+
 def _taxa_page(
     conn: psycopg.Connection,
     f: TaxonFilter,
@@ -488,16 +495,7 @@ def taxons(
         limit=limit,
         next=result.next,
         previous=result.previous,
-        results=[
-            TaxonItem(
-                **CladeSummary.from_metadata(
-                    r.name, r.rank, r.meta, r.is_infraspecific
-                ).model_dump(),
-                context=r.context,
-                has_children=r.has_children,
-            )
-            for r in result.rows
-        ],
+        results=list(map(_taxon, result.rows)),
     )
 
 
@@ -603,29 +601,47 @@ def aggregate(
         n_rows=meta.n_rows,
         resources=ResourceSummary.by_metric(meta),
         composition=AssemblyComposition.from_metadata(meta),
-        quality=[QualityStatValue(key=q.key, value=quality[q.key]) for q in QUALITY_STATS],
+        stats=[QualityStatValue(key=q.key, value=quality[q.key]) for q in QUALITY_STATS],
     )
 
 
 @app.get("/taxons/{taxid}", response_model=Taxon)
 def taxon(taxid: int, conn: Conn) -> Taxon:
-    """One taxon: its lineage (root first, the taxon last), species count,
-    per-resource coverage, assembly composition, and the quality stats (best
-    BUSCO, median genes, genome size and N50) of every record under it. A
-    species, an informal species or a finer taxon also has ``direct``: its
-    records attached to the taxon itself rather than to a finer taxon below it."""
+    """One taxon, the same object ``/taxons`` lists: species count, per-resource
+    coverage and assembly composition. A species, an informal species or a finer
+    taxon also has ``direct``: its records attached to the taxon itself rather than
+    to a finer taxon below it."""
     try:
-        row = fetch_taxon(conn, taxid)
+        return _taxon(fetch_taxon(conn, taxid))
     except TaxonNotFound:
         raise HTTPException(status_code=404, detail=f"taxon {taxid} not found")
-    summary = CladeSummary.from_metadata(row.name, row.rank, row.meta, row.is_infraspecific)
-    if row.is_infraspecific or row.rank in UNIT_RANKS:
-        summary.direct = fetch_direct_totals(conn, taxid, row.meta)
-    return Taxon(
-        **summary.model_dump(),
-        lineage=[TaxonRef(taxid=t, name=n, rank=r) for t, n, r in row.lineage],
-        has_children=row.has_children,
-        stats=[QualityStatValue(key=k, value=v) for k, v in row.stats.items()],
+
+
+@app.get("/taxons/{taxid}/ancestors", response_model=TaxonPage)
+def taxon_ancestors(taxid: int, conn: Conn) -> TaxonPage:
+    """The root, every taxon below it down to this one, and this one, in that order,
+    as the same objects ``/taxons`` lists. One page: a lineage is at most a few
+    dozen taxa."""
+    try:
+        rows = fetch_ancestors(conn, taxid)
+    except TaxonNotFound:
+        raise HTTPException(status_code=404, detail=f"taxon {taxid} not found")
+    return TaxonPage(
+        total=len(rows), limit=len(rows), next=None, previous=None, results=list(map(_taxon, rows))
+    )
+
+
+@app.get("/taxons/{taxid}/stats", response_model=TaxonStats)
+def taxon_stats(taxid: int, conn: Conn) -> TaxonStats:
+    """The quality stats (best BUSCO, median genes, genome size and N50) of the
+    records on or below one taxon, the same object ``/taxons/stats`` lists. From a
+    few milliseconds for a genus to about 0.3 s for Eukaryota."""
+    try:
+        name, stats = fetch_taxon_stats(conn, taxid)
+    except TaxonNotFound:
+        raise HTTPException(status_code=404, detail=f"taxon {taxid} not found")
+    return TaxonStats(
+        taxid=taxid, name=name, stats=[QualityStatValue(key=k, value=v) for k, v in stats.items()]
     )
 
 

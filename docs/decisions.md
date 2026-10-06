@@ -110,20 +110,22 @@ Streamlit app that answered the same questions but was slow to build and to serv
   `/taxons/aggregate` computes any set. Nothing is precomputed, so a deployment
   changes its groups with a restart, not a rebuild. Groups under one parent may not
   overlap, so that they and the parent's "rest" group always add up to the parent.
-- **The API has one main resource, taxons, named like Annotrieve's.**
-  `/taxons/{taxid}` is a taxon with its lineage, counts and quality stats, and
+- **The API has one main resource, taxons, named like Annotrieve's.** A taxon is
+  one object everywhere: `/taxons/{taxid}` returns it, `/taxons` lists it, and
+  `/taxons/{taxid}/ancestors` gives the lineage as the same objects, root first.
   `/taxons` lists taxa by name, parent, rank under a taxon or taxid, sorted by any
   count or by the species still missing a resource (`gap_<key>`). Search, the tree's
   children, the data map, the gaps list, compare and the landing numbers are that
   one list with different filters, so each page's request is cached on its own and
-  nothing is computed twice. The list's quality stats are a separate resource,
-  `/taxons/stats`, paged with the same parameters and cursors: they cost about half
-  a second per page whatever its size (search takes 7 ms without them), so a list
-  that does not show them never pays for them, and no parameter changes a
-  response's shape. Records are their own collections (`/assemblies`,
-  `/annotations`), filtered by `within`, and `/taxons/report` is the whole list as
-  TSV. Names follow Annotrieve's API (`/taxons`, `sort_by`, `sort_order`, `results`,
-  `/report`), which the same people maintain and use.
+  nothing is computed twice. Quality stats are a resource of their own,
+  `/taxons/{taxid}/stats` and `/taxons/stats` (paged with the same parameters and
+  cursors as `/taxons`): a page of them costs about half a second whatever its size
+  (search takes 7 ms without them), so a list that does not show them never pays
+  for them, and no parameter changes a response's shape. Records are their own
+  collections (`/assemblies`, `/annotations`), filtered by `within`, and
+  `/taxons/report` is the whole list as TSV. Names follow Annotrieve's API
+  (`/taxons`, `/ancestors`, `sort_by`, `sort_order`, `results`, `/report`), which the
+  same people maintain and use.
 - **Lists page with a cursor, not an offset.** Each list sorts on keys that end in
   a unique one (the taxid or the record's accession), and a page's `next` and
   `previous` cursors hold the key values of its last and first rows. The next query

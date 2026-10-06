@@ -28,7 +28,8 @@ hit() {  # label, url  -> status, size, seconds (never aborts the script)
 echo "== What the UI requests (expect 200, ideally well under 15s each)"
 hit "overview (landing)"                  "$API/taxons?taxids=2759,40674,8782,7898,50557,4751,3398&limit=7"
 hit "gaps teaser (landing)"               "$API/taxons?within=2759&rank=order&sort_by=gap_ass&limit=5"
-hit "summary Eukaryota (dashboard)"       "$API/taxons/2759"
+hit "summary Eukaryota (dashboard)"       "$API/taxons/2759/ancestors"
+hit "stats Eukaryota (dashboard)"         "$API/taxons/2759/stats"
 hit "assemblies Eukaryota (records)"      "$API/assemblies?within=2759&limit=50"
 hit "annotations Eukaryota (records)"     "$API/annotations?within=2759&limit=50"
 hit "breakdown Eukaryota phylum (map)"    "$API/taxons?within=2759&rank=phylum&limit=250"
@@ -50,7 +51,7 @@ hit "quality Metazoa genus"   "$API/taxons/stats?within=33208&rank=genus&limit=1
 hit "quality Fungi genus"     "$API/taxons/stats?within=4751&rank=genus&limit=1000" &
 hit "gaps family"             "$API/taxons/stats?within=2759&rank=family&sort_by=gap_ass&limit=200" &
 hit "report Insecta species"  "$API/taxons/report?within=50557&rank=species" &
-hit "summary Mammalia"        "$API/taxons/40674" &
+hit "stats Mammalia"          "$API/taxons/40674/stats" &
 hit "children Metazoa"        "$API/taxons?parent=33208&limit=100" &
 wait
 

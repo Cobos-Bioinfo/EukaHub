@@ -9,7 +9,7 @@ field order, guarded by a test.
 
 from __future__ import annotations
 
-from collections.abc import Collection, Iterator, Sequence
+from collections.abc import Collection, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from enum import Enum
 
@@ -125,71 +125,63 @@ def fetch_root(conn: psycopg.Connection, taxid: int) -> tuple[str, str, str]:
     return row
 
 
-@dataclass(frozen=True, slots=True)
-class TaxonRow:
-    """One taxon with its lineage, rollup and quality stats (see ``fetch_taxon``)."""
-
-    name: str
-    rank: str
-    lineage: list[tuple[int, str, str]]  # (taxid, name, rank), root first, the taxon last
-    is_infraspecific: bool
-    has_children: bool
-    meta: CladeMetadata
-    stats: dict[str, float | None]  # QUALITY_STATS over every record in the subtree
-
-
-def fetch_taxon(conn: psycopg.Connection, taxid: int) -> TaxonRow:
-    """One taxon with its lineage, rollup row (zero-filled when it has none) and
-    the quality stats of the records under it. The ancestors are the labels of
-    its path, so they are primary-key lookups. Raises ``TaxonNotFound``."""
-    row = conn.execute(
-        f"SELECT t.name, t.rank, ltree2text(t.path), "
-        "EXISTS (SELECT 1 FROM taxon c WHERE c.parent_id = t.taxid AND c.taxid <> t.taxid), "
-        f"{', '.join('f.' + c for c in _FEATURE_COLS)} "
-        "FROM taxon t LEFT JOIN clade_features f USING (taxid) WHERE t.taxid = %s",
-        (taxid,),
-    ).fetchone()
-    if row is None:
-        raise TaxonNotFound(taxid)
-    name, rank, path, has_children, *features = row
-    labels = [int(label) for label in path.split(".")]
-    ranks = {
-        t: (n, r)
-        for t, n, r in conn.execute(
-            "SELECT taxid, name, rank FROM taxon WHERE taxid = ANY(%s)", (labels,)
+def _direct_totals(
+    conn: psycopg.Connection, units: Mapping[int, CladeMetadata]
+) -> dict[int, dict[str, int]]:
+    """Per-resource records attached to each of these taxa itself rather than to a
+    finer taxon below it: its totals minus its children's."""
+    if not units:
+        return {}
+    below = {
+        parent: sums
+        for parent, *sums in conn.execute(
+            f"SELECT c.parent_id, {', '.join(f'sum(f.{c})' for c in TOTAL_KEYS)} "
+            "FROM taxon c JOIN clade_features f USING (taxid) "
+            "WHERE c.parent_id = ANY(%s) AND c.taxid <> c.parent_id GROUP BY c.parent_id",
+            (list(units),),
         ).fetchall()
     }
-    lineage = [(t, *ranks[t]) for t in labels if t in ranks]
+    return {
+        taxid: {
+            key: getattr(meta, f"s_{key}") - int(n)
+            for key, n in zip(METRIC_KEYS, below.get(taxid, [0] * len(TOTAL_KEYS)), strict=True)
+        }
+        for taxid, meta in units.items()
+    }
+
+
+def fetch_taxon(conn: psycopg.Connection, taxid: int) -> TaxonListRow:
+    """One taxon, built exactly as ``list_taxa`` builds a list item. Raises
+    ``TaxonNotFound``."""
+    _total, result = list_taxa(
+        conn, TaxonFilter(taxids=[taxid]), sort=None, descending=True, limit=1, cursor=None
+    )
+    if not result.rows:
+        raise TaxonNotFound(taxid)
+    return result.rows[0]
+
+
+def fetch_ancestors(conn: psycopg.Connection, taxid: int) -> list[TaxonListRow]:
+    """The root, every taxon down to ``taxid``, and the taxon itself, in that order:
+    the labels of its path. Raises ``TaxonNotFound``."""
+    labels = [int(label) for label in fetch_root(conn, taxid)[2].split(".")]
+    _total, result = list_taxa(
+        conn, TaxonFilter(taxids=labels), sort=None, descending=True, limit=len(labels), cursor=None
+    )
+    depth = {t: i for i, t in enumerate(labels)}
+    return sorted(result.rows, key=lambda r: depth[r.meta.taxid])
+
+
+def fetch_taxon_stats(
+    conn: psycopg.Connection, taxid: int
+) -> tuple[str, dict[str, float | None]]:
+    """``(name, QUALITY_STATS)`` of one taxon over the records on or below it. Raises
+    ``TaxonNotFound``."""
+    name, _rank, path = fetch_root(conn, taxid)
     stats: dict[str, float | None] = {}
     for source in ("assembly", "annotation"):
         stats |= _fetch_quality_stats(conn, source, path)[1]
-    return TaxonRow(
-        name=name,
-        rank=rank,
-        lineage=lineage,
-        is_infraspecific=any(r in UNIT_RANKS for _t, _n, r in lineage[:-1]),
-        has_children=has_children,
-        meta=(
-            CladeMetadata.zero(taxid) if features[0] is None else CladeMetadata(taxid, *features)
-        ),
-        stats={q.key: stats[q.key] for q in QUALITY_STATS},
-    )
-
-
-def fetch_direct_totals(
-    conn: psycopg.Connection, taxid: int, meta: CladeMetadata
-) -> dict[str, int]:
-    """Per-resource records attached to the taxon itself rather than to a finer
-    taxon below it: its subtree totals minus its children's."""
-    below = conn.execute(
-        f"SELECT {', '.join(f'COALESCE(sum(f.{c}), 0)' for c in TOTAL_KEYS)} "
-        "FROM taxon c JOIN clade_features f USING (taxid) "
-        "WHERE c.parent_id = %s AND c.taxid <> c.parent_id",
-        (taxid,),
-    ).fetchone()
-    return {
-        key: getattr(meta, f"s_{key}") - int(n) for key, n in zip(METRIC_KEYS, below, strict=True)
-    }
+    return name, {q.key: stats[q.key] for q in QUALITY_STATS}
 
 
 def fetch_dataset_meta(
@@ -355,6 +347,7 @@ class TaxonListRow:
     context: str | None
     is_infraspecific: bool
     has_children: bool
+    direct: dict[str, int] | None  # species and finer taxa only
 
 
 def list_taxa(
@@ -395,16 +388,19 @@ def list_taxa(
     else:
         total = conn.execute(f"SELECT count(*) FROM ({matches}) m", matches_params).fetchone()[0]
     n_keys = len(keys)
-    items: list[TaxonListRow] = []
-    keys_of: list[list[object]] = []
+    keys_of = [list(row[1 : 1 + n_keys]) for row in rows]
+    parsed = []
     for row in rows:
-        keys_of.append(list(row[1 : 1 + n_keys]))
         taxid, name, rank, *rest = row[1 + n_keys :]
         *features, has_children, is_infraspecific, context = rest
         meta = (
             CladeMetadata.zero(taxid) if features[0] is None else CladeMetadata(taxid, *features)
         )
-        items.append(TaxonListRow(meta, name, rank, context, is_infraspecific, has_children))
+        parsed.append((meta, name, rank, context, is_infraspecific, has_children))
+    direct = _direct_totals(
+        conn, {p[0].taxid: p[0] for p in parsed if p[4] or p[2] in UNIT_RANKS}
+    )
+    items = [TaxonListRow(*p, direct=direct.get(p[0].taxid)) for p in parsed]
     return total, page(items, keys_of, limit=limit, cursor=after, ordering=ordering)
 
 

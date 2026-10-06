@@ -40,8 +40,8 @@ def test_taxids_lists_those_taxa(client):
 )
 def test_stats_follow_the_list_page_for_page(client, params):
     """/taxons/stats holds the same taxa as /taxons for the same parameters, in the
-    same order and with the same cursors, and each taxon's stats are the ones
-    /taxons/{taxid} serves."""
+    same order and with the same cursors, and each item is the object
+    /taxons/{taxid}/stats returns."""
     listed = client.get("/taxons", params=params).json()
     stats = client.get("/taxons/stats", params=params).json()
     assert [s["taxid"] for s in stats["results"]] == [it["taxid"] for it in listed["results"]]
@@ -51,7 +51,7 @@ def test_stats_follow_the_list_page_for_page(client, params):
     for s in stats["results"][:3]:
         assert set(s) == {"taxid", "name", "stats"}
         assert [v["key"] for v in s["stats"]] == list(QUALITY_KEYS)
-        assert s["stats"] == client.get(f"/taxons/{s['taxid']}").json()["stats"]
+        assert s == client.get(f"/taxons/{s['taxid']}/stats").json()
 
 
 def test_stats_page_with_the_list_cursor(client):

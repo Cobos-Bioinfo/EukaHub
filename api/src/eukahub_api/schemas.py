@@ -233,18 +233,6 @@ class TaxonRef(BaseModel):
     rank: str
 
 
-class Taxon(CladeSummary):
-    """One taxon (served by ``/taxons/{taxid}``): its lineage, its counts, and the
-    quality stats of every record under it."""
-
-    lineage: list[TaxonRef] = Field(description="The root first, this taxon last.")
-    has_children: bool
-    stats: list[QualityStatValue] = Field(
-        description="Computed per request from every record on or below the taxon; "
-        "/config says which aggregation each one is."
-    )
-
-
 class QualityStatValue(BaseModel):
     """A quality stat of a taxon: the median or the maximum (see ``aggregation`` in
     ``/config``) of one field over the records on or below it."""
@@ -345,8 +333,10 @@ class AnnotationPage(Page):
     results: list[AnnotationRecord]
 
 
-class TaxonItem(CladeSummary):
-    """One taxon in a list (served by ``/taxons``)."""
+class Taxon(CladeSummary):
+    """One taxon: the object ``/taxons/{taxid}`` returns and ``/taxons`` lists. Its
+    ancestors are in ``/taxons/{taxid}/ancestors`` and its quality stats in
+    ``/taxons/{taxid}/stats``."""
 
     context: str | None = Field(
         description="Nearest class, phylum or kingdom above the taxon, to tell homonyms apart."
@@ -355,11 +345,12 @@ class TaxonItem(CladeSummary):
 
 
 class TaxonPage(Page):
-    results: list[TaxonItem]
+    results: list[Taxon]
 
 
 class TaxonStats(BaseModel):
-    """The quality stats of one taxon in a list (served by ``/taxons/stats``)."""
+    """The quality stats of one taxon: the object ``/taxons/{taxid}/stats`` returns
+    and ``/taxons/stats`` lists."""
 
     taxid: int
     name: str
@@ -383,7 +374,9 @@ class Aggregate(BaseModel):
     n_rows: int  # species in the set
     resources: dict[str, ResourceSummary]  # keyed by metric key, in METRICS order
     composition: AssemblyComposition
-    quality: list[QualityStatValue]  # BUSCO / genes / genome size / N50, QUALITY_STATS order
+    stats: list[QualityStatValue] = Field(
+        description="As for a taxon, over the records in the set."
+    )
 
 
 class CustomGroupItem(BaseModel):

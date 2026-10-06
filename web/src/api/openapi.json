@@ -25,19 +25,20 @@
             "title": "N Rows",
             "type": "integer"
           },
-          "quality": {
-            "items": {
-              "$ref": "#/components/schemas/QualityStatValue"
-            },
-            "title": "Quality",
-            "type": "array"
-          },
           "resources": {
             "additionalProperties": {
               "$ref": "#/components/schemas/ResourceSummary"
             },
             "title": "Resources",
             "type": "object"
+          },
+          "stats": {
+            "description": "As for a taxon, over the records in the set.",
+            "items": {
+              "$ref": "#/components/schemas/QualityStatValue"
+            },
+            "title": "Stats",
+            "type": "array"
           }
         },
         "required": [
@@ -46,7 +47,7 @@
           "n_rows",
           "resources",
           "composition",
-          "quality"
+          "stats"
         ],
         "title": "Aggregate",
         "type": "object"
@@ -975,94 +976,7 @@
         "type": "string"
       },
       "Taxon": {
-        "description": "One taxon (served by ``/taxons/{taxid}``): its lineage, its counts, and the\nquality stats of every record under it.",
-        "properties": {
-          "composition": {
-            "$ref": "#/components/schemas/AssemblyComposition"
-          },
-          "direct": {
-            "anyOf": [
-              {
-                "additionalProperties": {
-                  "type": "integer"
-                },
-                "type": "object"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "Species and finer taxa only: per resource, the records on the taxon itself; the rest of each total is on the taxa below it.",
-            "title": "Direct"
-          },
-          "has_children": {
-            "title": "Has Children",
-            "type": "boolean"
-          },
-          "is_infraspecific": {
-            "default": false,
-            "description": "Below a species (subspecies, strain, ...): one unit whose data also counts for its species.",
-            "title": "Is Infraspecific",
-            "type": "boolean"
-          },
-          "lineage": {
-            "description": "The root first, this taxon last.",
-            "items": {
-              "$ref": "#/components/schemas/TaxonRef"
-            },
-            "title": "Lineage",
-            "type": "array"
-          },
-          "n_rows": {
-            "description": "Species on or below the taxon (1 for a species or a finer taxon).",
-            "title": "N Rows",
-            "type": "integer"
-          },
-          "name": {
-            "title": "Name",
-            "type": "string"
-          },
-          "rank": {
-            "title": "Rank",
-            "type": "string"
-          },
-          "resources": {
-            "additionalProperties": {
-              "$ref": "#/components/schemas/ResourceSummary"
-            },
-            "description": "Per resource, keyed by the metric keys in /config.",
-            "title": "Resources",
-            "type": "object"
-          },
-          "stats": {
-            "description": "Computed per request from every record on or below the taxon; /config says which aggregation each one is.",
-            "items": {
-              "$ref": "#/components/schemas/QualityStatValue"
-            },
-            "title": "Stats",
-            "type": "array"
-          },
-          "taxid": {
-            "title": "Taxid",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "taxid",
-          "name",
-          "rank",
-          "n_rows",
-          "resources",
-          "composition",
-          "lineage",
-          "has_children",
-          "stats"
-        ],
-        "title": "Taxon",
-        "type": "object"
-      },
-      "TaxonItem": {
-        "description": "One taxon in a list (served by ``/taxons``).",
+        "description": "One taxon: the object ``/taxons/{taxid}`` returns and ``/taxons`` lists. Its\nancestors are in ``/taxons/{taxid}/ancestors`` and its quality stats in\n``/taxons/{taxid}/stats``.",
         "properties": {
           "composition": {
             "$ref": "#/components/schemas/AssemblyComposition"
@@ -1140,7 +1054,7 @@
           "context",
           "has_children"
         ],
-        "title": "TaxonItem",
+        "title": "Taxon",
         "type": "object"
       },
       "TaxonPage": {
@@ -1173,7 +1087,7 @@
           },
           "results": {
             "items": {
-              "$ref": "#/components/schemas/TaxonItem"
+              "$ref": "#/components/schemas/Taxon"
             },
             "title": "Results",
             "type": "array"
@@ -1243,7 +1157,7 @@
         "type": "string"
       },
       "TaxonStats": {
-        "description": "The quality stats of one taxon in a list (served by ``/taxons/stats``).",
+        "description": "The quality stats of one taxon: the object ``/taxons/{taxid}/stats`` returns\nand ``/taxons/stats`` lists.",
         "properties": {
           "name": {
             "title": "Name",
@@ -2363,7 +2277,7 @@
     },
     "/taxons/{taxid}": {
       "get": {
-        "description": "One taxon: its lineage (root first, the taxon last), species count,\nper-resource coverage, assembly composition, and the quality stats (best\nBUSCO, median genes, genome size and N50) of every record under it. A\nspecies, an informal species or a finer taxon also has ``direct``: its\nrecords attached to the taxon itself rather than to a finer taxon below it.",
+        "description": "One taxon, the same object ``/taxons`` lists: species count, per-resource\ncoverage and assembly composition. A species, an informal species or a finer\ntaxon also has ``direct``: its records attached to the taxon itself rather than\nto a finer taxon below it.",
         "operationId": "taxon_taxons__taxid__get",
         "parameters": [
           {
@@ -2399,6 +2313,86 @@
           }
         },
         "summary": "Taxon"
+      }
+    },
+    "/taxons/{taxid}/ancestors": {
+      "get": {
+        "description": "The root, every taxon below it down to this one, and this one, in that order,\nas the same objects ``/taxons`` lists. One page: a lineage is at most a few\ndozen taxa.",
+        "operationId": "taxon_ancestors_taxons__taxid__ancestors_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "taxid",
+            "required": true,
+            "schema": {
+              "title": "Taxid",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaxonPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Taxon Ancestors"
+      }
+    },
+    "/taxons/{taxid}/stats": {
+      "get": {
+        "description": "The quality stats (best BUSCO, median genes, genome size and N50) of the\nrecords on or below one taxon, the same object ``/taxons/stats`` lists. From a\nfew milliseconds for a genus to about 0.3 s for Eukaryota.",
+        "operationId": "taxon_stats_taxons__taxid__stats_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "taxid",
+            "required": true,
+            "schema": {
+              "title": "Taxid",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaxonStats"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Taxon Stats"
       }
     }
   }

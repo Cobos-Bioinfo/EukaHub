@@ -18,9 +18,9 @@ import type {
   SortOrder,
   TargetRank,
   Taxon,
-  TaxonItem,
   TaxonPage,
   TaxonSort,
+  TaxonStats,
   TaxonStatsPage,
 } from "./types";
 
@@ -80,10 +80,20 @@ export const getQualityConfig = async (): Promise<QualityStatConfig[]> =>
 // null before the first build has stamped the DB.
 export const getMeta = async (): Promise<DatasetMeta> => (await getConfig()).dataset;
 
-// One taxon: its lineage (root first, the taxon last), counts and the quality
-// stats of every record under it.
-export const getTaxon = async (taxid: number): Promise<Taxon> =>
-  unwrap(await api.GET("/taxons/{taxid}", { params: { path: { taxid } } }));
+/** A taxon with its lineage: the root first, the taxon itself last. */
+export type TaxonWithLineage = Taxon & { lineage: Taxon[] };
+
+// One taxon and its ancestors in one request: the ancestors end with the taxon.
+export async function getTaxon(taxid: number): Promise<TaxonWithLineage> {
+  const { results } = unwrap(
+    await api.GET("/taxons/{taxid}/ancestors", { params: { path: { taxid } } }),
+  );
+  return { ...results[results.length - 1], lineage: results };
+}
+
+// The quality stats of the records on or below one taxon.
+export const getTaxonStats = async (taxid: number): Promise<TaxonStats> =>
+  unwrap(await api.GET("/taxons/{taxid}/stats", { params: { path: { taxid } } }));
 
 // Taxa with their counts: a name search (q, or close spellings with fuzzy), a
 // taxon's children (parent), the taxa of a rank under a taxon (within + rank) or
@@ -127,7 +137,7 @@ export const getChildren = (
 ): Promise<TaxonPage> => getTaxa({ parent: taxid, ...params });
 
 /** A name-search result for the picker. */
-export type SearchHit = TaxonItem & { has_data: boolean; similar: boolean };
+export type SearchHit = Taxon & { has_data: boolean; similar: boolean };
 
 // Names containing the query; when none does, close spellings (`similar`).
 export async function searchTaxa(q: string, limit = 10): Promise<SearchHit[]> {
@@ -202,7 +212,7 @@ export async function getOverview(): Promise<Overview> {
 }
 
 /** One group in the compare view: its counts and quality stats. */
-export type CompareGroup = TaxonItem & { quality: QualityStatValue[] };
+export type CompareGroup = Taxon & { quality: QualityStatValue[] };
 
 // Several groups side by side, in the order given; unknown taxids are dropped.
 export async function getCompare(taxids: number[]): Promise<{ groups: CompareGroup[] }> {
@@ -247,7 +257,7 @@ export async function getGaps({
   resource = "ass",
   limit = 25,
   include_quality = true,
-}: GapsParams = {}): Promise<{ root: TaxonItem; total_matches: number; items: GapItem[] }> {
+}: GapsParams = {}): Promise<{ root: Taxon; total_matches: number; items: GapItem[] }> {
   const params = { within: root, rank, sort_by: `gap_${resource}` as TaxonSort, limit };
   const [roots, page, stats] = await Promise.all([
     getTaxa({ taxids: [root], limit: 1 }),
@@ -347,7 +357,7 @@ export interface BreakdownParams {
 export interface Breakdown {
   total_matches: number; // taxa matching, before `limit`
   returned: number;
-  items: TaxonItem[];
+  items: Taxon[];
 }
 
 const breakdownQuery = (taxid: number, p: BreakdownParams): TaxaParams => ({

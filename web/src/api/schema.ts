@@ -215,13 +215,56 @@ export interface paths {
         };
         /**
          * Taxon
-         * @description One taxon: its lineage (root first, the taxon last), species count,
-         *     per-resource coverage, assembly composition, and the quality stats (best
-         *     BUSCO, median genes, genome size and N50) of every record under it. A
-         *     species, an informal species or a finer taxon also has ``direct``: its
-         *     records attached to the taxon itself rather than to a finer taxon below it.
+         * @description One taxon, the same object ``/taxons`` lists: species count, per-resource
+         *     coverage and assembly composition. A species, an informal species or a finer
+         *     taxon also has ``direct``: its records attached to the taxon itself rather than
+         *     to a finer taxon below it.
          */
         get: operations["taxon_taxons__taxid__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/taxons/{taxid}/ancestors": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Taxon Ancestors
+         * @description The root, every taxon below it down to this one, and this one, in that order,
+         *     as the same objects ``/taxons`` lists. One page: a lineage is at most a few
+         *     dozen taxa.
+         */
+        get: operations["taxon_ancestors_taxons__taxid__ancestors_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/taxons/{taxid}/stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Taxon Stats
+         * @description The quality stats (best BUSCO, median genes, genome size and N50) of the
+         *     records on or below one taxon, the same object ``/taxons/stats`` lists. From a
+         *     few milliseconds for a genus to about 0.3 s for Eukaryota.
+         */
+        get: operations["taxon_stats_taxons__taxid__stats_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -248,12 +291,15 @@ export interface components {
             include: components["schemas"]["TaxonRef"][];
             /** N Rows */
             n_rows: number;
-            /** Quality */
-            quality: components["schemas"]["QualityStatValue"][];
             /** Resources */
             resources: {
                 [key: string]: components["schemas"]["ResourceSummary"];
             };
+            /**
+             * Stats
+             * @description As for a taxon, over the records in the set.
+             */
+            stats: components["schemas"]["QualityStatValue"][];
         };
         /** AnnotationPage */
         AnnotationPage: {
@@ -599,60 +645,11 @@ export interface components {
         TargetRank: "phylum" | "class" | "order" | "family" | "genus" | "species";
         /**
          * Taxon
-         * @description One taxon (served by ``/taxons/{taxid}``): its lineage, its counts, and the
-         *     quality stats of every record under it.
+         * @description One taxon: the object ``/taxons/{taxid}`` returns and ``/taxons`` lists. Its
+         *     ancestors are in ``/taxons/{taxid}/ancestors`` and its quality stats in
+         *     ``/taxons/{taxid}/stats``.
          */
         Taxon: {
-            composition: components["schemas"]["AssemblyComposition"];
-            /**
-             * Direct
-             * @description Species and finer taxa only: per resource, the records on the taxon itself; the rest of each total is on the taxa below it.
-             */
-            direct?: {
-                [key: string]: number;
-            } | null;
-            /** Has Children */
-            has_children: boolean;
-            /**
-             * Is Infraspecific
-             * @description Below a species (subspecies, strain, ...): one unit whose data also counts for its species.
-             * @default false
-             */
-            is_infraspecific: boolean;
-            /**
-             * Lineage
-             * @description The root first, this taxon last.
-             */
-            lineage: components["schemas"]["TaxonRef"][];
-            /**
-             * N Rows
-             * @description Species on or below the taxon (1 for a species or a finer taxon).
-             */
-            n_rows: number;
-            /** Name */
-            name: string;
-            /** Rank */
-            rank: string;
-            /**
-             * Resources
-             * @description Per resource, keyed by the metric keys in /config.
-             */
-            resources: {
-                [key: string]: components["schemas"]["ResourceSummary"];
-            };
-            /**
-             * Stats
-             * @description Computed per request from every record on or below the taxon; /config says which aggregation each one is.
-             */
-            stats: components["schemas"]["QualityStatValue"][];
-            /** Taxid */
-            taxid: number;
-        };
-        /**
-         * TaxonItem
-         * @description One taxon in a list (served by ``/taxons``).
-         */
-        TaxonItem: {
             composition: components["schemas"]["AssemblyComposition"];
             /**
              * Context
@@ -702,7 +699,7 @@ export interface components {
             /** Previous */
             previous: string | null;
             /** Results */
-            results: components["schemas"]["TaxonItem"][];
+            results: components["schemas"]["Taxon"][];
             /** Total */
             total: number;
         };
@@ -725,7 +722,8 @@ export interface components {
         TaxonSort: "n_rows" | "c_ass" | "c_ann" | "c_rna" | "c_lng" | "s_ass" | "s_ann" | "s_rna" | "s_lng" | "n_ass_complete" | "n_ass_chromosome" | "n_ass_scaffold" | "n_ass_contig" | "n_reference" | "gap_ass" | "gap_ann" | "gap_rna" | "gap_lng" | "name";
         /**
          * TaxonStats
-         * @description The quality stats of one taxon in a list (served by ``/taxons/stats``).
+         * @description The quality stats of one taxon: the object ``/taxons/{taxid}/stats`` returns
+         *     and ``/taxons/stats`` lists.
          */
         TaxonStats: {
             /** Name */
@@ -1122,6 +1120,68 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Taxon"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    taxon_ancestors_taxons__taxid__ancestors_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                taxid: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaxonPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    taxon_stats_taxons__taxid__stats_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                taxid: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaxonStats"];
                 };
             };
             /** @description Validation Error */

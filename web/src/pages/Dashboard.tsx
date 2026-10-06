@@ -1,6 +1,12 @@
 import { Link, useParams } from "react-router";
 
-import { getAbout, getMetricsConfig, getQualityConfig, getTaxon } from "../api/queries";
+import {
+  getAbout,
+  getMetricsConfig,
+  getQualityConfig,
+  getTaxon,
+  getTaxonStats,
+} from "../api/queries";
 import AboutCard from "../components/AboutCard";
 import Breadcrumb from "../components/Breadcrumb";
 import BreakdownMap from "../components/BreakdownMap";
@@ -23,6 +29,7 @@ export default function Dashboard() {
   const validId = Number.isInteger(taxid) && taxid > 0;
 
   const summary = useAsync(() => getTaxon(taxid), [taxid]);
+  const stats = useAsync(() => getTaxonStats(taxid), [taxid]);
   const metrics = useAsync(() => getMetricsConfig(), []);
   const quality = useAsync(() => getQualityConfig(), []);
   // Decorative Wikipedia context — never gates the page; rendered only if it
@@ -129,7 +136,10 @@ export default function Dashboard() {
           {quality.data && !noData && (
             <QualitySection
               quality={quality.data}
-              stats={s.stats}
+              stats={stats.data?.stats}
+              loading={stats.loading}
+              error={stats.error}
+              retry={stats.reload}
               assemblies={s.resources.ass.total}
               annotations={s.resources.ann.total}
               composition={s.composition}

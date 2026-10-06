@@ -176,36 +176,45 @@ def test_taxon_clade_not_infraspecific(client):
     assert client.get("/taxons/2759").json()["is_infraspecific"] is False
 
 
-def test_taxon_lineage_homo_sapiens(client):
-    body = client.get("/taxons/9606").json()
-    # Node fields echo the deepest lineage entry.
-    assert body["taxid"] == 9606
-    assert body["name"] == "Homo sapiens"
-    assert body["rank"] == "species"
+def test_taxon_is_the_object_the_list_returns(client):
+    """/taxons/{taxid} and /taxons share one schema and one builder."""
+    for taxid in (2759, 40674, 9606):
+        one = client.get(f"/taxons/{taxid}").json()
+        assert client.get("/taxons", params={"taxids": taxid}).json()["results"] == [one]
 
-    lin = body["lineage"]
+
+def test_taxon_ancestors_homo_sapiens(client):
+    body = client.get("/taxons/9606/ancestors").json()
+    lin = body["results"]
+    assert body["total"] == len(lin) and body["next"] is None
     assert lin[0]["taxid"] == 1  # root first
-    assert lin[-1]["taxid"] == 9606  # this taxon last
-    # A known ancestor sits somewhere in between.
-    assert any(hop["taxid"] == 2759 and hop["name"] == "Eukaryota" for hop in lin)
-    # Strictly increasing depth (root -> node), and each hop is unique.
-    taxids = [hop["taxid"] for hop in lin]
+    assert lin[-1] == client.get("/taxons/9606").json()  # the taxon itself last
+    assert any(a["taxid"] == 2759 and a["name"] == "Eukaryota" for a in lin)
+    taxids = [a["taxid"] for a in lin]
     assert len(taxids) == len(set(taxids))
+    # Every ancestor contains the next, so species counts never grow downwards.
+    counts = [a["n_rows"] for a in lin]
+    assert counts == sorted(counts, reverse=True)
 
 
-def test_taxon_lineage_root_is_singleton(client):
-    body = client.get("/taxons/1").json()
-    assert [hop["taxid"] for hop in body["lineage"]] == [1]
+def test_taxon_ancestors_of_the_root(client):
+    assert [a["taxid"] for a in client.get("/taxons/1/ancestors").json()["results"]] == [1]
 
 
-def test_taxon_quality_stats(client):
+def test_taxon_stats(client):
     """The stats cover every record under the taxon: one per QUALITY_STATS key,
     with BUSCO a percentage."""
-    body = client.get("/taxons/9606").json()
+    body = client.get("/taxons/9606/stats").json()
+    assert body["taxid"] == 9606 and body["name"] == "Homo sapiens"
     assert [s["key"] for s in body["stats"]] == list(QUALITY_KEYS)
     stats = {s["key"]: s["value"] for s in body["stats"]}
     assert stats["genome_size"] > 0 and stats["contig_n50"] > 0  # human has genomes
     assert 0.0 <= stats["busco"] <= 100.0
+
+
+def test_taxon_sub_resources_of_an_unknown_taxon(client):
+    assert client.get("/taxons/999999999/ancestors").status_code == 404
+    assert client.get("/taxons/999999999/stats").status_code == 404
 
 
 def test_taxon_has_children(client):

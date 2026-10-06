@@ -14,16 +14,23 @@ const LEVELS = [
 /** The enrichment "Data quality" band for a taxon: its quality stats (BUSCO,
  *  gene count, genome size, N50) as stat tiles, plus an assembly contiguity bar
  *  from the additive composition counts. Shown on every dashboard (clade /
- *  species / leaf); the full record lists live in the drill-down browser below. */
+ *  species / leaf); the full record lists live in the drill-down browser below.
+ *  The counts arrive with the taxon; the stats are a slower request of their own. */
 export default function QualitySection({
   quality,
   stats,
+  loading,
+  error,
+  retry,
   assemblies,
   annotations,
   composition,
 }: {
   quality: QualityStatConfig[];
-  stats: QualityStatValue[];
+  stats: QualityStatValue[] | undefined;
+  loading: boolean;
+  error?: string;
+  retry: () => void;
   assemblies: number;
   annotations: number;
   composition: AssemblyComposition;
@@ -31,7 +38,7 @@ export default function QualitySection({
   // Nothing to show for a clade with no assemblies and no annotations.
   if (assemblies === 0 && annotations === 0) return null;
 
-  const values = new Map(stats.map((s) => [s.key, s.value]));
+  const values = new Map((stats ?? []).map((s) => [s.key, s.value]));
   return (
     <section className="quality" aria-labelledby="quality-title">
       <header className="quality__head">
@@ -43,6 +50,15 @@ export default function QualitySection({
         </p>
       </header>
 
+      {error && (
+        <p className="notice notice--error notice--inline" role="alert">
+          Could not load the quality stats: {error}{" "}
+          <button type="button" className="link-btn" onClick={retry}>
+            Retry
+          </button>
+        </p>
+      )}
+
       <div className="quality__tiles">
         {quality.map((q) => (
           <QualityTile
@@ -50,6 +66,7 @@ export default function QualitySection({
             config={q}
             value={values.get(q.key) ?? null}
             total={q.source === "annotation" ? annotations : assemblies}
+            state={loading ? "loading" : error ? "failed" : "ready"}
           />
         ))}
       </div>
@@ -65,22 +82,28 @@ function QualityTile({
   config,
   value,
   total,
+  state,
 }: {
   config: QualityStatConfig;
   value: number | null;
   total: number;
+  state: "loading" | "failed" | "ready";
 }) {
   const noun = config.source === "annotation" ? "annotation" : "assembly";
   const nouns = config.source === "annotation" ? "annotations" : "assemblies";
-  const has = value !== null;
+  const has = state === "ready" && value !== null;
+  const shown =
+    state === "loading" ? "…" : state === "failed" ? "—" : fmtQuality(value, config.fmt);
   const caption =
-    total > 0 ? `over ${fmt(total)} ${total === 1 ? noun : nouns}` : `no ${nouns} yet`;
+    state === "failed"
+      ? "unavailable"
+      : total > 0
+        ? `over ${fmt(total)} ${total === 1 ? noun : nouns}`
+        : `no ${nouns} yet`;
   return (
     <article className="qtile" title={config.help}>
       <span className="qtile__label">{config.card_title}</span>
-      <span className={`qtile__value${has ? "" : " qtile__value--empty"}`}>
-        {fmtQuality(value, config.fmt)}
-      </span>
+      <span className={`qtile__value${has ? "" : " qtile__value--empty"}`}>{shown}</span>
       <span className="qtile__cap">{caption}</span>
     </article>
   );

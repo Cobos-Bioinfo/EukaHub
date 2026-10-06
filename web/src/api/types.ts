@@ -9,13 +9,13 @@ export type AppConfig = components["schemas"]["AppConfig"];
 export type CladeGroup = components["schemas"]["CladeGroup"];
 export type TaxonRef = components["schemas"]["TaxonRef"];
 export type Taxon = components["schemas"]["Taxon"];
-export type TaxonItem = components["schemas"]["TaxonItem"];
 export type TaxonPage = components["schemas"]["TaxonPage"];
+export type TaxonStats = components["schemas"]["TaxonStats"];
 export type TaxonStatsPage = components["schemas"]["TaxonStatsPage"];
 // The counts every taxon carries, alone or in a list.
-export type CladeSummary = Omit<Taxon, "lineage" | "has_children" | "stats">;
+export type CladeSummary = Omit<Taxon, "context" | "has_children">;
 // A taxon in the interactive tree.
-export type TaxonNode = TaxonItem;
+export type TaxonNode = Taxon;
 
 // Assembly-composition + quality dimension (data-model enrichment, Stage C/D).
 export type AssemblyComposition = components["schemas"]["AssemblyComposition"];
