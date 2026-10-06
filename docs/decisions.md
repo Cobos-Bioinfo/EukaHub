@@ -133,8 +133,9 @@ Streamlit app that answered the same questions but was slow to build and to serv
   and throws away, so a deep page costs what the first does and an indexed sort
   can start where the cursor points. The cursor is opaque base64url JSON naming its
   sort order; one from another order is refused with a 422. Records missing the
-  sort field come last in either direction. Lists still report `total`, counted
-  in the same query.
+  sort field come last in either direction. Lists still report `total`; each filter
+  set is counted once per dataset build and kept in a small in-process cache (about
+  2 MB at most), since the data only changes when a new build is installed.
 - **The root taxids stay in code**, in one constant per side
   (`eukahub_core.taxonomy` and `web/src/lib/taxonomy.ts`). The dataset is built and
   validated for Eukaryota, so another root needs a rebuild and new checks anyway.

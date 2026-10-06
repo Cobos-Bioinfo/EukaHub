@@ -30,6 +30,7 @@ from psycopg_pool import ConnectionPool
 from eukahub_api.clade_sets import SetTaxon
 from eukahub_api.pagination import Key, Page, beyond, key_columns, order_by, page
 from eukahub_api.pagination import decode as decode_cursor
+from eukahub_api.totals import counts
 
 # n_rows, then c_* (COVERAGE_KEYS), then s_* (TOTAL_KEYS), then the additive
 # composition columns — the exact tail of CladeMetadata's constructor after
@@ -55,6 +56,9 @@ TaxonSort = Enum(
     | {"name": "name"},
     type=str,
 )
+
+# Most rows one page of a list may hold.
+MAX_PAGE = 1000
 
 # Ranks the breakdown can target (ported from Euka-Survey's ALLOWED_RANKS).
 ALLOWED_RANKS: tuple[str, ...] = ("phylum", "class", "order", "family", "genus", "species")
@@ -365,33 +369,35 @@ def list_taxa(
     ordering, keys, key_params = _taxon_keys(sort, descending, f)
     after = decode_cursor(cursor, ordering=ordering, keys=keys) if cursor else None
     where, where_params = _taxon_where(f)
-    needs_features = any("f." in k.sql for k in keys) or f.exclude_empty or bool(f.filter_keys)
+    filters_need_features = f.exclude_empty or bool(f.filter_keys)
+    needs_features = filters_need_features or any("f." in k.sql for k in keys)
+    where_sql = f"WHERE {' AND '.join(where)}" if where else ""
+    total = counts.count(
+        conn,
+        "SELECT t.taxid FROM taxon t "
+        f"{'LEFT JOIN clade_features f USING (taxid) ' if filters_need_features else ''}{where_sql}",
+        where_params,
+    )
     matches = (
         f"SELECT t.taxid AS id, {key_columns(keys)} FROM taxon t "
-        f"{'LEFT JOIN clade_features f USING (taxid) ' if needs_features else ''}"
-        f"{'WHERE ' + ' AND '.join(where) if where else ''}"
+        f"{'LEFT JOIN clade_features f USING (taxid) ' if needs_features else ''}{where_sql}"
     )
-    matches_params = [*key_params, *where_params]
     beyond_sql, beyond_params = beyond(keys, after) if after else ("TRUE", [])
     backward = after is not None and after.backward
+    # The page is the top `limit + 1` rows of a sort, so the database keeps only
+    # that many in memory; the details are read for those rows alone.
     sql = (
-        f"WITH m AS MATERIALIZED ({matches}), "
-        f"p AS (SELECT * FROM m WHERE {beyond_sql} "
+        f"WITH p AS (SELECT * FROM ({matches}) m WHERE {beyond_sql} "
         f"ORDER BY {order_by(keys, backward=backward)} LIMIT %s) "
-        f"SELECT (SELECT count(*) FROM m) AS total, "
-        f"{', '.join(f'p.k{i}' for i in range(len(keys)))}, {_TAXON_ITEM_SQL} "
+        f"SELECT {', '.join(f'p.k{i}' for i in range(len(keys)))}, {_TAXON_ITEM_SQL} "
         f"ORDER BY {order_by(keys, backward=backward, table='p')}"
     )
-    rows = conn.execute(sql, [*matches_params, *beyond_params, limit + 1]).fetchall()
-    if rows:
-        total = rows[0][0]
-    else:
-        total = conn.execute(f"SELECT count(*) FROM ({matches}) m", matches_params).fetchone()[0]
+    rows = conn.execute(sql, [*key_params, *where_params, *beyond_params, limit + 1]).fetchall()
     n_keys = len(keys)
-    keys_of = [list(row[1 : 1 + n_keys]) for row in rows]
+    keys_of = [list(row[:n_keys]) for row in rows]
     parsed = []
     for row in rows:
-        taxid, name, rank, *rest = row[1 + n_keys :]
+        taxid, name, rank, *rest = row[n_keys:]
         *features, has_children, is_infraspecific, context = rest
         meta = (
             CladeMetadata.zero(taxid) if features[0] is None else CladeMetadata(taxid, *features)
@@ -558,32 +564,23 @@ def list_records(
     ordering = f"{source}:{sort}:{'desc' if descending else 'asc'}"
     after = decode_cursor(cursor, ordering=ordering, keys=keys) if cursor else None
     where, params = ("WHERE t.path <@ %s::ltree", [within_path]) if within_path else ("", [])
-    matches = (
-        f"SELECT r.{_RECORD_KEY[source]} AS id, {key_columns(keys)} "
-        f"FROM {source} r JOIN taxon t USING (taxid) {where}"
-    )
+    from_sql = f"FROM {source} r JOIN taxon t USING (taxid) {where}"
+    total = counts.count(conn, f"SELECT r.{_RECORD_KEY[source]} {from_sql}", params)
     beyond_sql, beyond_params = beyond(keys, after) if after else ("TRUE", [])
     backward = after is not None and after.backward
     sql = (
-        f"WITH m AS MATERIALIZED ({matches}), "
-        f"p AS (SELECT * FROM m WHERE {beyond_sql} "
+        f"WITH p AS (SELECT * FROM (SELECT r.{_RECORD_KEY[source]} AS id, "
+        f"{key_columns(keys)} {from_sql}) m WHERE {beyond_sql} "
         f"ORDER BY {order_by(keys, backward=backward)} LIMIT %s) "
-        f"SELECT (SELECT count(*) FROM m) AS total, {_RECORD_SELECT[source]}, "
-        f"{', '.join(f'p.k{i}' for i in range(len(keys)))} "
+        f"SELECT {_RECORD_SELECT[source]}, {', '.join(f'p.k{i}' for i in range(len(keys)))} "
         f"FROM p JOIN {source} a ON a.{_RECORD_KEY[source]} = p.id "
         "JOIN taxon t ON t.taxid = a.taxid "
         f"ORDER BY {order_by(keys, backward=backward, table='p')}"
     )
     with conn.cursor(row_factory=dict_row) as cur:
         rows = cur.execute(sql, [*params, *beyond_params, limit + 1]).fetchall()
-        if rows:
-            total = rows[0]["total"]
-        else:
-            total = cur.execute(f"SELECT count(*) AS n FROM ({matches}) m", params).fetchone()["n"]
     key_names = [f"k{i}" for i in range(len(keys))]
     keys_of = [[row.pop(k) for k in key_names] for row in rows]
-    for row in rows:
-        del row["total"]
     return total, page(rows, keys_of, limit=limit, cursor=after, ordering=ordering)
 
 
@@ -596,7 +593,12 @@ def _quality_by_bucket(
     Ancestors are read from the record taxon's own path labels (they are taxids),
     so buckets are found by primary key instead of an ltree containment scan over
     the whole GiST index. Returns ``{bucket_taxid: {stat_key: value|None}}`` for
-    buckets that carry records.
+    buckets that carry records, one row per bucket, read as a stream.
+
+    The record-to-bucket pairs are built in the database, which spills them to
+    disk past ``work_mem``; ``MATERIALIZED`` keeps the planner from merging them
+    into the outer join, which turns 0.5 s into 12 s for a handful of big clades.
+    Their cost grows with the records, so these stats belong in the build.
     """
     all_keys = [q.key for q in QUALITY_STATS]
     result: dict[int, dict[str, float | None]] = {}
@@ -618,10 +620,12 @@ def _quality_by_bucket(
             f"FROM {source} r JOIN mp ON mp.rec_taxid = r.taxid "
             "GROUP BY mp.bucket_taxid"
         )
-        for row in conn.execute(sql, params).fetchall():
-            entry = result.setdefault(row[0], {k: None for k in all_keys})
-            for k, v in zip(keys, row[1:], strict=True):
-                entry[k] = float(v) if v is not None else None
+        with conn.cursor() as cur:
+            rows = cur.stream(sql, params)
+            for row in rows:
+                entry = result.setdefault(row[0], {k: None for k in all_keys})
+                for k, v in zip(keys, row[1:], strict=True):
+                    entry[k] = float(v) if v is not None else None
     return result
 
 
@@ -629,7 +633,10 @@ def fetch_quality_for_taxids(
     conn: psycopg.Connection, taxids: Sequence[int]
 ) -> dict[int, dict[str, float | None]]:
     """QUALITY_STATS over each given clade's subtree, keyed by taxid; every
-    requested taxid is present (all-``None`` when it has no records)."""
+    requested taxid is present (all-``None`` when it has no records). At most
+    ``MAX_PAGE`` taxids, a page of ``/taxons/stats``."""
+    if len(taxids) > MAX_PAGE:
+        raise ValueError(f"at most {MAX_PAGE} taxids, got {len(taxids)}")
     all_keys = [q.key for q in QUALITY_STATS]
     result: dict[int, dict[str, float | None]] = {
         int(t): {k: None for k in all_keys} for t in taxids

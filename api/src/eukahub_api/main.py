@@ -43,6 +43,7 @@ from eukahub_api.db import lifespan as db_lifespan
 from eukahub_api.logging_config import configure_logging
 from eukahub_api.pagination import InvalidCursor, Page
 from eukahub_api.queries import (
+    MAX_PAGE,
     AnnotationSort,
     AssemblySort,
     FilterLogic,
@@ -445,7 +446,7 @@ _TaxonSortBy = Annotated[
 ]
 
 
-_Limit = Annotated[int, Query(ge=1, le=1000)]
+_Limit = Annotated[int, Query(ge=1, le=MAX_PAGE)]
 
 
 def _taxon(r: TaxonListRow) -> Taxon:

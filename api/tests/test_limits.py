@@ -39,8 +39,10 @@ def test_repeated_queries_never_switch_to_generic_plans(client):
         within = TaxonFilter(within_path=fetch_root(conn, 40674)[2], rank="family")
         for _ in range(20):
             list_taxa(conn, within, sort=None, descending=True, limit=25, cursor=None)
+        # A statement without parameters has only one plan, so only the others count.
         (generic,) = conn.execute(
-            "SELECT coalesce(max(generic_plans), 0) FROM pg_prepared_statements"
+            "SELECT coalesce(max(generic_plans), 0) FROM pg_prepared_statements "
+            "WHERE cardinality(parameter_types) > 0"
         ).fetchone()
     assert generic == 0
 
