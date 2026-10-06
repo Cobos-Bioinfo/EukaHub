@@ -1,5 +1,6 @@
 """Build: NCBI taxdump -> ``taxon``; fresh NCBI/Annotrieve/ENA fetches ->
-per-record ``assembly`` / ``annotation`` tables + the ``clade_features`` rollup.
+per-record ``assembly`` / ``annotation`` tables + the ``clade_features`` rollup and
+the per-clade quality stats (``clade_stats``).
 
 No ETE3, no ``precomputed_taxa``. The three sources are fetched (or reused from
 parquet snapshots) up front and filtered to the taxonomy; placeholder taxa without
@@ -37,11 +38,17 @@ from eukahub_pipeline.load import (
     load_annotation,
     load_assembly,
     load_clade_features,
+    load_clade_stats,
     load_dataset_meta,
     load_taxon,
 )
 from eukahub_pipeline.placeholders import orphans_below_species, prune_placeholders
-from eukahub_pipeline.rollup import assemble_leaf_features, carrying_taxids, rollup_from_frames
+from eukahub_pipeline.rollup import (
+    assemble_leaf_features,
+    carrying_taxids,
+    rollup_from_frames,
+    stats_from_records,
+)
 from eukahub_pipeline.snapshot import cached_frame
 from eukahub_pipeline.sources import load_sources
 from eukahub_pipeline.taxdump import (
@@ -261,8 +268,15 @@ def main(argv: list[str] | None = None) -> int:
             len(orphans), ", ".join(f"{t} {names.get(t, '')}" for t in orphans[:20]),
         )
 
-    clade = rollup_from_frames(_taxon_frame(nodes, paths), leaf, root_taxid=EUKARYOTA_TAXID)
+    taxon_frame = _taxon_frame(nodes, paths)
+    clade = rollup_from_frames(taxon_frame, leaf, root_taxid=EUKARYOTA_TAXID)
     log.info("Rolled up into %d clade rows", clade.height)
+    stats = stats_from_records(
+        taxon_frame,
+        {"assembly": assemblies, "annotation": annotations},
+        root_taxid=EUKARYOTA_TAXID,
+    )
+    log.info("Computed quality stats for %d clades", stats.height)
 
     with psycopg.connect(args.database_url) as conn:
         if not args.skip_schema:
@@ -274,6 +288,7 @@ def main(argv: list[str] | None = None) -> int:
         log.info("Loaded %d assembly + %d annotation rows", n_ass, n_ann)
         n_clade = load_clade_features(conn, clade)
         log.info("Loaded %d clade_features rows", n_clade)
+        log.info("Loaded %d clade_stats rows", load_clade_stats(conn, stats))
 
         # Gate on the invariants BEFORE stamping — a broken build raises here and
         # never records a (misleading) "updated" timestamp.

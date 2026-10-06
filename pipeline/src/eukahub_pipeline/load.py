@@ -12,6 +12,7 @@ from collections.abc import Iterable
 
 import polars as pl
 import psycopg
+from eukahub_core.metrics import QUALITY_KEYS
 
 from eukahub_pipeline.fetch_annotations import ANNOTATION_COLUMNS
 from eukahub_pipeline.fetch_assemblies import ASSEMBLY_COLUMNS
@@ -47,6 +48,12 @@ def load_clade_features(conn: psycopg.Connection, clade: pl.DataFrame) -> int:
             cp.write_row(row)
     conn.commit()
     return clade.height
+
+
+def load_clade_stats(conn: psycopg.Connection, stats: pl.DataFrame) -> int:
+    """COPY the per-clade quality stats (``rollup.stats_from_records``) into
+    ``clade_stats``."""
+    return _copy_frame(conn, "clade_stats", ("taxid", *QUALITY_KEYS), stats)
 
 
 def _copy_frame(
