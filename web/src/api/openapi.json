@@ -1334,7 +1334,7 @@
   "paths": {
     "/annotations": {
       "get": {
-        "description": "Gene annotations, best BUSCO first by default; records missing the sort field\ncome last. The quality stats of a taxon's annotations are in ``/taxons/{taxid}``.",
+        "description": "Gene annotations, best BUSCO first by default; records missing the sort field\ncome last. The quality stats of a taxon's annotations are in ``/taxons/{taxid}/stats``.",
         "operationId": "annotations_annotations_get",
         "parameters": [
           {
@@ -1427,12 +1427,15 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Annotations"
+        "summary": "Annotations",
+        "tags": [
+          "annotations"
+        ]
       }
     },
     "/assemblies": {
       "get": {
-        "description": "Genome assemblies, newest first by default; records missing the sort field\ncome last. The quality stats of a taxon's assemblies are in ``/taxons/{taxid}``.",
+        "description": "Genome assemblies, newest first by default; records missing the sort field\ncome last. The quality stats of a taxon's assemblies are in ``/taxons/{taxid}/stats``.",
         "operationId": "assemblies_assemblies_get",
         "parameters": [
           {
@@ -1525,7 +1528,10 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Assemblies"
+        "summary": "Assemblies",
+        "tags": [
+          "assemblies"
+        ]
       }
     },
     "/config": {
@@ -1544,7 +1550,10 @@
             "description": "Successful Response"
           }
         },
-        "summary": "Config"
+        "summary": "Config",
+        "tags": [
+          "config"
+        ]
       }
     },
     "/health": {
@@ -1567,7 +1576,10 @@
             "description": "Successful Response"
           }
         },
-        "summary": "Health"
+        "summary": "Health",
+        "tags": [
+          "health"
+        ]
       }
     },
     "/health/ready": {
@@ -1590,7 +1602,10 @@
             "description": "Successful Response"
           }
         },
-        "summary": "Readiness"
+        "summary": "Readiness",
+        "tags": [
+          "health"
+        ]
       }
     },
     "/taxons": {
@@ -1827,7 +1842,10 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Taxons"
+        "summary": "Taxons",
+        "tags": [
+          "taxons"
+        ]
       }
     },
     "/taxons/aggregates": {
@@ -1881,7 +1899,10 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Aggregate"
+        "summary": "Aggregate",
+        "tags": [
+          "taxons"
+        ]
       }
     },
     "/taxons/report": {
@@ -2085,7 +2106,10 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Taxons Report"
+        "summary": "Taxons Report",
+        "tags": [
+          "taxons"
+        ]
       }
     },
     "/taxons/stats": {
@@ -2322,7 +2346,10 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Taxons Stats"
+        "summary": "Taxons Stats",
+        "tags": [
+          "taxons"
+        ]
       }
     },
     "/taxons/{taxid}": {
@@ -2362,7 +2389,10 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Taxon"
+        "summary": "Taxon",
+        "tags": [
+          "taxons"
+        ]
       }
     },
     "/taxons/{taxid}/ancestors": {
@@ -2402,7 +2432,10 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Taxon Ancestors"
+        "summary": "Taxon Ancestors",
+        "tags": [
+          "taxons"
+        ]
       }
     },
     "/taxons/{taxid}/stats": {
@@ -2442,7 +2475,10 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Taxon Stats"
+        "summary": "Taxon Stats",
+        "tags": [
+          "taxons"
+        ]
       }
     }
   }

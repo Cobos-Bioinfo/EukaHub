@@ -10,7 +10,7 @@ from pathlib import Path
 
 import psycopg
 import pytest
-from eukahub_api import main, queries
+from eukahub_api import queries
 from eukahub_api.clade_sets import (
     SetTaxon,
     clade_set,
@@ -19,6 +19,7 @@ from eukahub_api.clade_sets import (
     set_pieces,
 )
 from eukahub_api.db import database_url
+from eukahub_api.resources import config as config_resource
 from eukahub_api.schemas import MAX_CLADES_PER_GROUP, CustomGroup
 from eukahub_api.settings import MAX_CUSTOM_GROUPS, load_settings
 from eukahub_core.metrics import METRIC_KEYS, QUALITY_STATS, CladeMetadata
@@ -328,7 +329,7 @@ def test_aggregate_rejects_what_is_not_a_set(client, params, detail):
 @pytest.fixture
 def custom_groups_body(client, monkeypatch, tmp_path, caplog):
     caplog.set_level(logging.WARNING, logger="eukahub.api.clade_sets")
-    monkeypatch.setattr(main, "get_settings", lambda: _settings(tmp_path, ENDPOINT_GROUPS))
+    monkeypatch.setattr(config_resource, "get_settings", lambda: _settings(tmp_path, ENDPOINT_GROUPS))
     response = client.get("/config")
     assert response.status_code == 200
     return {g["id"]: g for g in response.json()["custom_groups"]}

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import pytest
-from eukahub_api.main import MAX_TAXIDS
+from eukahub_api.resources.taxons import MAX_TAXIDS
 from eukahub_core.metrics import QUALITY_KEYS
 
 

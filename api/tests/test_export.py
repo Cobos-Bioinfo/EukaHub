@@ -7,6 +7,7 @@ import math
 
 from eukahub_api import main, queries
 from eukahub_api.queries import EXPORT_HEADER, TaxonFilter
+from eukahub_api.resources import taxons
 from eukahub_api.settings import get_settings
 
 
@@ -65,7 +66,7 @@ def test_report_streams_one_chunk_per_batch(client, monkeypatch):
     whole = client.get(url).text.splitlines()
 
     small_batches = dataclasses.replace(get_settings(), export_batch_rows=3)
-    monkeypatch.setattr(main, "get_settings", lambda: small_batches)
+    monkeypatch.setattr(taxons, "get_settings", lambda: small_batches)
     small = client.get(url).text.splitlines()
     assert small == whole
 
