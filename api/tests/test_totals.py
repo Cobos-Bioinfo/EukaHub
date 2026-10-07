@@ -39,17 +39,6 @@ def test_a_query_is_counted_once_per_build():
     assert len(conn.counted) == 3
 
 
-def test_a_sum_is_cached_apart_from_the_count():
-    conn, cache = _Connection(), CountCache()
-    assert cache.count(conn, "SELECT 1 AS n", []) == 1
-    assert cache.sum(conn, "n", "SELECT 1 AS n", []) == 2
-    assert cache.sum(conn, "n", "SELECT 1 AS n", []) == 2
-    assert [sql.split(" FROM")[0] for sql, _ in conn.counted] == [
-        "SELECT count(*)",
-        "SELECT coalesce(sum(n), 0)",
-    ]
-
-
 def test_the_oldest_counts_are_dropped_past_the_limit():
     conn, cache = _Connection(), CountCache(max_entries=2)
     for p in (1, 2, 3):

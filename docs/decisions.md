@@ -96,11 +96,11 @@ Streamlit app that answered the same questions but was slow to build and to serv
   sources. Abuse is handled with rate limiting at the reverse proxy, not logins.
 - **Sized for one CPU core and about 1 GB of RAM.** A 15 s per-query limit, a
   four-connection pool, no parallel query workers, and an nginx response cache keep
-  one expensive request from taking the server down. Every response is bounded:
-  lists by their page size, and a TSV report at 100 MB, checked before it starts
-  from its exact size (computed in Postgres once per dataset build and filter set),
-  so a refused report is a clear 422 rather than a download cut off halfway. The
-  largest report on the real data, every taxon, is about 45 MB.
+  one expensive request from taking the server down. The TSV report streams in
+  batches, so the API's memory stays flat whatever its size, and it has no size
+  limit: it grows only with the taxonomy (about 45 MB for every taxon today). It is
+  not cached (`no-store`), which keeps nginx's cache for the small JSON responses
+  the interface repeats.
 - **Deployment settings are configuration, not code.** Links, the privacy contact,
   the Wikipedia summary endpoint and the curated groups are read by the API at
   startup (from `infra/.env` and an optional `infra/config/groups.json`), and the web
