@@ -13,7 +13,7 @@ const LEVELS = [
   { key: "contig", label: "Contig", help: "Contig-level" },
 ] as const;
 
-/** The enrichment "Data quality" band for a taxon: live distribution stats
+/** The enrichment "Data quality" band for a taxon: distribution stats
  *  (BUSCO, gene count, genome size, N50) as stat tiles, plus an assembly
  *  contiguity bar from the additive composition counts. Shown on every
  *  dashboard (clade / species / leaf). Fetches the two per-record endpoints
@@ -31,7 +31,7 @@ export default function QualitySection({
   const assemblies = useAsync(() => getAssemblies(taxid, { limit: 1 }), [taxid]);
   const annotations = useAsync(() => getAnnotations(taxid, { limit: 1 }), [taxid]);
 
-  // Merge the live stat values from both endpoints into one key -> value map.
+  // Merge the stat values from both endpoints into one key -> value map.
   const values = new Map<string, number | null>();
   for (const s of assemblies.data?.stats ?? []) values.set(s.key, s.value);
   for (const s of annotations.data?.stats ?? []) values.set(s.key, s.value);
@@ -90,7 +90,7 @@ export default function QualitySection({
   );
 }
 
-/** One quality stat tile: label, the live value (median/best), and a caption
+/** One quality stat tile: label, the value (median/best), and a caption
  *  naming the record set it was computed over. */
 function QualityTile({
   config,

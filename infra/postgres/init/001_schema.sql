@@ -51,6 +51,20 @@ CREATE TABLE IF NOT EXISTS clade_features (
     n_reference      INTEGER NOT NULL DEFAULT 0
 );
 
+-- Quality stats of each clade over the records on or below it, computed at build
+-- time by fanning every record out to its ancestors (medians are not additive, so
+-- they come from the records, never from the children). One row per clade with at
+-- least one record; a NULL means none of its records has that value. Columns
+-- mirror eukahub_core.metrics.QUALITY_STATS keys. Stats of a set of clades
+-- (include minus exclude) are still computed per request from the record tables.
+CREATE TABLE IF NOT EXISTS clade_stats (
+    taxid        INTEGER PRIMARY KEY,
+    busco        REAL,              -- best BUSCO complete % (max)
+    genes        DOUBLE PRECISION,  -- median protein-coding gene count
+    genome_size  DOUBLE PRECISION,  -- median assembly length (bp)
+    contig_n50   DOUBLE PRECISION   -- median contig N50 (bp)
+);
+
 -- Per-record tables (data-model.md: Enriched data model). Small, read-only, and
 -- independently sourced, so drill-down lists + on-demand distribution stats
 -- (median N50 / genome size / gene count, BUSCO) are cheap ltree subtree scans

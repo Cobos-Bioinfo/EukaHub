@@ -15,6 +15,8 @@ from eukahub_core.metrics import (
     COMPOSITION_COLUMNS,
     COVERAGE_KEYS,
     METRIC_KEYS,
+    QUALITY_KEYS,
+    QUALITY_STATS,
     TOTAL_KEYS,
 )
 from eukahub_core.taxonomy import INFORMAL_SPECIES_RANK, SPECIES_RANK, UNIT_RANKS
@@ -196,3 +198,44 @@ def rollup_from_frames(
         ],
     )
     return clade.select(_OUTPUT_COLUMNS)
+
+
+def stats_from_records(
+    taxon: pl.DataFrame,
+    records: dict[str, pl.DataFrame],
+    root_taxid: int | None = None,
+) -> pl.DataFrame:
+    """``QUALITY_STATS`` of every clade over the records on or below it.
+
+    ``taxon`` needs (taxid, path); ``records`` maps each stat's ``source`` table
+    (``assembly``, ``annotation``) to its record frame. Every record is fanned out
+    to its ancestors, as in the rollup, and each clade takes the median or maximum
+    of its records' values, nulls ignored, as Postgres' ``percentile_cont(0.5)`` and
+    ``max`` do. One row per clade with at least one record: ``taxid`` then one column
+    per stat key, null when none of its records has that value. ``root_taxid``
+    limits it to that subtree, like ``rollup_from_frames``.
+    """
+    if root_taxid is not None:
+        taxon = taxon.filter(pl.col("path").str.split(".").list.contains(str(root_taxid)))
+    paths = taxon.select("taxid", "path")
+    per_source = []
+    for source, frame in records.items():
+        source_stats = [q for q in QUALITY_STATS if q.source == source]
+        values = frame.join(paths, on="taxid", how="inner").select(
+            "path", *[pl.col(q.column).cast(pl.Float64).alias(q.key) for q in source_stats]
+        )
+        per_source.append(
+            _collect(
+                _ancestors(values.lazy())
+                .group_by("taxid")
+                .agg(
+                    pl.col(q.key).median() if q.agg == "median" else pl.col(q.key).max()
+                    for q in source_stats
+                )
+            )
+        )
+    stats = per_source[0]
+    for frame in per_source[1:]:
+        stats = stats.join(frame, on="taxid", how="full", coalesce=True)
+    return stats.select("taxid", *QUALITY_KEYS).sort("taxid")
+

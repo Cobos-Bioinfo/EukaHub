@@ -339,8 +339,8 @@ class Breakdown(BaseModel):
 
 
 class QualityStatValue(BaseModel):
-    """A quality stat computed live over a taxon's subtree records (median or
-    max per QUALITY_STATS). ``value`` is ``null`` when the subtree has no records
+    """A quality stat over a taxon's subtree records (median or max per
+    QUALITY_STATS), computed at build time. ``value`` is ``null`` when the subtree has no records
     carrying that field."""
 
     key: str
@@ -380,7 +380,7 @@ class Gaps(BaseModel):
     items: list[GapItem]  # sorted by gap desc, limited
 
 
-# --- Quality dimension (per-record drill-down + live distribution stats) -----
+# --- Quality dimension (per-record drill-down + distribution stats) ----------
 
 
 class QualityStatConfig(BaseModel):
@@ -462,7 +462,7 @@ class BucketQuality(BaseModel):
 
 
 class AssemblyList(BaseModel):
-    """Assemblies under a taxon: live assembly-quality stats + a paginated list."""
+    """Assemblies under a taxon: assembly-quality stats + a paginated list."""
 
     root: TaxonRef
     total: int  # records in the subtree, before limit/offset
@@ -472,7 +472,7 @@ class AssemblyList(BaseModel):
 
 
 class AnnotationList(BaseModel):
-    """Annotations under a taxon: live annotation-quality stats + a paginated list."""
+    """Annotations under a taxon: annotation-quality stats + a paginated list."""
 
     root: TaxonRef
     total: int
@@ -483,7 +483,7 @@ class AnnotationList(BaseModel):
 
 class CompareGroup(BaseModel):
     """One group in the compare view: its species count, per-resource coverage,
-    and live quality stats — enough to line several groups up side by side."""
+    and quality stats — enough to line several groups up side by side."""
 
     taxid: int
     name: str
