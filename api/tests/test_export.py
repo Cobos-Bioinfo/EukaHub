@@ -84,3 +84,20 @@ def test_report_streams_one_chunk_per_batch(client, monkeypatch):
     n_rows = len(whole) - 1
     assert n_rows > 3
     assert len(chunks) == 1 + math.ceil(n_rows / 3)  # header, then one chunk per batch
+
+
+def test_a_download_holds_only_its_own_connection(client, monkeypatch):
+    """The request's connection is back in the pool once the endpoint returns, so a
+    report being streamed holds only its cursor's (this stand-in holds none)."""
+    in_use = []
+
+    def _rows(pool, f, **kwargs):
+        yield "header\n"
+        yield "first batch\n"  # both read by the endpoint before it returns
+        stats = pool.get_stats()
+        in_use.append(stats["pool_size"] - stats["pool_available"])
+        yield "next batch\n"
+
+    monkeypatch.setattr(taxons, "iter_report_tsv", _rows)
+    assert client.get("/taxons/report?taxids=9606").status_code == 200
+    assert in_use == [0]

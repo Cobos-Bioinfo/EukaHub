@@ -73,6 +73,8 @@ changes. Put personal or machine-specific notes in a gitignored `CLAUDE.local.md
 - API connections have a 15 s statement timeout, a 4-connection pool and
   `plan_cache_mode=force_custom_plan`: generic plans lose the literal root path and scan the
   whole 400 MB path index.
+- `Conn` goes back to the pool when the endpoint returns, before the response is sent: a
+  streamed response must read from its own pool connection (see `iter_report_tsv`).
 - Subtree filters take the root's path as a literal parameter (`path <@ %s::ltree`), never a
   subquery. Don't join records to buckets by ltree containment; resolve ancestors from the
   path labels (see `_quality_by_bucket`).

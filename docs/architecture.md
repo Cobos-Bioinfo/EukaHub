@@ -66,7 +66,8 @@ CPU core. It has been tested under exactly those limits (see
 - Postgres cancels any API query after 15 s (`DB_STATEMENT_TIMEOUT_MS`); the client
   gets a 504 and the CPU is freed.
 - The API holds at most 4 database connections (`DB_POOL_MAX`); excess requests
-  wait, then get a 503 with `Retry-After`.
+  wait, then get a 503 with `Retry-After`. A request gives its connection back as
+  soon as its endpoint returns, so a TSV download holds only its cursor's.
 - Parallel query workers and JIT are off in the production Postgres, since they
   only compete for the single core.
 - nginx caches API responses (all but the TSV report), so repeated views of popular
