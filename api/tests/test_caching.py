@@ -1,4 +1,4 @@
-"""Cache-Control on GET responses: cacheable data endpoints, uncached health.
+"""Cache-Control on GET responses: cacheable data endpoints, uncached health and report.
 
 The dataset is read-only between offline rebuilds, so successful GETs advertise
 a public max-age; health/readiness must never be cached.
@@ -18,6 +18,12 @@ def test_list_is_cacheable(client):
     r = client.get("/taxons", params={"within": 2759, "rank": "phylum", "limit": 1})
     assert r.status_code == 200
     assert "public" in r.headers.get("cache-control", "")
+
+
+def test_report_is_not_cached(client):
+    r = client.get("/taxons/report", params={"taxids": "9606"})
+    assert r.status_code == 200
+    assert r.headers.get("cache-control") == "no-store"
 
 
 def test_health_is_not_cached(client):
