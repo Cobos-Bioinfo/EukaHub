@@ -86,6 +86,58 @@ jobs:
         continue-on-error: true
         run: npm audit --audit-level=high
 
+  smoke:
+    name: Web — every page in a browser
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: eukahub
+          POSTGRES_PASSWORD: eukahub
+          POSTGRES_DB: eukahub
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U eukahub"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql://eukahub:eukahub@localhost:5432/eukahub
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install uv
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          enable-cache: true
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Load CI test database
+        run: uv run python scripts/load_ci_db.py
+      - name: Build the web app
+        working-directory: web
+        run: npm ci && npm run build
+      - name: Start the API and the web app
+        # Both keep running for the next step; the web app proxies /api to the API
+        # as nginx does in production.
+        run: |
+          nohup uv run --package eukahub-api uvicorn eukahub_api.main:app --port 8000 > api.log 2>&1 &
+          cd web && VITE_API_URL=http://localhost:8000 nohup node_modules/.bin/vite preview --port 4173 --strictPort > ../web.log 2>&1 &
+      - name: Open every page in headless Chrome
+        # Fails on a script error, a failed request, a missing heading, the wrong
+        # view tab, a redirect that lands elsewhere or a page wider than a phone.
+        working-directory: web
+        env:
+          CHROME_PATH: /usr/bin/google-chrome
+        run: npm run smoke -- http://localhost:4173
+      - name: Server logs
+        if: failure()
+        run: cat api.log web.log
+
   security:
     name: Security — secret scan
     # Skipped on Dependabot PRs. GitHub gives Dependabot-triggered workflows a
