@@ -35,7 +35,7 @@ changes. Put personal or machine-specific notes in a gitignored `CLAUDE.local.md
 - `uv add`/`uv remove --package X` re-syncs the venv for X only; run `uv sync` afterwards.
 - UI checks in a browser: build the web app, run the API, then
   `VITE_API_URL=http://localhost:<port> web/node_modules/.bin/vite preview` (plain `npx vite`
-  ignores the project config and its `/api` proxy). Check light, dark and ~390 px width.
+  ignores the project config and its `/api/v1` proxy). Check light, dark and ~390 px width.
 
 ## Invariants
 - No ETE3 and no per-root precomputed tables: a breakdown is one indexed `ltree` subtree

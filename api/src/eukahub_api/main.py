@@ -28,11 +28,12 @@ log = logging.getLogger("eukahub.api")
 # per deploy; the default covers local dev + the prod web container.
 _DEFAULT_CORS_ORIGINS = "http://localhost:5173,http://localhost:8080"
 
-# The SPA reaches the API through a proxy (Vite in dev, nginx in prod) that
-# strips a `/api` prefix. Setting root_path tells FastAPI its external mount
-# point so the docs at `/api/docs` reference `/api/openapi.json` correctly.
-# Override with API_ROOT_PATH="" to serve the docs when hitting uvicorn directly.
-_ROOT_PATH = os.environ.get("API_ROOT_PATH", "/api")
+# Clients reach the API at /api/v1 through a proxy (Vite in dev, nginx in prod)
+# that strips the prefix, as Annotrieve serves /api/v0. Setting root_path tells
+# FastAPI its external mount point so the docs at `/api/v1/docs` reference
+# `/api/v1/openapi.json` correctly. Override with API_ROOT_PATH="" to serve the
+# docs when hitting uvicorn directly.
+_ROOT_PATH = os.environ.get("API_ROOT_PATH", "/api/v1")
 
 
 def cors_allow_origins() -> list[str]:

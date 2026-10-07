@@ -74,7 +74,7 @@ For a clade and a resource:
 A species, an informal species or a below-species taxon is a single unit: its row
 has `n_rows = 1`, and `c_<key> = 1` when it has that resource. Its page lists the
 taxa below it and splits each total into the records attached to the taxon itself
-and those on finer taxa (`direct` in `/api/taxons/{taxid}`).
+and those on finer taxa (`direct` in `/api/v1/taxons/{taxid}`).
 
 ## Tables
 

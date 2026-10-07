@@ -13,7 +13,7 @@ NCBI datasets ┐                                  refresher  (daily: is there a
 Annotrieve    ├─► pipeline ─► pg_dump ─► Release ─────► db   Postgres 17 + ltree + pg_trgm
 ENA           ┘   (rebuild.yml)          (public)          ▲
                                                            api  FastAPI, read-only
-                                                           ▲  /api
+                                                           ▲  /api/v1
                                               browsers ─► web  nginx: SPA, API proxy, cache
 ```
 
@@ -22,15 +22,15 @@ ENA           ┘   (rebuild.yml)          (public)          ▲
 | Pipeline | `pipeline/` | Downloads the NCBI taxonomy and every eukaryotic assembly (NCBI `datasets`), annotation (Annotrieve) and RNA-Seq run count (ENA); rolls counts up the tree; loads Postgres; checks invariants. Runs on GitHub Actions, never on the server. |
 | Rebuild workflow | `.github/workflows/rebuild.yml` | Monthly (and on demand): runs the pipeline, gates on the invariant checks, publishes a `pg_dump` as a GitHub Release. |
 | Database | `infra/postgres/init/001_schema.sql` | Postgres 17. See [data-model.md](data-model.md). |
-| API | `api/` | FastAPI, read-only, auto-generated OpenAPI at `/api/docs`. One module per resource in `api/src/eukahub_api/resources/`, mapped together in `router.py`; endpoint SQL lives in `api/src/eukahub_api/queries.py`. |
-| Web | `web/` | React + TypeScript SPA built with Vite, served by nginx, which also proxies `/api` and caches API responses. |
+| API | `api/` | FastAPI, read-only, auto-generated OpenAPI at `/api/v1/docs`. One module per resource in `api/src/eukahub_api/resources/`, mapped together in `router.py`; endpoint SQL lives in `api/src/eukahub_api/queries.py`. |
+| Web | `web/` | React + TypeScript SPA built with Vite, served by nginx, which also proxies `/api/v1` and caches API responses. |
 | Refresher | `scripts/auto_refresh.py` + `scripts/restore_snapshot.py` | Sidecar container. Installs the latest dataset Release on first start, then checks daily for a newer one. |
 | Shared config | `core/src/eukahub_core/metrics.py`, `taxonomy.py` | The four resource metrics, the quality stats and the root taxids, shared by pipeline and API and exported to the web app through OpenAPI. |
-| Deployment settings | `api/src/eukahub_api/settings.py`, `infra/config/` | Links, privacy contact, Wikipedia summary endpoint, curated groups and custom groups, read by the API at startup. The web app gets them, with the custom groups, from `/api/config`, and the data of any set of clades from `/api/taxons/aggregates`. See [deployment.md](deployment.md#configuration). |
+| Deployment settings | `api/src/eukahub_api/settings.py`, `infra/config/` | Links, privacy contact, Wikipedia summary endpoint, curated groups and custom groups, read by the API at startup. The web app gets them, with the custom groups, from `/api/v1/config`, and the data of any set of clades from `/api/v1/taxons/aggregates`. See [deployment.md](deployment.md#configuration). |
 
 ## Request path
 
-Browser → nginx (static SPA; `/api/*` proxied, successful GETs other than the TSV
+Browser → nginx (static SPA; `/api/v1/*` proxied, successful GETs other than the TSV
 report cached for up to an hour) → FastAPI → Postgres. Successful API responses carry `Cache-Control`,
 and JSON responses an `ETag`. Nothing in the request path writes to the database or calls an external
 service. The Wikipedia summary on the dashboard is fetched by the browser from

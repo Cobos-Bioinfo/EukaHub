@@ -1,7 +1,7 @@
 // Typed query functions over the generated client. Each unwraps openapi-fetch's
 // { data, error, response } into the response value, throwing a readable Error
 // on failure so the useAsync hook can surface it.
-import { api } from "./client";
+import { API_BASE, api } from "./client";
 import { EUKARYOTA_TAXID } from "../lib/taxonomy";
 import type {
   AnnotationPage,
@@ -402,5 +402,5 @@ export function exportTsvUrl(taxid: number, params: BreakdownParams): string {
   for (const f of params.filter ?? []) q.append("filter", f);
   if (params.logic) q.set("logic", params.logic);
   if (params.exclude_empty !== undefined) q.set("exclude_empty", String(params.exclude_empty));
-  return `/api/taxons/report?${q.toString()}`;
+  return `${API_BASE}/taxons/report?${q.toString()}`;
 }
