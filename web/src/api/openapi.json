@@ -753,10 +753,10 @@
         "type": "object"
       },
       "FilterLogic": {
-        "description": "How multiple resource-presence filters combine (ported verbatim).",
+        "description": "How multiple resource-presence filters combine.",
         "enum": [
-          "AND",
-          "OR"
+          "and",
+          "or"
         ],
         "title": "FilterLogic",
         "type": "string"
@@ -1836,14 +1836,14 @@
             }
           },
           {
-            "description": "Whether `filter` needs every resource (AND) or any (OR).",
+            "description": "Whether `filter` needs every resource (`and`) or any (`or`).",
             "in": "query",
             "name": "logic",
             "required": false,
             "schema": {
               "$ref": "#/components/schemas/FilterLogic",
-              "default": "AND",
-              "description": "Whether `filter` needs every resource (AND) or any (OR)."
+              "default": "and",
+              "description": "Whether `filter` needs every resource (`and`) or any (`or`)."
             }
           },
           {
@@ -2102,14 +2102,14 @@
             }
           },
           {
-            "description": "Whether `filter` needs every resource (AND) or any (OR).",
+            "description": "Whether `filter` needs every resource (`and`) or any (`or`).",
             "in": "query",
             "name": "logic",
             "required": false,
             "schema": {
               "$ref": "#/components/schemas/FilterLogic",
-              "default": "AND",
-              "description": "Whether `filter` needs every resource (AND) or any (OR)."
+              "default": "and",
+              "description": "Whether `filter` needs every resource (`and`) or any (`or`)."
             }
           },
           {
@@ -2340,14 +2340,14 @@
             }
           },
           {
-            "description": "Whether `filter` needs every resource (AND) or any (OR).",
+            "description": "Whether `filter` needs every resource (`and`) or any (`or`).",
             "in": "query",
             "name": "logic",
             "required": false,
             "schema": {
               "$ref": "#/components/schemas/FilterLogic",
-              "default": "AND",
-              "description": "Whether `filter` needs every resource (AND) or any (OR)."
+              "default": "and",
+              "description": "Whether `filter` needs every resource (`and`) or any (`or`)."
             }
           },
           {

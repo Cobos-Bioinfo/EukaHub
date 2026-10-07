@@ -62,14 +62,14 @@ def test_breakdown_exclude_empty(client):
 
 
 def test_breakdown_filter_and(client):
-    for it in _phyla(client, filter=["ass", "ann"], logic="AND", limit=50)["results"]:
+    for it in _phyla(client, filter=["ass", "ann"], logic="and", limit=50)["results"]:
         assert it["resources"]["ass"]["covered"] > 0
         assert it["resources"]["ann"]["covered"] > 0
 
 
 def test_breakdown_filter_or_is_superset_of_and(client):
-    and_body = _phyla(client, filter=["ass", "ann"], logic="AND")
-    or_body = _phyla(client, filter=["ass", "ann"], logic="OR")
+    and_body = _phyla(client, filter=["ass", "ann"], logic="and")
+    or_body = _phyla(client, filter=["ass", "ann"], logic="or")
     for it in or_body["results"]:
         assert it["resources"]["ass"]["covered"] > 0 or it["resources"]["ann"]["covered"] > 0
     assert or_body["total"] >= and_body["total"]

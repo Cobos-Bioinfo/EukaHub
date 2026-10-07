@@ -94,10 +94,10 @@ class SortOrder(str, Enum):
 
 
 class FilterLogic(str, Enum):
-    """How multiple resource-presence filters combine (ported verbatim)."""
+    """How multiple resource-presence filters combine."""
 
-    AND = "AND"
-    OR = "OR"
+    AND = "and"
+    OR = "or"
 
 # A taxon is "infraspecific" (below species) iff a proper ancestor in its path
 # is a species or an informal species: subspecies, strains, varietas, etc. Each

@@ -526,10 +526,10 @@ export interface components {
         };
         /**
          * FilterLogic
-         * @description How multiple resource-presence filters combine (ported verbatim).
+         * @description How multiple resource-presence filters combine.
          * @enum {string}
          */
-        FilterLogic: "AND" | "OR";
+        FilterLogic: "and" | "or";
         /**
          * MetricConfig
          * @description Static per-resource card chrome — served once in ``/config`` and joined
@@ -986,7 +986,7 @@ export interface operations {
                 taxids?: string | null;
                 /** @description Only taxa with data for these resources. */
                 filter?: components["schemas"]["MetricFilter"][] | null;
-                /** @description Whether `filter` needs every resource (AND) or any (OR). */
+                /** @description Whether `filter` needs every resource (`and`) or any (`or`). */
                 logic?: components["schemas"]["FilterLogic"];
                 /** @description Only taxa with data for at least one resource. */
                 exclude_empty?: boolean;
@@ -1071,7 +1071,7 @@ export interface operations {
                 taxids?: string | null;
                 /** @description Only taxa with data for these resources. */
                 filter?: components["schemas"]["MetricFilter"][] | null;
-                /** @description Whether `filter` needs every resource (AND) or any (OR). */
+                /** @description Whether `filter` needs every resource (`and`) or any (`or`). */
                 logic?: components["schemas"]["FilterLogic"];
                 /** @description Only taxa with data for at least one resource. */
                 exclude_empty?: boolean;
@@ -1125,7 +1125,7 @@ export interface operations {
                 taxids?: string | null;
                 /** @description Only taxa with data for these resources. */
                 filter?: components["schemas"]["MetricFilter"][] | null;
-                /** @description Whether `filter` needs every resource (AND) or any (OR). */
+                /** @description Whether `filter` needs every resource (`and`) or any (`or`). */
                 logic?: components["schemas"]["FilterLogic"];
                 /** @description Only taxa with data for at least one resource. */
                 exclude_empty?: boolean;

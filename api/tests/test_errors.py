@@ -61,7 +61,7 @@ def test_parameters_of_shared_dependencies_are_known(client):
         "within": 40674,
         "rank": "family",
         "filter": ["ass", "ann"],
-        "logic": "OR",
+        "logic": "or",
         "sort_by": "name",
         "sort_order": "asc",
         "limit": 2,
@@ -73,6 +73,11 @@ def test_an_endpoint_without_parameters_takes_none(client):
     assert client.get("/taxons/9606/ancestors").status_code == 200
     assert "takes none" in _problem(client.get("/config", params={"x": 1}), 422)["detail"]
 
+
+def test_logic_is_lower_case(client):
+    params = {"within": 40674, "rank": "order", "filter": ["ass", "ann"]}
+    assert client.get("/taxons", params={**params, "logic": "or"}).status_code == 200
+    _problem(client.get("/taxons", params={**params, "logic": "OR"}), 422)
 
 
 def test_an_unexpected_error_hides_its_cause(client, monkeypatch):

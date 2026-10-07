@@ -94,7 +94,7 @@ def taxon_filter(
         Query(description="Only taxa with data for these resources."),
     ] = None,
     logic: Annotated[
-        FilterLogic, Query(description="Whether `filter` needs every resource (AND) or any (OR).")
+        FilterLogic, Query(description="Whether `filter` needs every resource (`and`) or any (`or`).")
     ] = FilterLogic.AND,
     exclude_empty: Annotated[
         bool, Query(description="Only taxa with data for at least one resource.")

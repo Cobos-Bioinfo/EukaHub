@@ -147,7 +147,8 @@ Streamlit app that answered the same questions but was slow to build and to serv
   `Problem` as its default response.
 - **An unknown query parameter is a 422.** A typo such as `rnak=species` would
   otherwise return an unfiltered list that looks like an answer. The error names the
-  parameter and lists those the endpoint takes.
+  parameter and lists those the endpoint takes. Enumerated values are lower case
+  (`sort_order=asc`, `logic=or`).
 - **Lists page with a cursor, not an offset.** Each list sorts on keys that end in
   a unique one (the taxid or the record's accession), and a page's `next` and
   `previous` cursors hold the key values of its last and first rows. The next query
