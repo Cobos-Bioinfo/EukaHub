@@ -281,6 +281,8 @@ fixes over time; rebuild with `$C build --pull && $C up -d` every few months.
 
 - `GET /healthz` (nginx), `GET /api/v1/health` (API process), `GET /api/v1/health/ready`
   (API can reach the database). Compose uses these for container health.
+- Every error, from the API or from nginx, is problem details (RFC 9457,
+  `application/problem+json`): its `detail` says what went wrong and what to change.
 - Data pages say "not found" right after the first start: the dataset is still
   installing; see the refresher logs.
 - A request returns 504 "needs more work than the server allows": a very large
@@ -288,6 +290,8 @@ fixes over time; rebuild with `$C build --pull && $C up -d` every few months.
   rank works.
 - 503 "The server is busy": all database connections were busy; clients should
   retry after the `Retry-After` delay.
+- 429 "Too many requests from this address": one client sent more than nginx's rate
+  limit allows; it should retry after the `Retry-After` delay (one second).
 
 ## Testing under the production budget
 

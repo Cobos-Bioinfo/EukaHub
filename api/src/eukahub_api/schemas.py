@@ -413,3 +413,21 @@ class AppConfig(BaseModel):
     groups: list[CladeGroup]  # curated groups; ``featured`` ones are the landing-page cards
     # In groups-file order; a group that doesn't fit the current taxonomy is left out.
     custom_groups: list[CustomGroupItem]
+
+
+class ParameterError(BaseModel):
+    """One parameter a request got wrong."""
+
+    parameter: str
+    detail: str
+
+
+class Problem(BaseModel):
+    """Every error response: problem details (RFC 9457), sent as
+    ``application/problem+json``."""
+
+    type: str = "about:blank"  # no error types of our own: the status says it all
+    title: str  # the HTTP status phrase, e.g. "Not Found"
+    status: int
+    detail: str  # what went wrong, and what to change, in a sentence
+    errors: list[ParameterError] | None = None  # on a 422, each parameter at fault

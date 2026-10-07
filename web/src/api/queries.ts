@@ -24,16 +24,11 @@ import type {
   TaxonStatsPage,
 } from "./types";
 
+// Every API error is problem details (RFC 9457), whose `detail` says what went wrong.
 function extractDetail(error: unknown): string | undefined {
   if (error && typeof error === "object" && "detail" in error) {
     const d = (error as { detail: unknown }).detail;
     if (typeof d === "string") return d;
-    if (Array.isArray(d)) {
-      return d
-        .map((e) => (e as { msg?: string }).msg)
-        .filter(Boolean)
-        .join("; ");
-    }
   }
   return undefined;
 }

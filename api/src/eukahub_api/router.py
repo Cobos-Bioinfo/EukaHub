@@ -14,14 +14,16 @@
 - ``GET /assemblies``                 genome assemblies, optionally under a taxon.
 - ``GET /annotations``                gene annotations, optionally under a taxon.
 
-Lists page with an opaque cursor (see ``pagination``).
+Lists page with an opaque cursor (see ``pagination``). Every error is problem
+details (see ``errors``).
 """
 
 from fastapi import APIRouter
 
+from eukahub_api import errors
 from eukahub_api.resources import annotations, assemblies, config, health, taxons
 
-router = APIRouter()
+router = APIRouter(responses=errors.RESPONSES)
 
 router.include_router(health.router, tags=["health"])
 router.include_router(config.router, tags=["config"])

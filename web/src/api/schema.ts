@@ -530,11 +530,6 @@ export interface components {
          * @enum {string}
          */
         FilterLogic: "AND" | "OR";
-        /** HTTPValidationError */
-        HTTPValidationError: {
-            /** Detail */
-            detail?: components["schemas"]["ValidationError"][];
-        };
         /**
          * MetricConfig
          * @description Static per-resource card chrome — served once in ``/config`` and joined
@@ -583,6 +578,36 @@ export interface components {
          * @enum {string}
          */
         MetricFilter: "ass" | "ann" | "rna" | "lng";
+        /**
+         * ParameterError
+         * @description One parameter a request got wrong.
+         */
+        ParameterError: {
+            /** Detail */
+            detail: string;
+            /** Parameter */
+            parameter: string;
+        };
+        /**
+         * Problem
+         * @description Every error response: problem details (RFC 9457), sent as
+         *     ``application/problem+json``.
+         */
+        Problem: {
+            /** Detail */
+            detail: string;
+            /** Errors */
+            errors?: components["schemas"]["ParameterError"][] | null;
+            /** Status */
+            status: number;
+            /** Title */
+            title: string;
+            /**
+             * Type
+             * @default about:blank
+             */
+            type: string;
+        };
         /**
          * QualityStatConfig
          * @description Static chrome for one quality stat — served once in ``/config`` and
@@ -764,19 +789,6 @@ export interface components {
             /** Total */
             total: number;
         };
-        /** ValidationError */
-        ValidationError: {
-            /** Context */
-            ctx?: Record<string, never>;
-            /** Input */
-            input?: unknown;
-            /** Location */
-            loc: (string | number)[];
-            /** Message */
-            msg: string;
-            /** Error Type */
-            type: string;
-        };
     };
     responses: never;
     parameters: never;
@@ -812,13 +824,13 @@ export interface operations {
                     "application/json": components["schemas"]["AnnotationPage"];
                 };
             };
-            /** @description Validation Error */
-            422: {
+            /** @description An error, as problem details (RFC 9457). */
+            default: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };
@@ -849,13 +861,13 @@ export interface operations {
                     "application/json": components["schemas"]["AssemblyPage"];
                 };
             };
-            /** @description Validation Error */
-            422: {
+            /** @description An error, as problem details (RFC 9457). */
+            default: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };
@@ -876,6 +888,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AppConfig"];
+                };
+            };
+            /** @description An error, as problem details (RFC 9457). */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };
@@ -900,6 +921,15 @@ export interface operations {
                     };
                 };
             };
+            /** @description An error, as problem details (RFC 9457). */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
         };
     };
     readiness_health_ready_get: {
@@ -920,6 +950,15 @@ export interface operations {
                     "application/json": {
                         [key: string]: string;
                     };
+                };
+            };
+            /** @description An error, as problem details (RFC 9457). */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };
@@ -967,13 +1006,13 @@ export interface operations {
                     "application/json": components["schemas"]["TaxonPage"];
                 };
             };
-            /** @description Validation Error */
-            422: {
+            /** @description An error, as problem details (RFC 9457). */
+            default: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };
@@ -1001,13 +1040,13 @@ export interface operations {
                     "application/json": components["schemas"]["AggregatePage"];
                 };
             };
-            /** @description Validation Error */
-            422: {
+            /** @description An error, as problem details (RFC 9457). */
+            default: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };
@@ -1052,13 +1091,13 @@ export interface operations {
                     "application/json": unknown;
                 };
             };
-            /** @description Validation Error */
-            422: {
+            /** @description An error, as problem details (RFC 9457). */
+            default: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };
@@ -1106,13 +1145,13 @@ export interface operations {
                     "application/json": components["schemas"]["TaxonStatsPage"];
                 };
             };
-            /** @description Validation Error */
-            422: {
+            /** @description An error, as problem details (RFC 9457). */
+            default: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };
@@ -1137,13 +1176,13 @@ export interface operations {
                     "application/json": components["schemas"]["Taxon"];
                 };
             };
-            /** @description Validation Error */
-            422: {
+            /** @description An error, as problem details (RFC 9457). */
+            default: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };
@@ -1168,13 +1207,13 @@ export interface operations {
                     "application/json": components["schemas"]["TaxonPage"];
                 };
             };
-            /** @description Validation Error */
-            422: {
+            /** @description An error, as problem details (RFC 9457). */
+            default: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };
@@ -1199,13 +1238,13 @@ export interface operations {
                     "application/json": components["schemas"]["TaxonStats"];
                 };
             };
-            /** @description Validation Error */
-            422: {
+            /** @description An error, as problem details (RFC 9457). */
+            default: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };

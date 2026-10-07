@@ -139,6 +139,12 @@ Streamlit app that answered the same questions but was slow to build and to serv
   Annotrieve serves `/api/v0`. It is a mount point: the proxy (nginx, or Vite in
   development) strips it, and the routes in the code carry no version. A breaking
   change would be served as `/api/v2` next to it.
+- **Every error is problem details (RFC 9457).** One shape for every error, whoever
+  raises it (a resource, FastAPI's parameter checks, Starlette's routing, nginx's rate
+  limit): `type`, `title` (the HTTP status phrase), `status` and a `detail` sentence
+  saying what to change, sent as `application/problem+json`. A 422 also lists each
+  parameter at fault in `errors`. The OpenAPI document gives every operation this
+  `Problem` as its default response.
 - **Lists page with a cursor, not an offset.** Each list sorts on keys that end in
   a unique one (the taxid or the record's accession), and a page's `next` and
   `previous` cursors hold the key values of its last and first rows. The next query

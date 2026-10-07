@@ -9,6 +9,7 @@ The application itself: CORS, the middleware every response goes through
 import logging
 import os
 from contextlib import asynccontextmanager
+from typing import Any
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -74,3 +75,13 @@ app.middleware("http")(add_response_headers)
 app.middleware("http")(log_requests)
 
 app.include_router(router)
+
+
+def openapi() -> dict[str, Any]:
+    """FastAPI's OpenAPI document, with the error responses as problem details."""
+    if app.openapi_schema is None:
+        app.openapi_schema = errors.document(FastAPI.openapi(app))
+    return app.openapi_schema
+
+
+app.openapi = openapi

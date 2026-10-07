@@ -761,19 +761,6 @@
         "title": "FilterLogic",
         "type": "string"
       },
-      "HTTPValidationError": {
-        "properties": {
-          "detail": {
-            "items": {
-              "$ref": "#/components/schemas/ValidationError"
-            },
-            "title": "Detail",
-            "type": "array"
-          }
-        },
-        "title": "HTTPValidationError",
-        "type": "object"
-      },
       "MetricConfig": {
         "description": "Static per-resource card chrome \u2014 served once in ``/config`` and joined\nclient-side to the numbers in each per-clade payload (by ``key``).",
         "properties": {
@@ -889,6 +876,68 @@
         ],
         "title": "MetricFilter",
         "type": "string"
+      },
+      "ParameterError": {
+        "description": "One parameter a request got wrong.",
+        "properties": {
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "parameter": {
+            "title": "Parameter",
+            "type": "string"
+          }
+        },
+        "required": [
+          "parameter",
+          "detail"
+        ],
+        "title": "ParameterError",
+        "type": "object"
+      },
+      "Problem": {
+        "description": "Every error response: problem details (RFC 9457), sent as\n``application/problem+json``.",
+        "properties": {
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "errors": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ParameterError"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Errors"
+          },
+          "status": {
+            "title": "Status",
+            "type": "integer"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "type": {
+            "default": "about:blank",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "status",
+          "detail"
+        ],
+        "title": "Problem",
+        "type": "object"
       },
       "QualityStatConfig": {
         "description": "Static chrome for one quality stat \u2014 served once in ``/config`` and\njoined client-side to the per-taxon ``QualityStatValue`` by ``key``.\nThe analogue of ``MetricConfig`` for the annotation/assembly-quality\ndimension (BUSCO %, gene count, genome size, N50).",
@@ -1283,46 +1332,6 @@
         ],
         "title": "TaxonStatsPage",
         "type": "object"
-      },
-      "ValidationError": {
-        "properties": {
-          "ctx": {
-            "title": "Context",
-            "type": "object"
-          },
-          "input": {
-            "title": "Input"
-          },
-          "loc": {
-            "items": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "integer"
-                }
-              ]
-            },
-            "title": "Location",
-            "type": "array"
-          },
-          "msg": {
-            "title": "Message",
-            "type": "string"
-          },
-          "type": {
-            "title": "Error Type",
-            "type": "string"
-          }
-        },
-        "required": [
-          "loc",
-          "msg",
-          "type"
-        ],
-        "title": "ValidationError",
-        "type": "object"
       }
     }
   },
@@ -1416,15 +1425,15 @@
             },
             "description": "Successful Response"
           },
-          "422": {
+          "default": {
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "An error, as problem details (RFC 9457)."
           }
         },
         "summary": "Annotations",
@@ -1517,15 +1526,15 @@
             },
             "description": "Successful Response"
           },
-          "422": {
+          "default": {
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "An error, as problem details (RFC 9457)."
           }
         },
         "summary": "Assemblies",
@@ -1548,6 +1557,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "An error, as problem details (RFC 9457)."
           }
         },
         "summary": "Config",
@@ -1574,6 +1593,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "An error, as problem details (RFC 9457)."
           }
         },
         "summary": "Health",
@@ -1600,6 +1629,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "An error, as problem details (RFC 9457)."
           }
         },
         "summary": "Readiness",
@@ -1831,15 +1870,15 @@
             },
             "description": "Successful Response"
           },
-          "422": {
+          "default": {
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "An error, as problem details (RFC 9457)."
           }
         },
         "summary": "Taxons",
@@ -1888,15 +1927,15 @@
             },
             "description": "Successful Response"
           },
-          "422": {
+          "default": {
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "An error, as problem details (RFC 9457)."
           }
         },
         "summary": "Aggregate",
@@ -2095,15 +2134,15 @@
             },
             "description": "Successful Response"
           },
-          "422": {
+          "default": {
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "An error, as problem details (RFC 9457)."
           }
         },
         "summary": "Taxons Report",
@@ -2335,15 +2374,15 @@
             },
             "description": "Successful Response"
           },
-          "422": {
+          "default": {
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "An error, as problem details (RFC 9457)."
           }
         },
         "summary": "Taxons Stats",
@@ -2378,15 +2417,15 @@
             },
             "description": "Successful Response"
           },
-          "422": {
+          "default": {
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "An error, as problem details (RFC 9457)."
           }
         },
         "summary": "Taxon",
@@ -2421,15 +2460,15 @@
             },
             "description": "Successful Response"
           },
-          "422": {
+          "default": {
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "An error, as problem details (RFC 9457)."
           }
         },
         "summary": "Taxon Ancestors",
@@ -2464,15 +2503,15 @@
             },
             "description": "Successful Response"
           },
-          "422": {
+          "default": {
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "An error, as problem details (RFC 9457)."
           }
         },
         "summary": "Taxon Stats",
