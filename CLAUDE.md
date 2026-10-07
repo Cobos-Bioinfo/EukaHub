@@ -90,8 +90,10 @@ changes. Put personal or machine-specific notes in a gitignored `CLAUDE.local.md
   decisions go to `docs/decisions.md`.
 - Interface text: plain sentences, no em dashes (except "—" as an N/A placeholder), no emojis.
   Icons are inline SVG in `web/src/components/icons.tsx`.
-- Charts: one sequential ramp per measure, light to dark in both themes, and a text
-  alternative (list, table or outline) for every chart.
+- Charts: a share (of species with data, or of assemblies) is coloured by the six fixed
+  ranges in `web/src/lib/ranges.ts` (`--range-*` tokens: one blue ramp for every measure,
+  light to dark in both themes); any other magnitude by one sequential ramp; every chart
+  has a text alternative (list, table or outline).
 - Commits: Conventional Commits with a body explaining why; pull requests target `dev`.
   Commit or push only when asked.
 - Security: never commit secrets or print tokens. SQL identifiers interpolated into queries

@@ -49,6 +49,22 @@
   --lvl-chromosome: #2a78d6;
   --lvl-scaffold: #5598e7;
   --lvl-contig: #86b6ef;
+  /* Colour ranges for a share (lib/ranges.ts): none (hatched grey, never the
+     lightest step), then five steps of one blue ramp, light to dark, each with
+     the ink that reads on it at 4.5:1. Checked with the dataviz ordinal check:
+     monotone lightness, visible steps, the light end clears the surface. */
+  --range-0: repeating-linear-gradient(135deg, #eceef1 0 5px, #dde1e6 5px 10px);
+  --range-0-ink: #1a1d21;
+  --range-1: #8fb8ea;
+  --range-1-ink: #14171b;
+  --range-2: #5f97de;
+  --range-2-ink: #14171b;
+  --range-3: #3876cc;
+  --range-3-ink: #ffffff;
+  --range-4: #2558a6;
+  --range-4-ink: #ffffff;
+  --range-5: #183d78;
+  --range-5-ink: #ffffff;
   --radius: 12px;
   --shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 1px 3px rgba(16, 24, 40, 0.06);
   --maxw: 1360px; /* content cap — wide enough for the dashboard two-column body */
@@ -107,6 +123,20 @@
   --lvl-chromosome: #3987e5;
   --lvl-scaffold: #256abf;
   --lvl-contig: #184f95;
+  /* Colour ranges re-stepped for the dark surface: still light to dark, the dark
+     end lifted so it clears the surface (2.4:1 on the card). */
+  --range-0: repeating-linear-gradient(135deg, #262b33 0 5px, #2f353e 5px 10px);
+  --range-0-ink: #e8eaed;
+  --range-1: #b3d0f4;
+  --range-1-ink: #14171b;
+  --range-2: #86b2ea;
+  --range-2-ink: #14171b;
+  --range-3: #5b93dd;
+  --range-3-ink: #14171b;
+  --range-4: #3a70c2;
+  --range-4-ink: #ffffff;
+  --range-5: #2a56a0;
+  --range-5-ink: #ffffff;
 }
 
 * {
@@ -1106,7 +1136,8 @@ a:hover {
 .bd-name {
   font-weight: 500;
 }
-.bd-num {
+.bd-num,
+.bd-table .bd-num {
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
@@ -2820,11 +2851,7 @@ button.menu__item {
 
 /* ---- Breakdown "data map" -------------------------------------------- */
 .bmap-block__head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 1rem;
-  flex-wrap: wrap;
+  margin-bottom: 0.25rem;
 }
 .bmap-block__title {
   margin: 0;
@@ -2840,81 +2867,15 @@ button.menu__item {
   font-size: 0.9rem;
   text-wrap: pretty;
 }
-.bmap-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem;
-  /* Shrinkable (not flex:none) so that when the head wraps this onto its own
-     row on narrow screens, it can shrink and let its buttons wrap instead of
-     forcing a one-line max-content width that overflows the viewport. */
-  flex: 0 1 auto;
-  min-width: 0;
-}
-
-/* The "level" bar: always states which rank you're viewing and which rank the
-   tiles are, as two rank badges, so the position isn't buried in the trail and
-   the tile rank isn't hover-only. */
-.bmap-level {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.35rem 0.7rem;
-  margin: 0.9rem 0;
-  padding: 0.5rem 0.75rem;
-  background: var(--track);
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  font-size: 0.92rem;
-  width: fit-content;
-  max-width: 100%;
-}
-.bmap-level__part {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 0.4rem;
-}
-/* The rank in the level bar reads as inline uppercase text (not a pill), so it
-   sits on the same baseline as the surrounding words — a bordered badge floats
-   optically high against mixed-case text next to it. The "now" rank (what the
-   tiles are) takes the accent colour to stand out. */
-.bmap-level__rank {
-  font-size: 0.75rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--ink-2);
-}
-.bmap-level__rank--now {
-  color: var(--link-strong);
-}
-.bmap-level__cap {
-  color: var(--ink-2);
-}
-.bmap-level__name {
-  color: var(--ink);
-}
-.bmap-level__count {
-  color: var(--ink-2);
-  font-variant-numeric: tabular-nums;
-}
-
 .bmap-controls {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.75rem 1.5rem;
-  margin-bottom: 0.85rem;
+  align-items: flex-end;
+  gap: 0.75rem 1.25rem;
+  margin: 1rem 0 0.85rem;
 }
-.bmap-ctl {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 0.5rem 0.6rem;
-}
-/* Fixed-width label column so the shorter "Size by" toggle group lines up under
-   the wider "Colour by" one when the two control rows stack. */
-.bmap-ctl > .tree-controls__label {
-  flex: none;
-  width: 4.75rem;
+.bmap-controls__end {
+  margin-left: auto;
 }
 
 .bmap {
@@ -2975,133 +2936,18 @@ button.menu__item {
   white-space: nowrap;
   max-width: 100%;
 }
-.bmap-tile__stat {
+.bmap-tile__stat,
+.bmap-tile__share {
   font-size: 0.72rem;
   font-variant-numeric: tabular-nums;
 }
-.bmap-tile__dive {
-  position: absolute;
-  top: 3px;
-  right: 5px;
-  font-size: 0.72rem;
-  opacity: 0;
-  transition: opacity 0.08s ease;
+.bmap-tile__share {
+  font-weight: 600;
 }
-.bmap-tile:hover .bmap-tile__dive {
-  opacity: 0.7;
-}
-
-.bmap-legend {
-  position: absolute;
-  left: 12px;
-  bottom: 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 0.5rem 0.65rem;
-  font-size: 0.72rem;
-  color: var(--ink-2);
-  background: var(--overlay-bg);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  backdrop-filter: blur(4px);
-}
-.bmap-legend__title {
-  font-weight: 700;
-  color: var(--ink);
-}
-.bmap-legend__ramp {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-}
-.bmap-legend__bar {
-  width: 110px;
-  height: 10px;
-  border-radius: 3px;
-  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.08);
-}
-.bmap-legend__cap {
-  color: var(--ink-2);
-}
-.bmap-legend__hint {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  color: var(--ink-2);
-}
-.bmap-legend__chip {
-  width: 11px;
-  height: 11px;
-  border-radius: 3px;
-  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.1);
-}
-
 .bmap-foot {
   margin: 0.75rem 0 0;
   font-size: 0.82rem;
   color: var(--muted);
-}
-
-/* List view: the keyboard / screen-reader path to the same subgroups. */
-.bmap-listwrap {
-  margin-top: 0.5rem;
-}
-.bmap-listwrap > summary {
-  cursor: pointer;
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: var(--ink-2);
-  padding: 0.25rem 0;
-}
-.bmap-list {
-  list-style: none;
-  margin: 0.5rem 0 0;
-  padding: 0;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  overflow: hidden;
-}
-.bmap-list__row {
-  display: flex;
-  align-items: baseline;
-  gap: 0.5rem 0.75rem;
-  flex-wrap: wrap;
-  padding: 0.5rem 0.85rem;
-  border-bottom: 1px solid var(--border);
-}
-.bmap-list__row:last-child {
-  border-bottom: none;
-}
-.bmap-list__name {
-  font: inherit;
-  font-weight: 600;
-  padding: 0;
-  border: none;
-  background: none;
-  color: var(--link);
-  cursor: pointer;
-  text-align: left;
-}
-.bmap-list__name:hover {
-  text-decoration: underline;
-}
-.bmap-list__rank {
-  font-size: 0.7rem;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-  color: var(--muted);
-}
-.bmap-list__meta {
-  font-size: 0.82rem;
-  color: var(--ink-2);
-  font-variant-numeric: tabular-nums;
-}
-.bmap-list__open {
-  margin-left: auto;
-  font-size: 0.8rem;
-  font-weight: 600;
-  white-space: nowrap;
 }
 
 .bmap-tip {
@@ -3116,14 +2962,48 @@ button.menu__item {
   letter-spacing: 0.05em;
   color: var(--muted);
 }
-.bmap-legend__loading {
-  font-weight: 400;
-  font-style: italic;
-  color: var(--muted);
+
+/* The key to the colour ranges (RangeLegend). */
+.ranges {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 1rem;
+  margin: 0 0 0.85rem;
+  font-size: 0.82rem;
+  color: var(--ink-2);
 }
-.bmap-legend__error {
-  color: var(--danger);
-  font-weight: 400;
+.ranges__title {
+  font-weight: 600;
+  color: var(--ink);
+}
+.ranges__list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 0.9rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.ranges__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.ranges__swatch {
+  display: inline-block;
+  width: 22px;
+  height: 14px;
+  margin-right: 0.45rem;
+  border-radius: 3px;
+  vertical-align: -2px;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.14);
+}
+.ranges__item .ranges__swatch {
+  margin-right: 0;
+}
+.ranges__hint {
+  color: var(--muted);
 }
 
 /* ---- FAQ page -------------------------------------------------------- */

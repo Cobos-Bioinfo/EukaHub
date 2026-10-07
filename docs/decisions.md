@@ -170,10 +170,23 @@ Streamlit app that answered the same questions but was slow to build and to serv
 - **The Tree of Life is a radial tree in SVG**, using `d3-hierarchy` and `d3-shape`
   for layout only. The radial form is the recognizable "tree of life"; SVG keeps it
   accessible and themeable; lazy expansion keeps the node count manageable.
-- **The breakdown is a click-to-drill treemap (the "data map").** Tile area is the
-  number of species (or assemblies) and colour one chosen measure, so a large, pale
-  tile is a large group with little data. Clicking a tile makes it the current group,
-  broken down by the next taxonomic rank, so no rank selector is needed; the colour
-  and size choices stay in the address (`?colour=`, `?size=`).
-- **Colour follows one scheme:** one sequential ramp per measure, light to dark in
-  both themes, and text alternatives (lists, tables, outlines) for every chart.
+- **The breakdown is a click-to-drill treemap (the "Data map"), with a list beside
+  it.** Tile area is the number of species (or assemblies) and colour one share, so a
+  large, pale tile is a large group with little data. Clicking a tile makes it the
+  current group, broken down by the next taxonomic rank; a "Show" menu picks a finer
+  rank. Groups under 1% of the total share one tile (when there are three or more),
+  which opens the list, since their own tiles would be too small to read or hit.
+  The List view is the same breakdown as a table and holds the TSV download. Only
+  shares colour the map (of species with each resource, of assemblies at chromosome
+  level); genome size, gene counts and BUSCO stay in the tooltip and on the Summary.
+  The view, measure, size and rank stay in the address (`?view=`, `?colour=`,
+  `?size=`, `?rank=`).
+- **Shares are coloured by six fixed ranges:** none (hatched grey, never the lightest
+  step), under 1%, 1 to 5%, 5 to 20%, 20 to 50% and 50% or more, on one blue ramp for
+  every measure, light to dark in both themes (the dark theme lifts its dark end so
+  it clears the surface). Most shares are small: of the orders by assemblies, 35% have
+  none, 6% under 1%, 19% 1 to 5%, 26% 5 to 20%, 8% 20 to 50% and 6% 50% or more, so a
+  continuous 0 to 100% ramp left most of the map pale. The Data map uses them; the
+  Tree of Life keeps a continuous ramp per measure until its own redesign. Any other
+  magnitude gets one sequential ramp, and every chart has a text alternative (a list,
+  a table or an outline).
