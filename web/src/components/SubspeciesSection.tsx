@@ -3,6 +3,7 @@ import { Link } from "react-router";
 import { getChildren } from "../api/queries";
 import type { MetricConfig } from "../api/types";
 import { useAsync } from "../hooks/useAsync";
+import { cladePath } from "../lib/clade";
 import { fmt } from "../lib/format";
 import { INFORMAL_SPECIES_RANK } from "../lib/taxonomy";
 
@@ -107,7 +108,7 @@ export default function SubspeciesSection({
       {data.total > data.results.length && (
         <p className="bd__sub" style={{ marginTop: "0.6rem" }}>
           Showing the {data.results.length} with the most data. See them all in the{" "}
-          <Link to={`/tree/${taxid}`}>Tree of Life</Link>.
+          <Link to={cladePath(taxid, "tree")}>Tree of Life</Link>.
         </p>
       )}
     </section>

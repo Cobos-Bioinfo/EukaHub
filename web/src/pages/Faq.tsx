@@ -89,9 +89,9 @@ export default function Faq() {
       <div className="faq__item">
         <h2 className="faq__q">Can I download the data?</h2>
         <p className="faq__a">
-          Yes. "Download TSV" in a dashboard's breakdown saves one row per group at the rank shown,
-          with its species count and coverage for each resource. Each assembly and annotation in
-          the record list links to its files at the source.
+          Yes. "Download TSV" on a group's Data map saves one row per group at the rank shown,
+          with its species count and coverage for each resource. Each assembly and annotation on
+          a group's Records links to its files at the source.
         </p>
       </div>
 

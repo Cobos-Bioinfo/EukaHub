@@ -49,7 +49,7 @@ RNA-Seq is kept as counts because there are millions of runs; assemblies and
 annotations are small enough (tens of thousands) to keep per record, which is what
 powers the record lists and the quality statistics.
 
-## What the dashboard numbers mean
+## What the Summary numbers mean
 
 For a clade and a resource:
 

@@ -156,12 +156,24 @@ Streamlit app that answered the same questions but was slow to build and to serv
 
 ## Interface
 
+- **The current group is the app's state.** Every view of a group lives under
+  `/clade/:taxid`: its Summary, Data map (`/map`), Records (`/records`), Tree of Life
+  (`/tree`) and Gaps (`/gaps`), shown as tabs, with its lineage in the top bar
+  (the first two ranks, a "…" menu with the ones in between, and the last two).
+  Following the lineage, searching, clicking a tile on the Data map or looking inside
+  a group on Gaps changes the group and keeps the view, so the address always names
+  what is on screen and the browser's back button walks it. A species or a finer
+  taxon has no Data map or Gaps, and a group without records no Records tab. The old
+  addresses (`/map/:taxid`, `/tree/:taxid`, `/gaps?root=`) redirect. On a phone the
+  pinned top bar is one line (brand, search, menu), and Compare and the theme move
+  into the menu. Compare is the only page about several groups.
 - **The Tree of Life is a radial tree in SVG**, using `d3-hierarchy` and `d3-shape`
   for layout only. The radial form is the recognizable "tree of life"; SVG keeps it
   accessible and themeable; lazy expansion keeps the node count manageable.
 - **The breakdown is a click-to-drill treemap (the "data map").** Tile area is the
   number of species (or assemblies) and colour one chosen measure, so a large, pale
-  tile is a large group with little data. Clicking drills to the next taxonomic
-  rank, so no rank selector is needed.
+  tile is a large group with little data. Clicking a tile makes it the current group,
+  broken down by the next taxonomic rank, so no rank selector is needed; the colour
+  and size choices stay in the address (`?colour=`, `?size=`).
 - **Colour follows one scheme:** one sequential ramp per measure, light to dark in
   both themes, and text alternatives (lists, tables, outlines) for every chart.
