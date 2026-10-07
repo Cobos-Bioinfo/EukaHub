@@ -430,27 +430,6 @@ def _tsv_cell(value: object) -> str:
     return str(value).replace("\t", " ").replace("\n", " ").replace("\r", " ")
 
 
-_EXPORT_HEADER_LINE = "\t".join(EXPORT_HEADER) + "\n"
-
-
-def _report_rows(columns: str, f: TaxonFilter) -> tuple[str, list[object]]:
-    """``columns`` of every taxon matching ``f``, unordered, and the parameters."""
-    where, params = _taxon_where(f)
-    sql = f"SELECT {columns} FROM taxon t LEFT JOIN clade_features f USING (taxid)"
-    return (f"{sql} WHERE {' AND '.join(where)}" if where else sql), params
-
-
-def report_size(conn: psycopg.Connection, f: TaxonFilter) -> int:
-    """The bytes ``iter_report_tsv`` sends for ``f``, computed once per dataset build
-    without building the report. Each row is its cells joined by tabs plus a newline:
-    the cells are integers, which Postgres and Python print alike, and a name, whose
-    length ``_tsv_cell`` keeps."""
-    sql, params = _report_rows(
-        f"octet_length(concat_ws(E'\\t', {_EXPORT_COLS})) + 1 AS bytes", f
-    )
-    return len(_EXPORT_HEADER_LINE.encode()) + counts.sum(conn, "bytes", sql, params)
-
-
 def iter_report_tsv(
     pool: ConnectionPool,
     f: TaxonFilter,
@@ -468,12 +447,16 @@ def iter_report_tsv(
     never materializes in memory.
     """
     _ordering, keys, key_params = _taxon_keys(sort, descending, f)
-    rows_sql, where_params = _report_rows(_EXPORT_COLS, f)
+    where, where_params = _taxon_where(f)
     order = ", ".join(f"{k.sql} {'DESC' if k.descending else 'ASC'}" for k in keys)
+    sql = (
+        f"SELECT {_EXPORT_COLS} FROM taxon t LEFT JOIN clade_features f USING (taxid) "
+        f"{'WHERE ' + ' AND '.join(where) if where else ''} ORDER BY {order}"
+    )
 
-    yield _EXPORT_HEADER_LINE
+    yield "\t".join(EXPORT_HEADER) + "\n"
     with pool.connection() as conn, conn.cursor(name="report") as cur:
-        cur.execute(f"{rows_sql} ORDER BY {order}", [*where_params, *key_params])
+        cur.execute(sql, [*where_params, *key_params])
         # Each chunk costs a thread hop through the ASGI stack; one chunk per row
         # would take ~40x longer than the query itself on a full-species report.
         while rows := cur.fetchmany(batch_rows):

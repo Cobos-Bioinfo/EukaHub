@@ -1907,7 +1907,7 @@
     },
     "/taxons/report": {
       "get": {
-        "description": "Every taxon ``/taxons`` lists for the same filters and sort, as a streamed\nTSV download: taxid, name, species count, then the species with each resource\nand the total of each resource. At most 100 MB: a larger report is refused\nbefore it starts.",
+        "description": "Every taxon ``/taxons`` lists for the same filters and sort, as a streamed\nTSV download: taxid, name, species count, then the species with each resource\nand the total of each resource.",
         "operationId": "taxons_report_taxons_report_get",
         "parameters": [
           {
