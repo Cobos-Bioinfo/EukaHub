@@ -17,6 +17,8 @@ const PAGES = [
   { path: "/clade/2759", tab: "Summary" },
   { path: "/clade/40674", tab: "Summary" },
   { path: "/clade/40674/map", tab: "Data map" },
+  { path: "/clade/40674/map?view=list", tab: "Data map" },
+  { path: "/clade/40674/map?colour=chrom&rank=family&size=assemblies", tab: "Data map" },
   { path: "/clade/40674/records", tab: "Records" },
   { path: "/clade/40674/tree", tab: "Tree of Life" },
   { path: "/clade/40674/gaps", tab: "Gaps" },
@@ -31,7 +33,7 @@ const PAGES = [
   { path: "/clade/999999999", failing: true },
   { path: "/no-such-page" },
 ];
-const PHONE = ["/", "/clade/40674", "/clade/40674/map", "/clade/40674/records", "/clade/9606"];
+const PHONE = ["/", "/clade/40674", "/clade/40674/map", "/clade/40674/map?view=list", "/clade/40674/records", "/clade/9606"];
 
 async function waitForApi() {
   for (let i = 0; i < 60; i++) {
