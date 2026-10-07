@@ -1,26 +1,24 @@
 import { useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router";
+import { useNavigate } from "react-router";
 
 import { getTaxon, getMetricsConfig } from "../api/queries";
 import type { TaxonRef } from "../api/types";
-import Breadcrumb from "../components/Breadcrumb";
 import { TaxonError } from "../components/ErrorPage";
 import RadialTree from "../components/RadialTree";
 import RootPicker from "../components/RootPicker";
 import TreeOutline from "../components/TreeOutline";
-import ViewSwitcher from "../components/ViewSwitcher";
 import { useAsync } from "../hooks/useAsync";
 import { useTree } from "../hooks/useTree";
+import { cladePath } from "../lib/clade";
+import { useClade } from "./CladeLayout";
 
-/** The interactive radial Tree of Life for one root clade (`/tree/:taxid`). */
+/** The Tree of Life view of one group: an interactive radial tree rooted at it. */
 export default function TreePage() {
-  const { taxid: taxidParam } = useParams();
-  const taxid = Number(taxidParam);
-  const validId = Number.isInteger(taxid) && taxid > 0;
+  const node = useClade();
+  const taxid = node.taxid;
   const navigate = useNavigate();
 
   const metrics = useAsync(() => getMetricsConfig(), []);
-  const lineage = useAsync(() => getTaxon(taxid), [taxid]);
   const tree = useTree(taxid);
 
   // Search-to-locate: pan/highlight a taxon within the current tree, expanding
@@ -34,9 +32,6 @@ export default function TreePage() {
     setLocateMsg(null);
   }, [taxid]);
 
-  const lin = lineage.data?.lineage;
-  const node = lin && lin.length > 0 ? lin[lin.length - 1] : undefined;
-
   const locate = async (picked: TaxonRef) => {
     setLocateMsg(null);
     if (picked.taxid === taxid) {
@@ -49,7 +44,7 @@ export default function TreePage() {
       const idx = target.lineage.findIndex((a) => a.taxid === taxid);
       if (idx === -1) {
         setLocateMsg({
-          text: `${picked.name} is not inside ${node?.name ?? "this group"}.`,
+          text: `${picked.name} is not inside ${node.name}.`,
           taxid: picked.taxid,
         });
         return;
@@ -70,28 +65,14 @@ export default function TreePage() {
     }
   };
 
-  if (!validId) return <TaxonError taxid={taxidParam} />;
-  if (lineage.error) {
-    return (
-      <TaxonError
-        taxid={taxidParam}
-        status={lineage.status}
-        message={lineage.error}
-        retry={lineage.reload}
-      />
-    );
-  }
-  if (tree.error) return <TaxonError taxid={taxidParam} message={tree.error} />;
+  if (tree.error) return <TaxonError taxid={String(taxid)} message={tree.error} />;
 
   return (
     <section className="tree-page">
-      {lineage.data && <Breadcrumb lineage={lineage.data.lineage} currentTaxid={taxid} />}
-      {node && <ViewSwitcher taxid={taxid} name={node.name} current="tree" layout="row" />}
-
       <header className="tree-page__head">
         <div className="tree-page__topline">
           <h1 className="tree-page__title">
-            Tree of Life{node ? <> from <em>{node.name}</em></> : null}
+            Tree of Life from <em>{node.name}</em>
           </h1>
           <div className="tree-search">
             <RootPicker onPick={locate} placeholder="Find a group in this tree" />
@@ -102,7 +83,7 @@ export default function TreePage() {
                 <button
                   type="button"
                   className="tree-search__jump"
-                  onClick={() => navigate(`/tree/${locateMsg.taxid}`)}
+                  onClick={() => navigate(cladePath(locateMsg.taxid, "tree"))}
                 >
                   Open its own tree
                 </button>
@@ -113,7 +94,7 @@ export default function TreePage() {
         <p className="tree-page__sub">
           Browse the tree of life starting from this group. Bigger circles hold more species, and
           you can colour the tree by a data type to see where data is rich or sparse. Click a circle
-          to see its details or open its dashboard. Scroll to zoom and drag to move around.
+          to see its details or open its summary. Scroll to zoom and drag to move around.
         </p>
       </header>
 
@@ -122,7 +103,7 @@ export default function TreePage() {
           tree={tree}
           metrics={metrics.data}
           focus={focus}
-          onOpen={(t) => navigate(`/clade/${t}`)}
+          onOpen={(t) => navigate(cladePath(t))}
         />
       ) : metrics.error ? (
         <p className="notice notice--error" role="alert">

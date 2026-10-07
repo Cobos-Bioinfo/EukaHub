@@ -33,7 +33,7 @@ ENA           ┘   (rebuild.yml)          (public)          ▲
 Browser → nginx (static SPA; `/api/*` proxied, successful GETs other than the TSV
 report cached for up to an hour) → FastAPI → Postgres. Successful API responses carry `Cache-Control`,
 and JSON responses an `ETag`. Nothing in the request path writes to the database or calls an external
-service. The Wikipedia summary on the dashboard is fetched by the browser from
+service. The Wikipedia summary on a group's Summary is fetched by the browser from
 Wikipedia.
 
 ## Data updates

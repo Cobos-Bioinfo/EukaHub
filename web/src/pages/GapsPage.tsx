@@ -1,14 +1,15 @@
-import { Link, useSearchParams } from "react-router";
+import { Link, useNavigate, useSearchParams } from "react-router";
 
 import { getGaps, getMetricsConfig, getQualityConfig, type GapItem } from "../api/queries";
 import type { MetricFilter, QualityStatConfig, TargetRank } from "../api/types";
 import GapsScatter from "../components/GapsScatter";
-import RootPicker from "../components/RootPicker";
 import { DashboardIcon, MapIcon, TreeIcon } from "../components/icons";
 import { useAsync } from "../hooks/useAsync";
 import { useCladeLabel } from "../hooks/useSiteConfig";
+import { cladePath, isUnit } from "../lib/clade";
 import { fmt, fmtCompact, fmtPct, fmtQuality } from "../lib/format";
-import { EUKARYOTA_TAXID } from "../lib/taxonomy";
+import { NoBreakdown } from "./BreakdownPage";
+import { useClade } from "./CladeLayout";
 
 // Ranks the leaderboard can group by (species excluded — a species is one row,
 // so its "gap" is 0 or 1 and meaningless). Coarse → fine, the selector order.
@@ -30,13 +31,15 @@ const PLURAL: Record<string, string> = {
   genus: "genera",
 };
 
-/** "Where are the gaps?" — the app's thesis surfaced directly. Ranks the biggest
- *  under-sequenced groups (most species with no data for a chosen resource) at a
- *  chosen rank under a chosen root. Root/rank/resource live in the URL, so a view
- *  is shareable. Reuses the breakdown machinery server-side (one ltree query). */
+/** The Gaps view of one group: the biggest under-sequenced groups inside it (most
+ *  species with no data for a chosen resource) at a chosen rank. Rank, resource
+ *  and view live in the URL, so a view is shareable. Reuses the breakdown
+ *  machinery server-side (one ltree query). */
 export default function GapsPage() {
+  const clade = useClade();
+  const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
-  const root = Number(params.get("root")) || EUKARYOTA_TAXID;
+  const root = clade.taxid;
   const rawRank = params.get("rank") as TargetRank;
   const rank: TargetRank = RANKS.includes(rawRank) ? rawRank : "order";
   const rawRes = params.get("resource") as MetricFilter;
@@ -52,9 +55,10 @@ export default function GapsPage() {
   const cladeLabel = useCladeLabel();
   const metrics = useAsync(getMetricsConfig, []);
   const quality = useAsync(getQualityConfig, []);
+  const unit = isUnit(clade);
   const gaps = useAsync(
-    () => getGaps({ root, rank, resource, limit: 25 }),
-    [root, rank, resource],
+    () => (unit ? Promise.resolve(null) : getGaps({ root, rank, resource, limit: 25 })),
+    [root, rank, resource, unit],
   );
 
   const resourceLabel = metrics.data?.find((m) => m.key === resource)?.card_title ?? "data";
@@ -63,13 +67,21 @@ export default function GapsPage() {
   // each gap: the quality of the data that *does* exist.
   const headlineQ = (quality.data ?? []).filter((q) => q.headline);
   const items = gaps.data?.items ?? [];
-  const rootName = gaps.data ? (cladeLabel(gaps.data.root.taxid) ?? gaps.data.root.name) : "…";
+  const rootName = cladeLabel(root) ?? clade.name;
   const maxGap = items.length ? items[0].gap : 1; // items are sorted gap-desc
+  // Looking inside a group makes it the current one, one rank finer, keeping the
+  // resource and the list/scatter choice.
+  const lookInside = (taxid: number) => {
+    const next = new URLSearchParams(params);
+    next.set("rank", FINER[rank]);
+    navigate(`${cladePath(taxid, "gaps")}?${next}`);
+  };
 
+  if (unit) return <NoBreakdown />;
   return (
     <section className="gaps">
       <header className="gaps__head">
-        <h1 className="gaps__title">Where are the gaps?</h1>
+        <h1 className="gaps__title">Where are the gaps in {rootName}?</h1>
         <p className="gaps__lede">
           The biggest groups with the least genomic data. Each is ranked by the number of species
           that still have no {resourceLower}, so a huge, barely-sequenced group rises to the top.
@@ -77,28 +89,6 @@ export default function GapsPage() {
       </header>
 
       <div className="gaps__controls">
-        <div className="gaps__control gaps__control--search">
-          <span className="gaps__control-label">Look under</span>
-          <div className="gaps__root">
-            <Link to={`/clade/${root}`} className="gaps__root-name">
-              {rootName}
-            </Link>
-            {root !== EUKARYOTA_TAXID && (
-              <button
-                type="button"
-                className="gaps__reset"
-                onClick={() => patch({ root: String(EUKARYOTA_TAXID) })}
-              >
-                Reset to Eukaryota
-              </button>
-            )}
-          </div>
-          <RootPicker
-            onPick={(t) => patch({ root: String(t.taxid) })}
-            placeholder="Search a group to look within"
-          />
-        </div>
-
         <label className="gaps__control">
           <span className="gaps__control-label">Resource</span>
           <select
@@ -180,7 +170,7 @@ export default function GapsPage() {
                   resourceLower={resourceLower}
                   headlineQ={headlineQ}
                   canLookInside={rank !== "genus"}
-                  onLookInside={() => patch({ root: String(it.taxid), rank: FINER[rank] })}
+                  onLookInside={() => lookInside(it.taxid)}
                 />
               ))}
             </ol>
@@ -225,7 +215,7 @@ function GapRow({
       </div>
       <div className="gaps-row__body">
         <div className="gaps-row__top">
-          <Link to={`/clade/${item.taxid}`} className="gaps-row__name">
+          <Link to={cladePath(item.taxid)} className="gaps-row__name">
             {label}
           </Link>
           <span className="gaps-row__gap">
@@ -258,14 +248,14 @@ function GapRow({
             {fmt(item.n_rows)} species · {fmtPct(item.percent)}% covered
           </span>
           <span className="gaps-row__links">
-            <Link to={`/clade/${item.taxid}`} className="gaps-row__link">
-              <DashboardIcon size={13} /> Dashboard
+            <Link to={cladePath(item.taxid)} className="gaps-row__link">
+              <DashboardIcon size={13} /> Summary
             </Link>
-            <Link to={`/tree/${item.taxid}`} className="gaps-row__link">
+            <Link to={cladePath(item.taxid, "map")} className="gaps-row__link">
+              <MapIcon size={13} /> Data map
+            </Link>
+            <Link to={cladePath(item.taxid, "tree")} className="gaps-row__link">
               <TreeIcon size={13} /> Tree
-            </Link>
-            <Link to={`/map/${item.taxid}`} className="gaps-row__link">
-              <MapIcon size={13} /> Map
             </Link>
             {canLookInside && (
               <button type="button" className="gaps-row__link gaps-row__inside" onClick={onLookInside}>

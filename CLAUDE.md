@@ -5,9 +5,9 @@ Guidance for AI coding agents working in this repository. Human documentation is
 changes. Put personal or machine-specific notes in a gitignored `CLAUDE.local.md`.
 
 ## Project
-- EukaHub: explorer of public genomic-data availability across Eukaryota. Per taxon: a
-  dashboard, a click-to-drill treemap ("data map"), a radial Tree of Life, compare, and a
-  gaps leaderboard.
+- EukaHub: explorer of public genomic-data availability across Eukaryota. Per taxon, as
+  tabs under `/clade/:taxid`: a Summary, a click-to-drill treemap ("Data map"), its
+  Records, a radial Tree of Life and a Gaps leaderboard; plus Compare.
 - Sources: NCBI `datasets` CLI (assemblies), Annotrieve `api/v0` (annotations, BUSCO),
   ENA (RNA-Seq run counts). Rewrite of Euka-Survey (Streamlit).
 - The dataset is rebuilt monthly on GitHub Actions (`.github/workflows/rebuild.yml`),
@@ -22,7 +22,7 @@ changes. Put personal or machine-specific notes in a gitignored `CLAUDE.local.md
 | `core/src/eukahub_core/metrics.py` | `METRICS`, `QUALITY_STATS`, `CladeMetadata`, shared by pipeline and API and exported to the web app via OpenAPI. The schema SQL, `rollup._subtree_totals` and `validate._COLS` are kept in sync by hand; `clade_stats` has one column per `QUALITY_STATS` key. |
 | `pipeline/src/eukahub_pipeline/build.py` | taxdump → Eukaryota trim → fetch (parquet cache in `data/sources/`) → `drop_duplicate_assemblies` → `prune_placeholders` → rollup (Polars) → load → `check_invariants` → `dataset_meta` last |
 | `api/src/eukahub_api/` | `main.py` the app (CORS, middleware, error handlers); `router.py` maps `resources/` (one module per resource, routes only); `params.py` query parameters shared by resources; `errors.py` error responses; `middleware.py` headers, ETags, request log; `queries.py` all SQL (a clade's quality stats are a `clade_stats` lookup; `fetch_set_quality` computes a set's); `pagination.py` keyset cursors for every list; `totals.py` list totals cached per dataset build; `schemas.py`; `db.py` connection pool; `settings.py` deployment settings (env + `infra/config/groups.json`, served by `/config`); `clade_sets.py` sets of clades (include minus exclude) and the custom groups built from them |
-| `web/src/` | `api/queries.ts` (all fetches), generated `api/openapi.json` + `schema.ts`; `hooks/useAsync` (results keyed by deps, `reload()`); `hooks/useTree` (visible-node cap); colours are CSS variables in `index.css` |
+| `web/src/` | `api/queries.ts` (all fetches), generated `api/openapi.json` + `schema.ts`; `lib/clade.ts` (the views of a group and their addresses); `pages/CladeLayout.tsx` (loads the current group for every view, `useClade()`); `hooks/useAsync` (results keyed by deps, `reload()`); `hooks/useTree` (visible-node cap); colours are CSS variables in `index.css` |
 | `infra/` | `docker-compose.yml` (dev DB), `docker-compose.prod.yml` (db, api, web, refresher), `postgres/init/001_schema.sql` (schema of record), `lowmem-test/` (1 GB / one-core harness) |
 | `scripts/` | `restore_snapshot.py` (stage, verify, rename swap, `--rollback`), `auto_refresh.py`, `generate_ci_seed.py` + `load_ci_db.py` (CI dataset) |
 

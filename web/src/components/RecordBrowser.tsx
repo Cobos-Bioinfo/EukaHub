@@ -92,10 +92,10 @@ function usePagedRecords(fetchPage: (cursor?: string) => Promise<RecordPage>, re
   return { items, total, next, loading, loadingMore, error, loadMore };
 }
 
-/** The per-record drill-down: individual genome assemblies and functional
- *  annotations anywhere under a taxon, with direct download links (FASTA / GFF).
- *  Tabbed, sortable, and paged with "load more". Mount with `key={taxid}` so a
- *  new root resets the tab/sort/pages. */
+/** The individual genome assemblies and functional annotations anywhere under a
+ *  taxon, with direct download links (FASTA / GFF). Tabbed, sortable, and paged
+ *  with "load more". Mount with `key={taxid}` so a new root resets the
+ *  tab/sort/pages. */
 export default function RecordBrowser({ taxid }: { taxid: number }) {
   const [tab, setTab] = useState<Tab>("assemblies");
   const [asmSort, setAsmSort] = useState<AssemblySort>("release_date");
@@ -122,14 +122,7 @@ export default function RecordBrowser({ taxid }: { taxid: number }) {
     tab === "assemblies" ? setAsmSort(v as AssemblySort) : setAnnSort(v as AnnotationSort);
 
   return (
-    <section className="rec" aria-labelledby="rec-title">
-      <header className="rec__head">
-        <h2 className="rec__title" id="rec-title">
-          Browse the data
-        </h2>
-        <p className="rec__sub">Individual records under this group, with direct download links.</p>
-      </header>
-
+    <section className="rec" aria-label="Records">
       <div className="rec__controls">
         <div className="rec__tabgroup">
           <span className="control__label">Show</span>

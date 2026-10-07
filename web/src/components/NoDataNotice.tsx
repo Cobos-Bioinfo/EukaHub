@@ -2,6 +2,7 @@ import { Link } from "react-router";
 
 import { getChildren, getMeta } from "../api/queries";
 import { useAsync } from "../hooks/useAsync";
+import { cladePath } from "../lib/clade";
 import { externalUrl, fmt, fmtDate } from "../lib/format";
 
 // How many groups to list inside an empty clade; the rest are in the Tree of Life.
@@ -92,7 +93,7 @@ function ChildList({ taxid, name }: { taxid: number; name: string }) {
       {data.total > data.results.length && (
         <p className="nodata__more">
           {fmt(data.total - data.results.length)} more in the{" "}
-          <Link to={`/tree/${taxid}`}>Tree of Life</Link>.
+          <Link to={cladePath(taxid, "tree")}>Tree of Life</Link>.
         </p>
       )}
     </section>

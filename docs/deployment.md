@@ -171,7 +171,7 @@ of it (Traefik, nginx, Caddy, ...). Recommended:
 - Do not expose 8080 to the internet directly: attach `web` to the proxy's Docker
   network and remove its `ports:` mapping, or bind it to `127.0.0.1:8080:80`.
 - Route all paths (`/` and `/api/`) to `web`; it proxies the API itself.
-- Add at the proxy: HSTS, and a Content-Security-Policy. The dashboard fetches its
+- Add at the proxy: HSTS, and a Content-Security-Policy. The Summary fetches its
   Wikipedia summary in the browser and shows Wikipedia thumbnails, so `connect-src`
   must allow the `WIKIPEDIA_SUMMARY_URL` host and `img-src`
   `https://thumb.wikimedia.org` (and `https://upload.wikimedia.org`). A starting point:
