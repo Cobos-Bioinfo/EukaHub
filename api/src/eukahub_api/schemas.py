@@ -241,7 +241,7 @@ class QualityStatValue(BaseModel):
     value: float | None = Field(description="Null when no record under the taxon has the field.")
 
 
-# --- Quality dimension (per-record drill-down + live distribution stats) -----
+# --- Quality dimension (per-record drill-down + distribution stats) ----------
 
 
 class QualityStatConfig(BaseModel):

@@ -34,7 +34,7 @@ def main() -> None:
         print("applied seed.sql")
         conn.commit()
         counts = {}
-        for table in ("taxon", "clade_features", "assembly", "annotation"):
+        for table in ("taxon", "clade_features", "clade_stats", "assembly", "annotation"):
             counts[table] = conn.execute(f"SELECT count(*) FROM {table}").fetchone()[0]
             print(f"{table}: {counts[table]}")
         # Stamp dataset_meta so /config (and its test) exercises the

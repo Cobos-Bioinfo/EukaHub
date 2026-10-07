@@ -21,7 +21,6 @@ _CALLS = {
     "report sort": lambda: next(queries.iter_report_tsv(
         None, queries.TaxonFilter(), sort=HOSTILE, descending=True, batch_rows=1,
     )),
-    "quality source": lambda: queries._fetch_quality_stats(None, HOSTILE, "2759"),
     "records sort": lambda: queries._record_keys("assembly", HOSTILE, True),
     "records source": lambda: queries._record_keys(HOSTILE, "release_date", True),
 }

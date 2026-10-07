@@ -19,9 +19,9 @@ changes. Put personal or machine-specific notes in a gitignored `CLAUDE.local.md
 ## Map
 | Path | Notes |
 |---|---|
-| `core/src/eukahub_core/metrics.py` | `METRICS`, `QUALITY_STATS`, `CladeMetadata`, shared by pipeline and API and exported to the web app via OpenAPI. The schema SQL, `rollup._subtree_totals` and `validate._COLS` are kept in sync by hand. |
+| `core/src/eukahub_core/metrics.py` | `METRICS`, `QUALITY_STATS`, `CladeMetadata`, shared by pipeline and API and exported to the web app via OpenAPI. The schema SQL, `rollup._subtree_totals` and `validate._COLS` are kept in sync by hand; `clade_stats` has one column per `QUALITY_STATS` key. |
 | `pipeline/src/eukahub_pipeline/build.py` | taxdump → Eukaryota trim → fetch (parquet cache in `data/sources/`) → `drop_duplicate_assemblies` → `prune_placeholders` → rollup (Polars) → load → `check_invariants` → `dataset_meta` last |
-| `api/src/eukahub_api/` | `main.py` the app (CORS, middleware, error handlers); `router.py` maps `resources/` (one module per resource, routes only); `params.py` query parameters shared by resources; `errors.py` error responses; `middleware.py` headers, ETags, request log; `queries.py` all SQL (`_quality_by_bucket` is the per-bucket stats helper); `pagination.py` keyset cursors for every list; `totals.py` list totals cached per dataset build; `schemas.py`; `db.py` connection pool; `settings.py` deployment settings (env + `infra/config/groups.json`, served by `/config`); `clade_sets.py` sets of clades (include minus exclude) and the custom groups built from them |
+| `api/src/eukahub_api/` | `main.py` the app (CORS, middleware, error handlers); `router.py` maps `resources/` (one module per resource, routes only); `params.py` query parameters shared by resources; `errors.py` error responses; `middleware.py` headers, ETags, request log; `queries.py` all SQL (a clade's quality stats are a `clade_stats` lookup; `fetch_set_quality` computes a set's); `pagination.py` keyset cursors for every list; `totals.py` list totals cached per dataset build; `schemas.py`; `db.py` connection pool; `settings.py` deployment settings (env + `infra/config/groups.json`, served by `/config`); `clade_sets.py` sets of clades (include minus exclude) and the custom groups built from them |
 | `web/src/` | `api/queries.ts` (all fetches), generated `api/openapi.json` + `schema.ts`; `hooks/useAsync` (results keyed by deps, `reload()`); `hooks/useTree` (visible-node cap); colours are CSS variables in `index.css` |
 | `infra/` | `docker-compose.yml` (dev DB), `docker-compose.prod.yml` (db, api, web, refresher), `postgres/init/001_schema.sql` (schema of record), `lowmem-test/` (1 GB / one-core harness) |
 | `scripts/` | `restore_snapshot.py` (stage, verify, rename swap, `--rollback`), `auto_refresh.py`, `generate_ci_seed.py` + `load_ci_db.py` (CI dataset) |
@@ -50,8 +50,9 @@ changes. Put personal or machine-specific notes in a gitignored `CLAUDE.local.md
   species and below-species taxa are single units (`n_rows = 1`). Placeholder taxa without
   data are dropped at build time (`placeholders.py`). One `assembly` row per
   assembly number (GenBank over RefSeq, latest version).
-- Counts are rolled up at build time; medians and best-of stats are computed per request
-  from the record tables.
+- Counts and each clade's quality stats (medians, best BUSCO) are computed at build time
+  (`clade_features`, `clade_stats`); only the stats of a set of clades (include minus
+  exclude) are computed per request from the record tables.
 - `dataset_meta` is written last; its presence marks a complete build. The update swap
   renames databases (the extensions live in `public`).
 - Tests pass on both the full dataset and the CI slice (`api/tests/seed.sql`): assert
@@ -77,7 +78,7 @@ changes. Put personal or machine-specific notes in a gitignored `CLAUDE.local.md
   streamed response must read from its own pool connection (see `iter_report_tsv`).
 - Subtree filters take the root's path as a literal parameter (`path <@ %s::ltree`), never a
   subquery. Don't join records to buckets by ltree containment; resolve ancestors from the
-  path labels (see `_quality_by_bucket`).
+  path labels (as `rollup._ancestors` does at build time).
 - Check new queries with `EXPLAIN (ANALYZE, BUFFERS)` on the full dataset with
   `max_parallel_workers_per_gather=0`, as in production.
 

@@ -18,10 +18,15 @@ Streamlit app that answered the same questions but was slow to build and to serv
   lazily); the path makes "all descendants of X at rank R" a single indexed query
   for any root. This replaces Euka-Survey's per-root precomputed tables and its
   ETE3 dependency.
-- **Counts are rolled up at build time; medians are computed on request.** Counts
-  add up a tree, so every clade's totals are precomputed once. Medians and "best of"
-  statistics do not add up, so they are computed from the per-record tables, which
-  are small enough (tens of thousands of rows) for that.
+- **Counts and each clade's quality statistics are computed at build time.** Counts
+  add up a tree, so every clade's totals are summed once. Medians and "best of"
+  statistics do not add up, so the build computes each clade's from its own
+  records, fanned out to every ancestor as the counts are (`clade_stats`, about
+  52,600 rows). They were computed per request until October 2026, which read every
+  record under each clade: about half a second for a page of clades, growing with
+  the records (tens of seconds at 30 times today's assemblies). A lookup costs the
+  same at any scale. Only a set of clades (include minus exclude) still needs its
+  records, since medians cannot be subtracted.
 - **Assemblies and annotations are stored per record; RNA-Seq only as counts.**
   Per-record data gives download links and quality statistics where it is cheap;
   RNA-Seq has millions of runs and adds little per record.
@@ -123,9 +128,8 @@ Streamlit app that answered the same questions but was slow to build and to serv
   one list with different filters, so each page's request is cached on its own and
   nothing is computed twice. Quality stats are a resource of their own,
   `/taxons/{taxid}/stats` and `/taxons/stats` (paged with the same parameters and
-  cursors as `/taxons`): a page of them costs about half a second whatever its size
-  (search takes 7 ms without them), so a list that does not show them never pays
-  for them, and no parameter changes a response's shape. Records are their own
+  cursors as `/taxons`), so a list that does not show them never reads them and no
+  parameter changes a response's shape. Records are their own
   collections (`/assemblies`, `/annotations`), filtered by `within`, and
   `/taxons/report` is the whole list as TSV. Names follow Annotrieve's API
   (`/taxons`, `/ancestors`, `sort_by`, `sort_order`, `results`, `/report`), which the

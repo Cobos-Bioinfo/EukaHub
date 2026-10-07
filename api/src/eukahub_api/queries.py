@@ -19,6 +19,7 @@ from eukahub_core.metrics import (
     COVERAGE_KEYS,
     METRIC_KEYS,
     METRICS,
+    QUALITY_KEYS,
     QUALITY_STATS,
     TOTAL_KEYS,
     CladeMetadata,
@@ -179,13 +180,10 @@ def fetch_ancestors(conn: psycopg.Connection, taxid: int) -> list[TaxonListRow]:
 def fetch_taxon_stats(
     conn: psycopg.Connection, taxid: int
 ) -> tuple[str, dict[str, float | None]]:
-    """``(name, QUALITY_STATS)`` of one taxon over the records on or below it. Raises
-    ``TaxonNotFound``."""
-    name, _rank, path = fetch_root(conn, taxid)
-    stats: dict[str, float | None] = {}
-    for source in ("assembly", "annotation"):
-        stats |= _fetch_quality_stats(conn, source, path)[1]
-    return name, {q.key: stats[q.key] for q in QUALITY_STATS}
+    """``(name, QUALITY_STATS)`` of one taxon over the records on or below it,
+    computed at build time. Raises ``TaxonNotFound``."""
+    name, _rank, _path = fetch_root(conn, taxid)
+    return name, _clade_stats(conn, [taxid]).get(taxid, dict.fromkeys(QUALITY_KEYS))
 
 
 def fetch_dataset_meta(
@@ -464,11 +462,9 @@ def iter_report_tsv(
 
 
 # --- Per-record drill-down (assemblies / annotations) -----------------------
-# The per-record tables are small (~68k / ~18k rows) and independently sourced,
-# so "everything under clade X" is a cheap subtree join to `taxon`, and the
-# distribution stats (median N50 / genome size / gene count, best BUSCO) are
-# computed live per request rather than precomputed — a subtree median is not
-# the sum of child medians, so it can't ride the additive rollup (data-model.md).
+# "Everything under clade X" is a subtree join to `taxon`. A clade's distribution
+# stats (median N50 / genome size / gene count, best BUSCO) are computed at build
+# time from its records (`clade_stats`); only a set of clades needs its records here.
 
 # SELECT lists alias every column to the response-model field name, so the
 # endpoint can build the Pydantic model straight from a dict_row.
@@ -501,24 +497,6 @@ def _quality_stats_agg(source: str) -> str:
         else:  # "max" — e.g. the clade's best BUSCO
             parts.append(f"max({q.column}) AS {q.key}")
     return ", ".join(parts)
-
-
-def _fetch_quality_stats(
-    conn: psycopg.Connection, source: str, root_path: str
-) -> tuple[int, dict[str, float | None]]:
-    """Return ``(record_count, {stat_key: value})`` for a source over the subtree
-    rooted at ``root_path``. ``source`` is a per-record table name."""
-    source = _identifier(source, _RECORD_SORTS)
-    keys = [q.key for q in QUALITY_STATS if q.source == source]
-    agg = _quality_stats_agg(source)
-    row = conn.execute(
-        f"SELECT count(*), {agg} FROM {source} r JOIN taxon t USING (taxid) "
-        "WHERE t.path <@ %s::ltree",
-        (root_path,),
-    ).fetchone()
-    count = row[0]
-    values = {k: (float(v) if v is not None else None) for k, v in zip(keys, row[1:])}
-    return count, values
 
 
 # Primary key and the SQL type of each sort column, per record table.
@@ -584,49 +562,23 @@ def list_records(
     return total, page(rows, keys_of, limit=limit, cursor=after, ordering=ordering)
 
 
-def _quality_by_bucket(
-    conn: psycopg.Connection, bucket_filter: str, params: Sequence[object]
+def _clade_stats(
+    conn: psycopg.Connection, taxids: Sequence[int]
 ) -> dict[int, dict[str, float | None]]:
-    """QUALITY_STATS per bucket, attributing each record to every ancestor taxon
-    ``b`` that matches ``bucket_filter`` (SQL over ``b``, a trusted literal).
-
-    Ancestors are read from the record taxon's own path labels (they are taxids),
-    so buckets are found by primary key instead of an ltree containment scan over
-    the whole GiST index. Returns ``{bucket_taxid: {stat_key: value|None}}`` for
-    buckets that carry records, one row per bucket, read as a stream.
-
-    The record-to-bucket pairs are built in the database, which spills them to
-    disk past ``work_mem``; ``MATERIALIZED`` keeps the planner from merging them
-    into the outer join, which turns 0.5 s into 12 s for a handful of big clades.
-    Their cost grows with the records, so these stats belong in the build.
-    """
-    all_keys = [q.key for q in QUALITY_STATS]
-    result: dict[int, dict[str, float | None]] = {}
-    for source in ("assembly", "annotation"):
-        keys = [q.key for q in QUALITY_STATS if q.source == source]
-        if not keys:
-            continue
-        sql = (
-            "WITH mp AS MATERIALIZED ("
-            "  SELECT rec.taxid AS rec_taxid, b.taxid AS bucket_taxid"
-            f"  FROM (SELECT DISTINCT taxid FROM {source}) d"
-            "  JOIN taxon rec ON rec.taxid = d.taxid"
-            "  CROSS JOIN LATERAL"
-            "    unnest(string_to_array(ltree2text(rec.path), '.')::int[]) AS anc(taxid)"
-            "  JOIN taxon b ON b.taxid = anc.taxid"
-            f"  WHERE {bucket_filter}"
-            ") "
-            f"SELECT mp.bucket_taxid, {_quality_stats_agg(source)} "
-            f"FROM {source} r JOIN mp ON mp.rec_taxid = r.taxid "
-            "GROUP BY mp.bucket_taxid"
-        )
-        with conn.cursor() as cur:
-            rows = cur.stream(sql, params)
-            for row in rows:
-                entry = result.setdefault(row[0], {k: None for k in all_keys})
-                for k, v in zip(keys, row[1:], strict=True):
-                    entry[k] = float(v) if v is not None else None
-    return result
+    """QUALITY_STATS of the given clades, computed at build time over the records on
+    or below each (``clade_stats``), keyed by taxid. Clades without records are
+    absent. Callers bound ``taxids`` to one page."""
+    rows = conn.execute(
+        f"SELECT taxid, {', '.join(QUALITY_KEYS)} FROM clade_stats WHERE taxid = ANY(%s)",
+        (list(taxids),),
+    ).fetchall()
+    return {
+        row[0]: {
+            k: (float(v) if v is not None else None)
+            for k, v in zip(QUALITY_KEYS, row[1:], strict=True)
+        }
+        for row in rows
+    }
 
 
 def fetch_quality_for_taxids(
@@ -642,7 +594,7 @@ def fetch_quality_for_taxids(
         int(t): {k: None for k in all_keys} for t in taxids
     }
     if taxids:
-        result.update(_quality_by_bucket(conn, "b.taxid = ANY(%s)", (list(taxids),)))
+        result.update(_clade_stats(conn, taxids))
     return result
 
 

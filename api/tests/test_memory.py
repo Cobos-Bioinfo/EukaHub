@@ -10,7 +10,8 @@ The dataset: Eukaryota with 50 phyla, each level ten times wider down to familie
 then 4 genera per family and 9 species per genus, about 2.1 million taxa (the real
 taxonomy has about 1 million); 2,000,000 assemblies and 1,000,000 annotations
 spread over the species (28 and 50 times the real counts). The counts in
-``clade_features`` follow the tree's shape; they only need to be plausible.
+``clade_features`` follow the tree's shape and every taxon has a row of
+``clade_stats``; both only need to be plausible.
 
 Slow (the dataset takes about 1.5 minutes to build the first time, and 2 GB of
 disk), so these run only when asked for: ``uv run pytest -m ram``. CI runs them.
@@ -18,6 +19,8 @@ disk), so these run only when asked for: ``uv run pytest -m ram``. CI runs them.
 
 from __future__ import annotations
 
+import hashlib
+import inspect
 import json
 import os
 import socket
@@ -95,6 +98,11 @@ def build(conninfo: str) -> None:
             f"FROM (SELECT t.taxid, CASE {species_below} ELSE {SPECIES} END AS n FROM taxon t) x"
         )
         conn.execute(
+            "INSERT INTO clade_stats "
+            "SELECT taxid, 90 + taxid % 10, 15000 + taxid % 5000, "
+            "1e8 + taxid % 1000000, 1e6 + taxid % 100000 FROM taxon"
+        )
+        conn.execute(
             "INSERT INTO assembly SELECT "
             "'GCA_' || lpad(i::text, 9, '0') || '.1', "
             f"{SPECIES_FIRST} + (i * 7919) % {SPECIES}, "
@@ -135,15 +143,24 @@ def _url_for(dbname: str) -> str:
     return urllib.parse.urlunsplit(parts._replace(path=f"/{dbname}"))
 
 
+def _fingerprint() -> str:
+    """Changes whenever the schema or ``build`` does, so a stale dataset is rebuilt."""
+    return hashlib.sha256((SCHEMA.read_text() + inspect.getsource(build)).encode()).hexdigest()
+
+
 @pytest.fixture(scope="module")
 def huge_database() -> str:
-    """The synthetic dataset's connection URL, built once and kept between runs
-    (its ``dataset_meta`` row is written last, so a complete build has one)."""
+    """The synthetic dataset's connection URL, built once and kept between runs.
+    The database's comment holds the fingerprint of the schema and builder it was
+    made with, written after the build, so it also marks a complete build."""
     url = _url_for(DATABASE)
     try:
         with psycopg.connect(url) as conn:
-            built = conn.execute("SELECT assembly_count FROM dataset_meta").fetchone()
-        if built == (ASSEMBLIES,):
+            (comment,) = conn.execute(
+                "SELECT shobj_description(oid, 'pg_database') FROM pg_database "
+                "WHERE datname = current_database()"
+            ).fetchone()
+        if comment == _fingerprint():
             return url
     except psycopg.Error:
         pass
@@ -154,6 +171,8 @@ def huge_database() -> str:
     except psycopg.OperationalError:
         pytest.skip("serving Postgres not reachable")
     build(url)
+    with psycopg.connect(url, autocommit=True) as conn:
+        conn.execute(f"COMMENT ON DATABASE {DATABASE} IS '{_fingerprint()}'")
     return url
 
 

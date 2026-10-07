@@ -2114,7 +2114,7 @@
     },
     "/taxons/stats": {
       "get": {
-        "description": "The quality stats (best BUSCO, median genes, genome size and N50) of the taxa\n``/taxons`` lists for the same parameters, page for page and with the same\ncursors, each computed from the records on or below the taxon. Slower than\n``/taxons``: about half a second for any page on the full dataset.",
+        "description": "The quality stats (best BUSCO, median genes, genome size and N50) of the taxa\n``/taxons`` lists for the same parameters, page for page and with the same\ncursors, each over the records on or below the taxon. Computed at build time,\nso a page costs about what the same page of ``/taxons`` does.",
         "operationId": "taxons_stats_taxons_stats_get",
         "parameters": [
           {
@@ -2440,7 +2440,7 @@
     },
     "/taxons/{taxid}/stats": {
       "get": {
-        "description": "The quality stats (best BUSCO, median genes, genome size and N50) of the\nrecords on or below one taxon, the same object ``/taxons/stats`` lists. From a\nfew milliseconds for a genus to about 0.3 s for Eukaryota.",
+        "description": "The quality stats (best BUSCO, median genes, genome size and N50) of the\nrecords on or below one taxon, the same object ``/taxons/stats`` lists,\ncomputed at build time.",
         "operationId": "taxon_stats_taxons__taxid__stats_get",
         "parameters": [
           {
