@@ -14,7 +14,7 @@ export interface paths {
         /**
          * Annotations
          * @description Gene annotations, best BUSCO first by default; records missing the sort field
-         *     come last. The quality stats of a taxon's annotations are in ``/taxons/{taxid}``.
+         *     come last. The quality stats of a taxon's annotations are in ``/taxons/{taxid}/stats``.
          */
         get: operations["annotations_annotations_get"];
         put?: never;
@@ -35,7 +35,7 @@ export interface paths {
         /**
          * Assemblies
          * @description Genome assemblies, newest first by default; records missing the sort field
-         *     come last. The quality stats of a taxon's assemblies are in ``/taxons/{taxid}``.
+         *     come last. The quality stats of a taxon's assemblies are in ``/taxons/{taxid}/stats``.
          */
         get: operations["assemblies_assemblies_get"];
         put?: never;

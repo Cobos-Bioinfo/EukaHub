@@ -12,6 +12,7 @@ import psycopg
 from eukahub_api import main
 from eukahub_api.db import statement_timeout_ms
 from eukahub_api.queries import TaxonFilter, fetch_root, list_taxa
+from eukahub_api.resources import taxons
 from psycopg.errors import QueryCanceled
 from psycopg_pool import PoolTimeout
 
@@ -48,7 +49,7 @@ def test_repeated_queries_never_switch_to_generic_plans(client):
 
 
 def test_cancelled_query_is_a_clean_504(client, monkeypatch):
-    monkeypatch.setattr(main, "fetch_taxon", _slow_query)
+    monkeypatch.setattr(taxons, "fetch_taxon", _slow_query)
     resp = client.get("/taxons/2759")
     assert resp.status_code == 504
     assert "smaller group" in resp.json()["detail"]
@@ -63,7 +64,7 @@ def test_export_timeout_fails_before_the_download_starts(client, monkeypatch):
         yield "header\n"
         raise QueryCanceled("canceling statement due to statement timeout")
 
-    monkeypatch.setattr(main, "iter_report_tsv", _cancelled_export)
+    monkeypatch.setattr(taxons, "iter_report_tsv", _cancelled_export)
     resp = client.get("/taxons/report?within=2759&rank=species")
     assert resp.status_code == 504
     assert resp.headers["content-type"].startswith("application/json")
@@ -73,7 +74,7 @@ def test_pool_exhaustion_is_a_retryable_503(client, monkeypatch):
     def _no_connection(conn, taxid):
         raise PoolTimeout("couldn't get a connection after 30.00 sec")
 
-    monkeypatch.setattr(main, "fetch_taxon", _no_connection)
+    monkeypatch.setattr(taxons, "fetch_taxon", _no_connection)
     resp = client.get("/taxons/2759")
     assert resp.status_code == 503
     assert resp.headers["retry-after"] == "10"

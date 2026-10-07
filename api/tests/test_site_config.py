@@ -8,7 +8,7 @@ import logging
 from pathlib import Path
 
 import pytest
-from eukahub_api import main
+from eukahub_api.resources import config as config_resource
 from eukahub_api.settings import (
     DEFAULT_GROUPS,
     DEFAULT_SOURCE_CODE_URL,
@@ -149,7 +149,7 @@ def test_endpoints_follow_the_settings(client, monkeypatch, tmp_path):
             ),
         }
     )
-    monkeypatch.setattr(main, "get_settings", lambda: settings)
+    monkeypatch.setattr(config_resource, "get_settings", lambda: settings)
 
     config = client.get("/config").json()
     links = {m["key"]: m["external_url_template"] for m in config["metrics"]}
