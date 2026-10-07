@@ -30,8 +30,8 @@ ENA           ┘   (rebuild.yml)          (public)          ▲
 
 ## Request path
 
-Browser → nginx (static SPA; `/api/*` proxied, successful GETs cached for up to
-an hour) → FastAPI → Postgres. Successful API responses carry `Cache-Control`,
+Browser → nginx (static SPA; `/api/*` proxied, successful GETs other than the TSV
+report cached for up to an hour) → FastAPI → Postgres. Successful API responses carry `Cache-Control`,
 and JSON responses an `ETag`. Nothing in the request path writes to the database or calls an external
 service. The Wikipedia summary on the dashboard is fetched by the browser from
 Wikipedia.
@@ -69,8 +69,8 @@ CPU core. It has been tested under exactly those limits (see
   wait, then get a 503 with `Retry-After`.
 - Parallel query workers and JIT are off in the production Postgres, since they
   only compete for the single core.
-- nginx caches API responses, so repeated views of popular clades never reach the
-  database.
+- nginx caches API responses (all but the TSV report), so repeated views of popular
+  clades never reach the database.
 
 ## Repository layout
 

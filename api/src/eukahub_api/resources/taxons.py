@@ -226,7 +226,8 @@ def taxons_report(
 ) -> StreamingResponse:
     """Every taxon ``/taxons`` lists for the same filters and sort, as a streamed
     TSV download: taxid, name, species count, then the species with each resource
-    and the total of each resource."""
+    and the total of each resource. Not cached: a report runs to tens of MB, and
+    nginx's cache is kept for the small responses the interface repeats."""
     rows = iter_report_tsv(
         request.app.state.pool,
         f,
@@ -243,7 +244,10 @@ def taxons_report(
     return StreamingResponse(
         itertools.chain(head, rows),
         media_type="text/tab-separated-values",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Cache-Control": "no-store",
+        },
     )
 
 

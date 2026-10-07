@@ -1907,7 +1907,7 @@
     },
     "/taxons/report": {
       "get": {
-        "description": "Every taxon ``/taxons`` lists for the same filters and sort, as a streamed\nTSV download: taxid, name, species count, then the species with each resource\nand the total of each resource.",
+        "description": "Every taxon ``/taxons`` lists for the same filters and sort, as a streamed\nTSV download: taxid, name, species count, then the species with each resource\nand the total of each resource. Not cached: a report runs to tens of MB, and\nnginx's cache is kept for the small responses the interface repeats.",
         "operationId": "taxons_report_taxons_report_get",
         "parameters": [
           {
