@@ -64,8 +64,8 @@ changes. Put personal or machine-specific notes in a gitignored `CLAUDE.local.md
   precompute into tables), and keep every process's memory bounded to a few hundred MB
   whatever the data size.
 - For large tables, read rollups computed at build time rather than aggregating per request.
-- No unbounded output: cap every list and every response (at most 100 MB, with a clear
-  error), and stream large ones.
+- No unbounded output: cap every list (page size, number of taxids or clades) with a clear
+  error. A download streams in batches, so memory stays flat whatever its size.
 - Every new query or endpoint gets a case in `api/tests/test_memory.py` (`uv run pytest -m
   ram`, fails over 256 MB); check memory use whenever a query changes.
 
