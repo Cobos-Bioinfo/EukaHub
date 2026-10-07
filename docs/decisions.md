@@ -145,6 +145,9 @@ Streamlit app that answered the same questions but was slow to build and to serv
   saying what to change, sent as `application/problem+json`. A 422 also lists each
   parameter at fault in `errors`. The OpenAPI document gives every operation this
   `Problem` as its default response.
+- **An unknown query parameter is a 422.** A typo such as `rnak=species` would
+  otherwise return an unfiltered list that looks like an answer. The error names the
+  parameter and lists those the endpoint takes.
 - **Lists page with a cursor, not an offset.** Each list sorts on keys that end in
   a unique one (the taxid or the record's accession), and a page's `next` and
   `previous` cursors hold the key values of its last and first rows. The next query

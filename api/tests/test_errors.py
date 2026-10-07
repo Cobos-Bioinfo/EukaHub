@@ -1,4 +1,4 @@
-"""Every error is problem details (RFC 9457)."""
+"""Every error is problem details (RFC 9457), and an unknown parameter is refused."""
 
 from __future__ import annotations
 
@@ -50,7 +50,28 @@ def test_an_invalid_cursor_is_a_parameter_error(client):
     assert [e["parameter"] for e in body["errors"]] == ["cursor"]
 
 
+def test_an_unknown_parameter_is_refused(client):
+    body = _problem(client.get("/taxons", params={"within": 40674, "rnak": "species"}), 422)
+    assert [e["parameter"] for e in body["errors"]] == ["rnak"]
+    assert "rank" in body["detail"]  # the parameters it takes are listed
 
+
+def test_parameters_of_shared_dependencies_are_known(client):
+    params = {
+        "within": 40674,
+        "rank": "family",
+        "filter": ["ass", "ann"],
+        "logic": "OR",
+        "sort_by": "name",
+        "sort_order": "asc",
+        "limit": 2,
+    }
+    assert client.get("/taxons", params=params).status_code == 200
+
+
+def test_an_endpoint_without_parameters_takes_none(client):
+    assert client.get("/taxons/9606/ancestors").status_code == 200
+    assert "takes none" in _problem(client.get("/config", params={"x": 1}), 422)["detail"]
 
 
 
