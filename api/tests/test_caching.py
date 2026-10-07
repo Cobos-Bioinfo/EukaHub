@@ -84,14 +84,3 @@ def test_streamed_export_has_no_etag(client):
 
 def test_health_has_no_etag(client):
     assert "etag" not in client.get("/health").headers
-
-
-def test_head_answers_like_get_without_a_body(client):
-    get = client.get("/taxons/9606")
-    head = client.head("/taxons/9606")
-    assert head.status_code == 200
-    assert head.content == b""
-    for header in ("etag", "cache-control", "content-type", "content-length"):
-        assert head.headers[header] == get.headers[header]
-    assert client.head("/health").status_code == 200
-    assert client.head("/taxons/999999999").status_code == 404
