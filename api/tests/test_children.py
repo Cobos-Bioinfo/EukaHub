@@ -9,6 +9,7 @@ from __future__ import annotations
 import psycopg
 import pytest
 from eukahub_api.db import database_url
+from eukahub_core.metrics import METRIC_NAMES
 
 
 def _children(client, taxid: int, **params) -> dict:
@@ -21,12 +22,12 @@ def test_children_root_sorted_by_species(client):
     d = _children(client, 2759, limit=5)
     assert d["total"] >= 20  # ~21 direct children of Eukaryota
     assert len(d["results"]) == 5
-    counts = [i["n_rows"] for i in d["results"]]
+    counts = [i["species"] for i in d["results"]]
     assert counts == sorted(counts, reverse=True)
     top = d["results"][0]
     assert top["name"] == "Opisthokonta"  # most species-rich child
     assert top["has_children"] is True
-    assert set(top["resources"]) == {"ass", "ann", "rna", "lng"}
+    assert list(top["resources"]) == list(METRIC_NAMES)
 
 
 def test_children_pages_cover_every_child_once(client):
@@ -43,9 +44,9 @@ def test_children_pages_cover_every_child_once(client):
 
 def test_children_sort_param_changes_order(client):
     by_species = _children(client, 2759, limit=25)
-    by_ann = _children(client, 2759, limit=25, sort_by="c_ann")
+    by_ann = _children(client, 2759, limit=25, sort_by="resources.annotations.covered")
     assert {i["taxid"] for i in by_species["results"]} == {i["taxid"] for i in by_ann["results"]}
-    ann = [i["resources"]["ann"]["covered"] for i in by_ann["results"]]
+    ann = [i["resources"]["annotations"]["covered"] for i in by_ann["results"]]
     assert ann == sorted(ann, reverse=True)
     by_name = _children(client, 2759, limit=25, sort_by="name", sort_order="asc")
     names = [i["name"] for i in by_name["results"]]

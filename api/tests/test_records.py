@@ -49,7 +49,7 @@ def test_without_within_lists_every_record(client):
     assert everything >= client.get("/assemblies", params={"within": 40674, "limit": 1}).json()[
         "total"
     ]
-    assert everything == client.get("/taxons/2759").json()["resources"]["ass"]["total"]
+    assert everything == client.get("/taxons/2759").json()["resources"]["assemblies"]["total"]
 
 
 @pytest.mark.parametrize(

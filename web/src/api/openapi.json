@@ -21,16 +21,16 @@
             "title": "Include",
             "type": "array"
           },
-          "n_rows": {
-            "title": "N Rows",
-            "type": "integer"
-          },
           "resources": {
             "additionalProperties": {
               "$ref": "#/components/schemas/ResourceSummary"
             },
             "title": "Resources",
             "type": "object"
+          },
+          "species": {
+            "title": "Species",
+            "type": "integer"
           },
           "stats": {
             "description": "As for a taxon, over the records in the set.",
@@ -44,7 +44,7 @@
         "required": [
           "include",
           "exclude",
-          "n_rows",
+          "species",
           "resources",
           "composition",
           "stats"
@@ -783,10 +783,6 @@
             "title": "Color",
             "type": "string"
           },
-          "coverage_column": {
-            "title": "Coverage Column",
-            "type": "string"
-          },
           "empty_text": {
             "title": "Empty Text",
             "type": "string"
@@ -804,6 +800,7 @@
             "type": "string"
           },
           "key": {
+            "description": "The resource's name: its key in `resources`, its value for `filter`, and the middle of its `sort_by` values.",
             "title": "Key",
             "type": "string"
           },
@@ -831,10 +828,6 @@
             "title": "Species Help",
             "type": "string"
           },
-          "total_column": {
-            "title": "Total Column",
-            "type": "string"
-          },
           "total_help": {
             "title": "Total Help",
             "type": "string"
@@ -855,8 +848,6 @@
           "color",
           "external_source_name",
           "external_url_template",
-          "coverage_column",
-          "total_column",
           "filter_label",
           "sort_count_label",
           "sort_total_label",
@@ -869,10 +860,10 @@
       },
       "MetricFilter": {
         "enum": [
-          "ass",
-          "ann",
-          "rna",
-          "lng"
+          "assemblies",
+          "annotations",
+          "rna_seq",
+          "long_read_rna_seq"
         ],
         "title": "MetricFilter",
         "type": "string"
@@ -1035,8 +1026,13 @@
             "title": "Covered",
             "type": "integer"
           },
+          "missing": {
+            "description": "Species on or below the taxon without any: species - covered.",
+            "title": "Missing",
+            "type": "integer"
+          },
           "percent": {
-            "description": "covered / n_rows * 100, or 0 when n_rows is 0.",
+            "description": "covered / species * 100, or 0 when species is 0.",
             "title": "Percent",
             "type": "number"
           },
@@ -1048,6 +1044,7 @@
         },
         "required": [
           "covered",
+          "missing",
           "total",
           "percent"
         ],
@@ -1118,11 +1115,6 @@
             "title": "Is Infraspecific",
             "type": "boolean"
           },
-          "n_rows": {
-            "description": "Species on or below the taxon (1 for a species or a finer taxon).",
-            "title": "N Rows",
-            "type": "integer"
-          },
           "name": {
             "title": "Name",
             "type": "string"
@@ -1135,9 +1127,14 @@
             "additionalProperties": {
               "$ref": "#/components/schemas/ResourceSummary"
             },
-            "description": "Per resource, keyed by the metric keys in /config.",
+            "description": "Per resource, keyed by the resource names in /config.",
             "title": "Resources",
             "type": "object"
+          },
+          "species": {
+            "description": "Species on or below the taxon (1 for a species or a finer taxon).",
+            "title": "Species",
+            "type": "integer"
           },
           "taxid": {
             "title": "Taxid",
@@ -1148,7 +1145,7 @@
           "taxid",
           "name",
           "rank",
-          "n_rows",
+          "species",
           "resources",
           "composition",
           "context",
@@ -1233,24 +1230,24 @@
       },
       "TaxonSort": {
         "enum": [
-          "n_rows",
-          "c_ass",
-          "c_ann",
-          "c_rna",
-          "c_lng",
-          "s_ass",
-          "s_ann",
-          "s_rna",
-          "s_lng",
-          "n_ass_complete",
-          "n_ass_chromosome",
-          "n_ass_scaffold",
-          "n_ass_contig",
-          "n_reference",
-          "gap_ass",
-          "gap_ann",
-          "gap_rna",
-          "gap_lng",
+          "species",
+          "resources.assemblies.covered",
+          "resources.assemblies.missing",
+          "resources.assemblies.total",
+          "resources.annotations.covered",
+          "resources.annotations.missing",
+          "resources.annotations.total",
+          "resources.rna_seq.covered",
+          "resources.rna_seq.missing",
+          "resources.rna_seq.total",
+          "resources.long_read_rna_seq.covered",
+          "resources.long_read_rna_seq.missing",
+          "resources.long_read_rna_seq.total",
+          "composition.complete",
+          "composition.chromosome",
+          "composition.scaffold",
+          "composition.contig",
+          "composition.reference",
           "name"
         ],
         "title": "TaxonSort",
@@ -1650,11 +1647,11 @@
     },
     "/taxons": {
       "get": {
-        "description": "Taxa with their counts: a name search (``q``), a taxon's children\n(``parent``), every taxon of a rank under a taxon (``within`` and ``rank``), or\nchosen taxa (``taxids``), narrowed by the data they have. Sort by\n``gap_<resource>`` for the groups with the most species still missing it. Their\nquality stats are in ``/taxons/stats``.",
+        "description": "Taxa with their counts: a name search (``q``), a taxon's children\n(``parent``), every taxon of a rank under a taxon (``within`` and ``rank``), or\nchosen taxa (``taxids``), narrowed by the data they have. Sort by\n``resources.<resource>.missing`` for the groups with the most species still\nmissing it. Their quality stats are in ``/taxons/stats``.",
         "operationId": "taxons_taxons_get",
         "parameters": [
           {
-            "description": "A count column, `gap_<resource>` (species without that resource) or `name`. Without it: relevance for `q`, else species count (`n_rows`).",
+            "description": "The path of a number in a taxon: `species`, `resources.<resource>.covered`, `.missing` or `.total`, or `composition.<field>`; or `name`. Without it: relevance for `q`, else `species`.",
             "in": "query",
             "name": "sort_by",
             "required": false,
@@ -1667,7 +1664,7 @@
                   "type": "null"
                 }
               ],
-              "description": "A count column, `gap_<resource>` (species without that resource) or `name`. Without it: relevance for `q`, else species count (`n_rows`).",
+              "description": "The path of a number in a taxon: `species`, `resources.<resource>.covered`, `.missing` or `.total`, or `composition.<field>`; or `name`. Without it: relevance for `q`, else `species`.",
               "title": "Sort By"
             }
           },
@@ -1816,7 +1813,7 @@
             }
           },
           {
-            "description": "Only taxa with data for these resources.",
+            "description": "Only taxa with data for these resources (their names in /config).",
             "in": "query",
             "name": "filter",
             "required": false,
@@ -1832,7 +1829,7 @@
                   "type": "null"
                 }
               ],
-              "description": "Only taxa with data for these resources.",
+              "description": "Only taxa with data for these resources (their names in /config).",
               "title": "Filter"
             }
           },
@@ -1951,7 +1948,7 @@
         "operationId": "taxons_report_taxons_report_get",
         "parameters": [
           {
-            "description": "A count column, `gap_<resource>` (species without that resource) or `name`. Without it: relevance for `q`, else species count (`n_rows`).",
+            "description": "The path of a number in a taxon: `species`, `resources.<resource>.covered`, `.missing` or `.total`, or `composition.<field>`; or `name`. Without it: relevance for `q`, else `species`.",
             "in": "query",
             "name": "sort_by",
             "required": false,
@@ -1964,7 +1961,7 @@
                   "type": "null"
                 }
               ],
-              "description": "A count column, `gap_<resource>` (species without that resource) or `name`. Without it: relevance for `q`, else species count (`n_rows`).",
+              "description": "The path of a number in a taxon: `species`, `resources.<resource>.covered`, `.missing` or `.total`, or `composition.<field>`; or `name`. Without it: relevance for `q`, else `species`.",
               "title": "Sort By"
             }
           },
@@ -2082,7 +2079,7 @@
             }
           },
           {
-            "description": "Only taxa with data for these resources.",
+            "description": "Only taxa with data for these resources (their names in /config).",
             "in": "query",
             "name": "filter",
             "required": false,
@@ -2098,7 +2095,7 @@
                   "type": "null"
                 }
               ],
-              "description": "Only taxa with data for these resources.",
+              "description": "Only taxa with data for these resources (their names in /config).",
               "title": "Filter"
             }
           },
@@ -2158,7 +2155,7 @@
         "operationId": "taxons_stats_taxons_stats_get",
         "parameters": [
           {
-            "description": "A count column, `gap_<resource>` (species without that resource) or `name`. Without it: relevance for `q`, else species count (`n_rows`).",
+            "description": "The path of a number in a taxon: `species`, `resources.<resource>.covered`, `.missing` or `.total`, or `composition.<field>`; or `name`. Without it: relevance for `q`, else `species`.",
             "in": "query",
             "name": "sort_by",
             "required": false,
@@ -2171,7 +2168,7 @@
                   "type": "null"
                 }
               ],
-              "description": "A count column, `gap_<resource>` (species without that resource) or `name`. Without it: relevance for `q`, else species count (`n_rows`).",
+              "description": "The path of a number in a taxon: `species`, `resources.<resource>.covered`, `.missing` or `.total`, or `composition.<field>`; or `name`. Without it: relevance for `q`, else `species`.",
               "title": "Sort By"
             }
           },
@@ -2320,7 +2317,7 @@
             }
           },
           {
-            "description": "Only taxa with data for these resources.",
+            "description": "Only taxa with data for these resources (their names in /config).",
             "in": "query",
             "name": "filter",
             "required": false,
@@ -2336,7 +2333,7 @@
                   "type": "null"
                 }
               ],
-              "description": "Only taxa with data for these resources.",
+              "description": "Only taxa with data for these resources (their names in /config).",
               "title": "Filter"
             }
           },

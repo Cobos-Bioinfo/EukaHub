@@ -2,9 +2,9 @@
 
 The static card chrome (titles, help text, colors, external URLs) lives in
 ``eukahub_core.metrics.METRICS`` and is served once in ``/config``.
-These per-clade payloads carry only the numbers, keyed by metric key
-("ass", "ann", "rna", "lng"), so the frontend loops the metric config to
-render one card per resource.
+These per-clade payloads carry only the numbers, keyed by resource name
+("assemblies", "annotations", "rna_seq", "long_read_rna_seq"), so the frontend
+loops the metric config to render one card per resource.
 """
 
 from __future__ import annotations
@@ -13,7 +13,7 @@ from datetime import date, datetime
 from typing import Annotated
 
 from eukahub_core.metrics import (
-    METRIC_KEYS,
+    METRICS,
     CladeMetadata,
     Metric,
     QualityAgg,
@@ -34,7 +34,8 @@ class MetricConfig(BaseModel):
     """Static per-resource card chrome — served once in ``/config`` and joined
     client-side to the numbers in each per-clade payload (by ``key``)."""
 
-    key: str
+    key: str = Field(description="The resource's name: its key in `resources`, its value for "
+        "`filter`, and the middle of its `sort_by` values.")
     card_title: str
     card_title_help: str | None
     species_help: str
@@ -44,13 +45,11 @@ class MetricConfig(BaseModel):
     color: str
     external_source_name: str
     external_url_template: str  # contains "{taxid}"; the client substitutes
-    coverage_column: str
-    total_column: str
     # Labels for the breakdown (Q2) filter/sort controls — the metric config's
     # single source of truth so the frontend's control copy can't drift.
     filter_label: str  # resource-presence checkbox label
-    sort_count_label: str  # label for sorting by c_<key> (species covered)
-    sort_total_label: str  # label for sorting by s_<key> (summed total)
+    sort_count_label: str  # label for sorting by resources.<key>.covered
+    sort_total_label: str  # label for sorting by resources.<key>.total
     # Divergent bar-chart layout (Q2 chart): which half of the mirrored bar the
     # metric occupies, whether it's the darker overlaid (subset) metric in its
     # pair, and the short label used in the chart legend.
@@ -61,7 +60,7 @@ class MetricConfig(BaseModel):
     @classmethod
     def from_metric(cls, m: Metric, external_url_template: str) -> MetricConfig:
         return cls(
-            key=m.key,
+            key=m.name,
             card_title=m.card_title,
             card_title_help=m.card_title_help,
             species_help=m.species_help,
@@ -71,8 +70,6 @@ class MetricConfig(BaseModel):
             color=m.color,
             external_source_name=m.external_source_name,
             external_url_template=external_url_template,
-            coverage_column=m.coverage_key,
-            total_column=m.total_key,
             filter_label=m.filter_label,
             sort_count_label=m.sort_count_label,
             sort_total_label=m.sort_total_label,
@@ -87,20 +84,34 @@ class ResourceSummary(BaseModel):
     below it when the dataset is built."""
 
     covered: int = Field(description="Species on or below the taxon with at least one record.")
+    missing: int = Field(description="Species on or below the taxon without any: species - covered.")
     total: int = Field(description="Records on or below the taxon, at any rank.")
-    percent: float = Field(description="covered / n_rows * 100, or 0 when n_rows is 0.")
+    percent: float = Field(description="covered / species * 100, or 0 when species is 0.")
 
     @classmethod
     def by_metric(cls, meta: CladeMetadata) -> dict[str, ResourceSummary]:
-        """One summary per metric key, in METRICS order."""
-        return {
-            key: cls(
-                covered=getattr(meta, f"c_{key}"),
-                total=getattr(meta, f"s_{key}"),
-                percent=round(meta.percent(key), 2),
-            )
-            for key in METRIC_KEYS
-        }
+        """One summary per resource, keyed by its name, in METRICS order."""
+        return {m.name: cls.of(meta, m) for m in METRICS}
+
+    @classmethod
+    def of(cls, meta: CladeMetadata, m: Metric) -> ResourceSummary:
+        covered = getattr(meta, m.coverage_key)
+        return cls(
+            covered=covered,
+            missing=meta.n_rows - covered,
+            total=getattr(meta, m.total_key),
+            percent=round(meta.percent(m.key), 2),
+        )
+
+
+# The clade_features column behind each field of AssemblyComposition.
+COMPOSITION_FIELDS: dict[str, str] = {
+    "complete": "n_ass_complete",
+    "chromosome": "n_ass_chromosome",
+    "scaffold": "n_ass_scaffold",
+    "contig": "n_ass_contig",
+    "reference": "n_reference",
+}
 
 
 class AssemblyComposition(BaseModel):
@@ -116,13 +127,7 @@ class AssemblyComposition(BaseModel):
 
     @classmethod
     def from_metadata(cls, meta: CladeMetadata) -> AssemblyComposition:
-        return cls(
-            complete=meta.n_ass_complete,
-            chromosome=meta.n_ass_chromosome,
-            scaffold=meta.n_ass_scaffold,
-            contig=meta.n_ass_contig,
-            reference=meta.n_reference,
-        )
+        return cls(**{field: getattr(meta, column) for field, column in COMPOSITION_FIELDS.items()})
 
 
 class CladeSummary(BaseModel):
@@ -131,7 +136,7 @@ class CladeSummary(BaseModel):
     taxid: int
     name: str
     rank: str
-    n_rows: int = Field(
+    species: int = Field(
         description="Species on or below the taxon (1 for a species or a finer taxon)."
     )
     is_infraspecific: bool = Field(
@@ -140,7 +145,7 @@ class CladeSummary(BaseModel):
         "counts for its species.",
     )
     resources: dict[str, ResourceSummary] = Field(
-        description="Per resource, keyed by the metric keys in /config."
+        description="Per resource, keyed by the resource names in /config."
     )
     composition: AssemblyComposition
     direct: dict[str, int] | None = Field(
@@ -157,7 +162,7 @@ class CladeSummary(BaseModel):
             taxid=meta.taxid,
             name=name,
             rank=rank,
-            n_rows=meta.n_rows,
+            species=meta.n_rows,
             is_infraspecific=is_infraspecific,
             resources=ResourceSummary.by_metric(meta),
             composition=AssemblyComposition.from_metadata(meta),
@@ -371,8 +376,8 @@ class Aggregate(BaseModel):
 
     include: list[TaxonRef]
     exclude: list[TaxonRef]
-    n_rows: int  # species in the set
-    resources: dict[str, ResourceSummary]  # keyed by metric key, in METRICS order
+    species: int  # species in the set
+    resources: dict[str, ResourceSummary]  # keyed by resource name, in METRICS order
     composition: AssemblyComposition
     stats: list[QualityStatValue] = Field(
         description="As for a taxon, over the records in the set."

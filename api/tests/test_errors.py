@@ -41,7 +41,7 @@ def test_a_bad_parameter_is_named(client):
 
 
 def test_a_bad_list_item_names_its_parameter(client):
-    body = _problem(client.get("/taxons", params={"filter": ["ass", "nope"]}), 422)
+    body = _problem(client.get("/taxons", params={"filter": ["assemblies", "nope"]}), 422)
     assert [e["parameter"] for e in body["errors"]] == ["filter"]
 
 
@@ -60,7 +60,7 @@ def test_parameters_of_shared_dependencies_are_known(client):
     params = {
         "within": 40674,
         "rank": "family",
-        "filter": ["ass", "ann"],
+        "filter": ["assemblies", "annotations"],
         "logic": "or",
         "sort_by": "name",
         "sort_order": "asc",
@@ -75,7 +75,7 @@ def test_an_endpoint_without_parameters_takes_none(client):
 
 
 def test_logic_is_lower_case(client):
-    params = {"within": 40674, "rank": "order", "filter": ["ass", "ann"]}
+    params = {"within": 40674, "rank": "order", "filter": ["assemblies", "annotations"]}
     assert client.get("/taxons", params={**params, "logic": "or"}).status_code == 200
     _problem(client.get("/taxons", params={**params, "logic": "OR"}), 422)
 

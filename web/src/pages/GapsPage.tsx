@@ -13,7 +13,7 @@ import { EUKARYOTA_TAXID } from "../lib/taxonomy";
 // Ranks the leaderboard can group by (species excluded — a species is one row,
 // so its "gap" is 0 or 1 and meaningless). Coarse → fine, the selector order.
 const RANKS: TargetRank[] = ["phylum", "class", "order", "family", "genus"];
-const RESOURCES: MetricFilter[] = ["ass", "ann", "rna", "lng"];
+const RESOURCES: MetricFilter[] = ["assemblies", "annotations", "rna_seq", "long_read_rna_seq"];
 // One step finer, for the "look inside" re-root that walks down the tree.
 const FINER: Record<string, TargetRank> = {
   phylum: "class",
@@ -40,7 +40,7 @@ export default function GapsPage() {
   const rawRank = params.get("rank") as TargetRank;
   const rank: TargetRank = RANKS.includes(rawRank) ? rawRank : "order";
   const rawRes = params.get("resource") as MetricFilter;
-  const resource: MetricFilter = RESOURCES.includes(rawRes) ? rawRes : "ass";
+  const resource: MetricFilter = RESOURCES.includes(rawRes) ? rawRes : "assemblies";
   const view: "list" | "scatter" = params.get("view") === "scatter" ? "scatter" : "list";
 
   const patch = (next: Record<string, string>) => {
@@ -235,7 +235,7 @@ function GapRow({
         <div
           className="gaps-row__bar"
           role="img"
-          aria-label={`${fmt(item.gap)} of ${fmt(item.n_rows)} species have no ${resourceLower}`}
+          aria-label={`${fmt(item.gap)} of ${fmt(item.species)} species have no ${resourceLower}`}
         >
           <div className="gaps-row__bar-fill" style={{ width: `${width}%` }} />
         </div>
@@ -255,7 +255,7 @@ function GapRow({
         )}
         <div className="gaps-row__meta">
           <span className="gaps-row__stat">
-            {fmt(item.n_rows)} species · {fmtPct(item.percent)}% covered
+            {fmt(item.species)} species · {fmtPct(item.percent)}% covered
           </span>
           <span className="gaps-row__links">
             <Link to={`/clade/${item.taxid}`} className="gaps-row__link">

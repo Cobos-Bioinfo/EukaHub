@@ -39,7 +39,7 @@ def test_search_hits_carry_the_taxon_counts(client):
     for hit in _search(client, "Homo", limit=5):
         taxon = client.get(f"/taxons/{hit['taxid']}").json()
         assert hit["resources"] == taxon["resources"]
-        assert hit["n_rows"] == taxon["n_rows"]
+        assert hit["species"] == taxon["species"]
         assert hit == taxon
         assert "stats" not in hit  # in /taxons/stats
 

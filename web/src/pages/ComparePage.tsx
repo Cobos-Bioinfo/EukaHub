@@ -229,7 +229,7 @@ function CompareChart({
                   className="ccht__barrow"
                   title={`${nameOf(g.taxid)} · ${m.card_title}: ${fmtPct(
                     pct,
-                  )}% (${fmt(r?.covered ?? 0)} of ${fmt(g.n_rows)} species)`}
+                  )}% (${fmt(r?.covered ?? 0)} of ${fmt(g.species)} species)`}
                 >
                   <div
                     className="ccht__bar"
@@ -278,7 +278,7 @@ function CompareTable({
   const qMap = (g: CompareGroup) => Object.fromEntries(g.quality.map((q) => [q.key, q.value]));
   // Numeric columns: species, each resource coverage %, each quality stat.
   const columns = [
-    { key: "n_rows", label: "Species", get: (g: CompareGroup) => g.n_rows, fmt: (v: number) => fmt(v) },
+    { key: "species", label: "Species", get: (g: CompareGroup) => g.species, fmt: (v: number) => fmt(v) },
     ...metrics.map((m) => ({
       key: `r_${m.key}`,
       label: `${m.card_title} %`,

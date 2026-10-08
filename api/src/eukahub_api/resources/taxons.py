@@ -15,6 +15,7 @@ from eukahub_api.pagination import Page
 from eukahub_api.params import Cursor, Within, within_path
 from eukahub_api.queries import (
     MAX_PAGE,
+    METRIC_KEY_OF,
     FilterLogic,
     MetricFilter,
     SortOrder,
@@ -91,7 +92,7 @@ def taxon_filter(
     ] = None,
     filter: Annotated[
         list[MetricFilter] | None,
-        Query(description="Only taxa with data for these resources."),
+        Query(description="Only taxa with data for these resources (their names in /config)."),
     ] = None,
     logic: Annotated[
         FilterLogic, Query(description="Whether `filter` needs every resource (`and`) or any (`or`).")
@@ -116,7 +117,7 @@ def taxon_filter(
         within_path=within_path(conn, within),
         rank=rank.value if rank else None,
         taxids=_parse_taxids(taxids, "taxids", MAX_TAXIDS) if taxids is not None else (),
-        filter_keys=[f.value for f in filter or ()],
+        filter_keys=[METRIC_KEY_OF[f.value] for f in filter or ()],
         logic=logic,
         exclude_empty=exclude_empty,
     )
@@ -126,8 +127,9 @@ _TaxonFilter = Annotated[TaxonFilter, Depends(taxon_filter)]
 _TaxonSortBy = Annotated[
     TaxonSort | None,
     Query(
-        description="A count column, `gap_<resource>` (species without that resource) or "
-        "`name`. Without it: relevance for `q`, else species count (`n_rows`)."
+        description="The path of a number in a taxon: `species`, "
+        "`resources.<resource>.covered`, `.missing` or `.total`, or `composition.<field>`; "
+        "or `name`. Without it: relevance for `q`, else `species`."
     ),
 ]
 
@@ -171,8 +173,8 @@ def taxons(
     """Taxa with their counts: a name search (``q``), a taxon's children
     (``parent``), every taxon of a rank under a taxon (``within`` and ``rank``), or
     chosen taxa (``taxids``), narrowed by the data they have. Sort by
-    ``gap_<resource>`` for the groups with the most species still missing it. Their
-    quality stats are in ``/taxons/stats``."""
+    ``resources.<resource>.missing`` for the groups with the most species still
+    missing it. Their quality stats are in ``/taxons/stats``."""
     total, result = _taxa_page(conn, f, sort_by, sort_order, limit, cursor)
     return TaxonPage(
         total=total,
@@ -287,7 +289,7 @@ def aggregate(
     aggregate = Aggregate(
         include=taxon_refs((t for t in inc if marks.get(t) is True), taxa),
         exclude=taxon_refs((t for t in exc if marks.get(t) is False), taxa),
-        n_rows=meta.n_rows,
+        species=meta.n_rows,
         resources=ResourceSummary.by_metric(meta),
         composition=AssemblyComposition.from_metadata(meta),
         stats=[QualityStatValue(key=q.key, value=quality[q.key]) for q in QUALITY_STATS],

@@ -40,7 +40,7 @@ def test_report_matches_the_list(client):
     for query in (
         "within=2759&rank=phylum",
         "within=2759&rank=phylum&exclude_empty=true",
-        "within=40674&rank=order&sort_by=gap_ass&sort_order=asc",
+        "within=40674&rank=order&sort_by=resources.assemblies.missing&sort_order=asc",
         "parent=2759&sort_by=name",
     ):
         _, rows = _parse(client.get(f"/taxons/report?{query}").text)

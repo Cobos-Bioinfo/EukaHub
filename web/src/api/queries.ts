@@ -181,11 +181,11 @@ export async function getOverview(): Promise<Overview> {
   if (!root) throw new Error("Eukaryota is missing from the dataset");
   return {
     totals: {
-      species: root.n_rows,
-      assemblies: root.resources.ass.total,
-      annotations: root.resources.ann.total,
-      rna_seq: root.resources.rna.total,
-      long_read: root.resources.lng.total,
+      species: root.species,
+      assemblies: root.resources.assemblies.total,
+      annotations: root.resources.annotations.total,
+      rna_seq: root.resources.rna_seq.total,
+      long_read: root.resources.long_read_rna_seq.total,
       reference_genomes: root.composition.reference,
     },
     featured: featured.flatMap((taxid) => {
@@ -195,10 +195,10 @@ export async function getOverview(): Promise<Overview> {
             {
               taxid,
               name: t.name,
-              species: t.n_rows,
-              assemblies: t.resources.ass.total,
-              assembly_percent: t.resources.ass.percent,
-              annotation_percent: t.resources.ann.percent,
+              species: t.species,
+              assemblies: t.resources.assemblies.total,
+              assembly_percent: t.resources.assemblies.percent,
+              annotation_percent: t.resources.annotations.percent,
             },
           ]
         : [];
@@ -229,10 +229,10 @@ export interface GapItem {
   taxid: number;
   name: string;
   rank: string;
-  n_rows: number;
+  species: number;
   covered: number; // species with the resource
-  percent: number; // covered / n_rows * 100
-  gap: number; // n_rows - covered
+  percent: number; // covered / species * 100
+  gap: number; // species - covered
   stats: QualityStatValue[];
 }
 
@@ -249,11 +249,11 @@ export interface GapsParams {
 export async function getGaps({
   root = EUKARYOTA_TAXID,
   rank = "order",
-  resource = "ass",
+  resource = "assemblies",
   limit = 25,
   include_quality = true,
 }: GapsParams = {}): Promise<{ root: Taxon; total_matches: number; items: GapItem[] }> {
-  const params = { within: root, rank, sort_by: `gap_${resource}` as TaxonSort, limit };
+  const params = { within: root, rank, sort_by: `resources.${resource}.missing` as TaxonSort, limit };
   const [roots, page, stats] = await Promise.all([
     getTaxa({ taxids: [root], limit: 1 }),
     getTaxa(params),
@@ -267,10 +267,10 @@ export async function getGaps({
         taxid: t.taxid,
         name: t.name,
         rank: t.rank,
-        n_rows: t.n_rows,
+        species: t.species,
         covered: r.covered,
         percent: r.percent,
-        gap: t.n_rows - r.covered,
+        gap: r.missing,
         stats: quality.get(t.taxid) ?? [],
       };
     })

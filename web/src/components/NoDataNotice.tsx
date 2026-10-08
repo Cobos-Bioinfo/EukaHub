@@ -84,7 +84,7 @@ function ChildList({ taxid, name }: { taxid: number; name: string }) {
             <Link to={`/clade/${c.taxid}`}>{c.name}</Link>{" "}
             <span className="nodata__meta">
               {c.rank}
-              {c.n_rows > 1 ? `, ${fmt(c.n_rows)} species` : ""}
+              {c.species > 1 ? `, ${fmt(c.species)} species` : ""}
             </span>
           </li>
         ))}
