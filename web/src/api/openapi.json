@@ -236,8 +236,8 @@
             ],
             "title": "Gff Url"
           },
-          "organism": {
-            "title": "Organism",
+          "organism_name": {
+            "title": "Organism Name",
             "type": "string"
           },
           "protein_coding_count": {
@@ -294,7 +294,7 @@
           "annotation_id",
           "assembly_accession",
           "taxid",
-          "organism",
+          "organism_name",
           "source_database",
           "provider",
           "release_date",
@@ -526,8 +526,8 @@
             ],
             "title": "Gc Percent"
           },
-          "organism": {
-            "title": "Organism",
+          "organism_name": {
+            "title": "Organism Name",
             "type": "string"
           },
           "refseq_category": {
@@ -605,7 +605,7 @@
         "required": [
           "assembly_accession",
           "taxid",
-          "organism",
+          "organism_name",
           "assembly_level",
           "contig_n50",
           "scaffold_n50",

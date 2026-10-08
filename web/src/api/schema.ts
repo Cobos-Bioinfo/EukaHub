@@ -351,8 +351,8 @@ export interface components {
             gene_count: number | null;
             /** Gff Url */
             gff_url: string | null;
-            /** Organism */
-            organism: string;
+            /** Organism Name */
+            organism_name: string;
             /** Protein Coding Count */
             protein_coding_count: number | null;
             /** Provider */
@@ -446,8 +446,8 @@ export interface components {
             download_url: string | null;
             /** Gc Percent */
             gc_percent: number | null;
-            /** Organism */
-            organism: string;
+            /** Organism Name */
+            organism_name: string;
             /** Refseq Category */
             refseq_category: string | null;
             /** Release Date */

@@ -477,13 +477,13 @@ def iter_report_tsv(
 # SELECT lists alias every column to the response-model field name, so the
 # endpoint can build the Pydantic model straight from a dict_row.
 _ASSEMBLY_RECORD_SELECT = (
-    "a.assembly_accession, a.taxid, t.name AS organism, a.assembly_level, "
+    "a.assembly_accession, a.taxid, t.name AS organism_name, a.assembly_level, "
     "a.contig_n50, a.scaffold_n50, a.total_sequence_length, a.gc_percent, "
     "a.refseq_category, a.release_date, a.submitter, a.source_database, "
     "a.bioprojects, a.download_url"
 )
 _ANNOTATION_RECORD_SELECT = (
-    "a.annotation_id, a.assembly_accession, a.taxid, t.name AS organism, "
+    "a.annotation_id, a.assembly_accession, a.taxid, t.name AS organism_name, "
     "a.source_database, a.provider, a.release_date, a.gff_url, a.gene_count, "
     "a.protein_coding_count, a.busco_complete, a.busco_single_copy, "
     "a.busco_duplicated, a.busco_lineage"

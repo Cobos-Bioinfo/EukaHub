@@ -281,7 +281,7 @@ class AssemblyRecord(BaseModel):
 
     assembly_accession: str
     taxid: int
-    organism: str  # scientific name at the record's taxid
+    organism_name: str  # scientific name at the record's taxid
     assembly_level: str | None
     contig_n50: int | None
     scaffold_n50: int | None
@@ -302,7 +302,7 @@ class AnnotationRecord(BaseModel):
     annotation_id: str
     assembly_accession: str | None
     taxid: int
-    organism: str
+    organism_name: str
     source_database: str | None
     provider: str | None
     release_date: date | None
