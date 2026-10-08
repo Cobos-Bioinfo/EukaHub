@@ -87,7 +87,10 @@ and those on finer taxa (`direct` in the summary API).
 | `annotation` | genome annotation | Source database, provider, GFF link, gene and protein-coding counts, BUSCO scores. |
 | `dataset_meta` | (single row) | When the dataset was built and its row counts; written last, so its presence marks a complete build. |
 
-There are no foreign keys: the data is bulk-loaded and never modified afterwards.
+One foreign key: `clade_features.taxid` references `taxon`, which is why `taxon` keeps the
+root and "cellular organisms". The record tables have none: their taxids and accessions
+come from independent sources, and the build drops what doesn't match instead of failing
+(see `infra/postgres/init/001_schema.sql`).
 
 ## How queries use it
 
