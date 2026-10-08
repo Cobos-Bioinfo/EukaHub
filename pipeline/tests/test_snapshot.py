@@ -7,6 +7,7 @@ import polars as pl
 import pytest
 from eukahub_pipeline import snapshot
 from eukahub_pipeline.snapshot import cached_frame
+from tenacity import wait_none
 
 SCHEMA = {"taxid": pl.Int64, "name": pl.String}
 
@@ -47,3 +48,42 @@ def test_a_failed_fetch_leaves_no_snapshot(tmp_path, monkeypatch):
         cached_frame("src", failing, SCHEMA, tmp_path)
     assert not (tmp_path / "src.parquet").exists()
     assert cached_frame("src", lambda: _rows(2), SCHEMA, tmp_path).height == 2
+
+
+def _flaky(failures: int, calls: list[int]):
+    """A fetch that drops its connection partway through its first ``failures`` runs."""
+
+    def fetch():
+        calls.append(1)
+        yield from _rows(5 if len(calls) <= failures else 3)
+        if len(calls) <= failures:
+            raise ConnectionError("connection dropped")
+
+    return fetch
+
+
+def test_a_failed_fetch_is_retried_from_scratch(tmp_path, monkeypatch):
+    monkeypatch.setattr(snapshot, "BATCH_ROWS", 2)
+    monkeypatch.setattr(snapshot, "FETCH_WAIT", wait_none())
+    calls: list[int] = []
+    df = cached_frame("src", _flaky(1, calls), SCHEMA, tmp_path, retry_on=(ConnectionError,))
+    assert len(calls) == 2
+    assert df["taxid"].to_list() == [0, 1, 2]  # only the run that completed
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["src.parquet"]
+
+
+def test_a_fetch_that_keeps_failing_gives_up(tmp_path, monkeypatch):
+    monkeypatch.setattr(snapshot, "FETCH_WAIT", wait_none())
+    calls: list[int] = []
+    with pytest.raises(ConnectionError):
+        cached_frame("src", _flaky(99, calls), SCHEMA, tmp_path, retry_on=(ConnectionError,))
+    assert len(calls) == snapshot.FETCH_ATTEMPTS
+    assert not (tmp_path / "src.parquet").exists()
+
+
+def test_only_the_listed_errors_are_retried(tmp_path, monkeypatch):
+    monkeypatch.setattr(snapshot, "FETCH_WAIT", wait_none())
+    calls: list[int] = []
+    with pytest.raises(ConnectionError):
+        cached_frame("src", _flaky(1, calls), SCHEMA, tmp_path)
+    assert len(calls) == 1

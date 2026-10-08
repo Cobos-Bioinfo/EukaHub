@@ -1,14 +1,20 @@
 name: Dataset rebuild
 
 # Monthly (and on demand): fetch fresh NCBI / Annotrieve / ENA sources, build the
-# dataset, gate it on the pipeline's invariant checks, and publish it as the
-# `dataset-YYYYMMDD` Release that deployed stacks install (scripts/auto_refresh.py).
-# A build that fails the gate publishes nothing. Only the default branch publishes:
-# a manual run on another branch builds and uploads the artifact, nothing more.
+# dataset, gate it on the pipeline's invariant checks and on its key counts against
+# the previous Release, and publish it as the `dataset-YYYYMMDD` Release that
+# deployed stacks install (scripts/auto_refresh.py). A build that fails the gate
+# publishes nothing. Only the default branch publishes: a manual run on another
+# branch builds and uploads the artifact, nothing more.
 on:
   schedule:
     - cron: "0 4 1 * *" # 04:00 UTC on the 1st of each month
-  workflow_dispatch: {} # manual "rebuild now" from the Actions tab
+  workflow_dispatch: # manual "rebuild now" from the Actions tab
+    inputs:
+      accept_drops:
+        description: Publish even if counts fell sharply since the previous Release (after checking the drop is real)
+        type: boolean
+        default: false
 
 # Each job asks for what it needs. The build runs third-party code (actions, the
 # datasets binary, every Python dependency), so it only gets a read-only token;
@@ -81,13 +87,32 @@ jobs:
           sudo mv datasets /usr/local/bin/datasets
           datasets --version
 
+      - name: Previous Release's counts
+        id: previous
+        # A partial download from a source is self-consistent, so only a
+        # comparison with the newest dataset Release catches it. Releases from
+        # before this check carry no counts file; the build then runs without it.
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          tag="$(gh release list --exclude-drafts --exclude-pre-releases --limit 50 \
+            --json tagName --jq '[.[].tagName | select(startswith("dataset-"))][0] // ""')"
+          if [ -n "$tag" ] && gh release download "$tag" --pattern dataset-counts.json --dir previous; then
+            echo "Comparing the build with $tag"
+            echo "path=previous/dataset-counts.json" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::No dataset counts in the newest Release (${tag:-none}); the build is not compared with it."
+          fi
+
       - name: Build dataset (fresh fetch + invariant gate)
         # Downloads the taxdump, re-fetches all three sources (ignoring any
         # snapshots), rolls up, applies the schema, loads, then validate() runs the
-        # hard invariant checks and raises on any violation — failing the job
-        # before anything is published or stamped. Source URLs and timeouts come
-        # from repository variables when set (docs/deployment.md); an unset one is
-        # empty here, which keeps the default in pipeline/.../sources.py.
+        # hard invariant checks and the comparison with the previous Release's
+        # counts, and raises on any violation — failing the job before anything is
+        # published or stamped. Source URLs and timeouts come from repository
+        # variables when set (docs/deployment.md); an unset one is empty here,
+        # which keeps the default in pipeline/.../sources.py.
         env:
           TAXDUMP_URL: ${{ vars.TAXDUMP_URL }}
           TAXDUMP_TIMEOUT_SECONDS: ${{ vars.TAXDUMP_TIMEOUT_SECONDS }}
@@ -95,7 +120,13 @@ jobs:
           ENA_TIMEOUT_SECONDS: ${{ vars.ENA_TIMEOUT_SECONDS }}
           ANNOTRIEVE_API_URL: ${{ vars.ANNOTRIEVE_API_URL }}
           ANNOTRIEVE_TIMEOUT_SECONDS: ${{ vars.ANNOTRIEVE_TIMEOUT_SECONDS }}
-        run: uv run --package eukahub-pipeline python -m eukahub_pipeline.build --refresh-sources
+          PREVIOUS_COUNTS: ${{ steps.previous.outputs.path }}
+          ACCEPT_DROPS: ${{ inputs.accept_drops }}
+        run: |
+          args=(--refresh-sources --counts-out dataset-counts.json)
+          if [ -n "$PREVIOUS_COUNTS" ]; then args+=(--previous-counts "$PREVIOUS_COUNTS"); fi
+          if [ "$ACCEPT_DROPS" = "true" ]; then args+=(--accept-drops); fi
+          uv run --package eukahub-pipeline python -m eukahub_pipeline.build "${args[@]}"
 
       - name: Job summary
         run: uv run --package eukahub-api python scripts/dataset_summary.py >> "$GITHUB_STEP_SUMMARY"
@@ -120,6 +151,7 @@ jobs:
           name: eukahub-dataset
           path: |
             eukahub-dataset.dump
+            dataset-counts.json
             notes.md
           retention-days: 90
           if-no-files-found: error
@@ -145,18 +177,19 @@ jobs:
         # The Release, not the artifact, is what deployed stacks download.
         # Artifacts are deleted after 90 days, so a server that sat idle or a run
         # of failed rebuilds would find nothing left to pull; Releases persist.
-        # Re-runnable: a second run on the same day replaces the day's asset
-        # rather than failing on the existing tag.
+        # Re-runnable: a second run on the same day replaces the day's assets
+        # rather than failing on the existing tag. dataset-counts.json is what the
+        # next rebuild compares itself with.
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           STAMP: ${{ needs.rebuild.outputs.stamp }}
         run: |
           if gh release view "dataset-${STAMP}" >/dev/null 2>&1; then
-            gh release upload "dataset-${STAMP}" eukahub-dataset.dump --clobber
+            gh release upload "dataset-${STAMP}" eukahub-dataset.dump dataset-counts.json --clobber
             gh release edit "dataset-${STAMP}" --notes-file notes.md --latest
           else
-            gh release create "dataset-${STAMP}" eukahub-dataset.dump \
+            gh release create "dataset-${STAMP}" eukahub-dataset.dump dataset-counts.json \
               --title "Dataset ${STAMP}" \
               --notes-file notes.md \
               --latest
@@ -189,5 +222,9 @@ jobs:
                 '',
                 'The served data is unchanged (the previous snapshot stands).',
                 'Check the fetch / build / invariant-gate step in the run above.',
+                '',
+                'If it stopped because counts fell since the previous Release and the',
+                'drop is real (a source withdrew records), run "Dataset rebuild" by hand',
+                'with "Publish even if counts fell sharply" ticked.',
               ].join('\n'),
             });

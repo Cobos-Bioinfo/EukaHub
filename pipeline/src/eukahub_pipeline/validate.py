@@ -1,13 +1,19 @@
 """Post-build validation: hard invariant gates + an optional parity printout.
 
-Two jobs:
+Three jobs:
 
 1. ``check_invariants`` — self-contained assertions on the freshly-loaded serving
    DB that **raise** on failure, so a broken rebuild (empty tables, a botched
-   rollup) never gets stamped or shipped. This is the gate the automated rebuild
-   relies on; it needs nothing but the serving DB.
+   rollup, a source field that came back empty) never gets stamped or shipped.
+   This is the gate the automated rebuild relies on; it needs nothing but the
+   serving DB.
 
-2. ``validate`` — runs the invariants, then, *if* the old Euka-Survey SQLite is
+2. ``release_counts`` and ``check_against_previous`` — the key counts of a build,
+   and the gate that fails when one fell sharply since the previous Release: a
+   partial download from a source is self-consistent, so only a comparison
+   catches it.
+
+3. ``validate`` — runs the invariants, then, *if* the old Euka-Survey SQLite is
    present, prints the parity comparison (species counts + total RNA-Seq runs) it
    always did. In CI / the scheduled rebuild that file is absent, so the parity
    step is skipped rather than crashing.
@@ -19,9 +25,16 @@ import logging
 import math
 import os
 import sqlite3
+from collections.abc import Mapping
 
 import psycopg
-from eukahub_core.metrics import QUALITY_KEYS, QUALITY_STATS
+from eukahub_core.metrics import (
+    COVERAGE_KEYS,
+    METRICS,
+    QUALITY_KEYS,
+    QUALITY_STATS,
+    TOTAL_KEYS,
+)
 from eukahub_core.taxonomy import EUKARYOTA_TAXID, INFORMAL_SPECIES_RANK
 
 log = logging.getLogger("eukahub.validate")
@@ -39,6 +52,22 @@ COMMON = [
 _COLS = ("n_rows", "c_ass", "c_ann", "c_rna", "c_lng", "s_ass", "s_ann", "s_rna", "s_lng")
 
 
+# The smallest share of records that must carry each field. A field the source
+# renames or stops sending comes back empty on every record, far below these.
+MIN_FILLED: dict[tuple[str, str], float] = {
+    ("assembly", "assembly_level"): 0.9,
+    ("assembly", "contig_n50"): 0.9,
+    ("assembly", "total_sequence_length"): 0.9,
+    ("annotation", "protein_coding_count"): 0.9,
+    ("annotation", "busco_complete"): 0.5,
+}
+
+# The largest drop of a key count since the previous Release, as a share, before
+# the build is refused. Month to month the counts grow or move by a few percent; a
+# truncated download loses far more.
+MAX_DROP = 0.1
+
+
 class DataValidationError(Exception):
     """Raised when a post-build invariant fails — the rebuild is not shippable."""
 
@@ -51,8 +80,9 @@ def check_invariants(conn: psycopg.Connection) -> None:
     hold across rebuilds as the sources drift: non-empty tables, the species
     universe matches the rollup, the totals match the record tables, no informal
     species is kept without data, coverage never exceeds the species count, the
-    additive assembly-composition split reconciles with the assembly total, and the
-    per-clade quality stats cover the clades with records and match them.
+    additive assembly-composition split reconciles with the assembly total, every
+    resource has data, one row per assembly, the fields the stats read are filled,
+    and the per-clade quality stats cover the clades with records and match them.
     """
     with conn.cursor() as cur:
 
@@ -69,15 +99,16 @@ def check_invariants(conn: psycopg.Connection) -> None:
                 raise DataValidationError(f"{table} is empty after build")
             log.info("invariant: %-16s %10d rows", table, n)
 
+        euk_path, euk = _eukaryota(cur)
+
         # 2. Eukaryota's species universe (n_rows) equals a direct count of
-        #    rank='species' under it — the pipeline's key rollup invariant.
-        euk_n_rows = scalar(
-            "SELECT n_rows FROM clade_features WHERE taxid = %s", (EUKARYOTA_TAXID,)
-        )
+        #    rank='species' under it — the pipeline's key rollup invariant. The
+        #    path is a literal: a subquery would make Postgres scan the whole
+        #    path index, on the build runner and on every server that installs.
+        euk_n_rows = euk["n_rows"]
         species_under_euk = scalar(
-            "SELECT count(*) FROM taxon WHERE rank = 'species' "
-            "AND path <@ (SELECT path FROM taxon WHERE taxid = %s)",
-            (EUKARYOTA_TAXID,),
+            "SELECT count(*) FROM taxon WHERE rank = 'species' AND path <@ %s::ltree",
+            (euk_path,),
         )
         if euk_n_rows != species_under_euk:
             raise DataValidationError(
@@ -90,9 +121,7 @@ def check_invariants(conn: psycopg.Connection) -> None:
         #    its totals match the record tables.
         for table, total in (("assembly", "s_ass"), ("annotation", "s_ann")):
             records = scalar(f"SELECT count(*) FROM {table}")
-            rolled = scalar(
-                f"SELECT {total} FROM clade_features WHERE taxid = %s", (EUKARYOTA_TAXID,)
-            )
+            rolled = euk[total]
             if rolled != records:
                 raise DataValidationError(
                     f"Eukaryota {total} ({rolled}) != {table} records ({records})"
@@ -118,19 +147,44 @@ def check_invariants(conn: psycopg.Connection) -> None:
 
         # 6. Eukaryota's assembly-level split reconciles: the four buckets sum to
         #    at most s_ass (some assemblies carry no/unmapped level), and non-zero.
-        cur.execute(
-            "SELECT n_ass_complete + n_ass_chromosome + n_ass_scaffold + n_ass_contig, "
-            "s_ass FROM clade_features WHERE taxid = %s",
-            (EUKARYOTA_TAXID,),
+        level_sum = sum(
+            euk[c] for c in ("n_ass_complete", "n_ass_chromosome", "n_ass_scaffold", "n_ass_contig")
         )
-        level_sum, s_ass = cur.fetchone()
+        s_ass = euk["s_ass"]
         if not (0 < level_sum <= s_ass):
             raise DataValidationError(
                 f"Eukaryota composition split ({level_sum}) not in (0, s_ass={s_ass}]"
             )
         log.info("invariant: composition split %d <= s_ass %d", level_sum, s_ass)
 
-        # 7. Quality stats exist for exactly the clades with records on or below them.
+        # 7. Every resource has data at Eukaryota: a source that returned nothing
+        #    usable leaves its coverage at zero.
+        empty = [m.card_title for m in METRICS if euk[m.coverage_key] == 0]
+        if empty:
+            raise DataValidationError(f"no species has data for: {', '.join(empty)}")
+
+        # 8. One row per assembly number: a GenBank assembly and its RefSeq copy,
+        #    or two versions of one assembly, are counted once.
+        repeated = scalar(
+            "SELECT count(*) - count(DISTINCT split_part(split_part("
+            "assembly_accession, '_', 2), '.', 1)) FROM assembly"
+        )
+        if repeated:
+            raise DataValidationError(f"{repeated} assembly rows repeat an assembly number")
+
+        # 9. The fields the quality stats and composition read are filled: a field
+        #    a source renames comes back empty instead of failing the fetch.
+        for (table, column), minimum in MIN_FILLED.items():
+            cur.execute(f"SELECT avg(({column} IS NOT NULL)::int) FROM {table}")
+            share = float(cur.fetchone()[0] or 0)
+            if share < minimum:
+                raise DataValidationError(
+                    f"{table}.{column} is filled on {share:.0%} of rows (at least "
+                    f"{minimum:.0%} expected): did the source rename the field?"
+                )
+        log.info("invariant: one row per assembly; source fields filled")
+
+        # 10. Quality stats exist for exactly the clades with records on or below them.
         mismatched = scalar(
             "SELECT count(*) FROM clade_stats s "
             "FULL JOIN (SELECT taxid FROM clade_features WHERE s_ass + s_ann > 0) f "
@@ -141,7 +195,7 @@ def check_invariants(conn: psycopg.Connection) -> None:
                 f"{mismatched} clades have quality stats but no records, or the reverse"
             )
 
-        # 8. The stored stats of the common clades equal Postgres' own aggregates
+        # 11. The stored stats of the common clades equal Postgres' own aggregates
         #    over their records (absent clades are skipped: the CI slice lacks some).
         for taxid, name in COMMON:
             cur.execute("SELECT path::text FROM taxon WHERE taxid = %s", (taxid,))
@@ -160,6 +214,80 @@ def check_invariants(conn: psycopg.Connection) -> None:
         log.info("invariant: clade_stats match their records")
 
     log.info("all invariants passed")
+
+
+_EUKARYOTA_COLUMNS = (
+    "n_rows",
+    *COVERAGE_KEYS,
+    *TOTAL_KEYS,
+    "n_ass_complete",
+    "n_ass_chromosome",
+    "n_ass_scaffold",
+    "n_ass_contig",
+)
+
+
+def _eukaryota(cur: psycopg.Cursor) -> tuple[str, dict[str, int]]:
+    """Eukaryota's path and rollup row; a clear failure if either is missing."""
+    cur.execute("SELECT path::text FROM taxon WHERE taxid = %s", (EUKARYOTA_TAXID,))
+    row = cur.fetchone()
+    if row is None:
+        raise DataValidationError(f"Eukaryota ({EUKARYOTA_TAXID}) is not in the taxon table")
+    path = row[0]
+    cur.execute(
+        f"SELECT {', '.join(_EUKARYOTA_COLUMNS)} FROM clade_features WHERE taxid = %s",
+        (EUKARYOTA_TAXID,),
+    )
+    row = cur.fetchone()
+    if row is None:
+        raise DataValidationError(f"Eukaryota ({EUKARYOTA_TAXID}) has no clade_features row")
+    return path, dict(zip(_EUKARYOTA_COLUMNS, row, strict=True))
+
+
+def release_counts(conn: psycopg.Connection) -> dict[str, int]:
+    """The counts a build is compared with the previous Release by: taxa, species,
+    and for each resource the species with data and the records at Eukaryota,
+    named like the TSV report's columns."""
+    with conn.cursor() as cur:
+        _path, euk = _eukaryota(cur)
+        cur.execute("SELECT count(*) FROM taxon")
+        taxa = cur.fetchone()[0]
+    return {
+        "taxa": taxa,
+        "total_species": euk["n_rows"],
+        **{m.tsv_count_column: euk[m.coverage_key] for m in METRICS},
+        **{m.tsv_total_column: euk[m.total_key] for m in METRICS},
+    }
+
+
+def count_drops(
+    current: Mapping[str, int], previous: Mapping[str, int], max_drop: float = MAX_DROP
+) -> list[str]:
+    """The counts that fell by more than ``max_drop`` since ``previous``, in words.
+    A count only one side has (a metric added or removed since) is skipped."""
+    return [
+        f"{key} {previous[key]:,} -> {current[key]:,} "
+        f"({(current[key] - previous[key]) / previous[key]:+.1%})"
+        for key in current
+        if key in previous and current[key] < previous[key] * (1 - max_drop)
+    ]
+
+
+def check_against_previous(
+    current: Mapping[str, int], previous: Mapping[str, int], *, accept_drops: bool = False
+) -> None:
+    """Refuse a build whose key counts fell sharply since the previous Release, the
+    sign of a partial download; ``accept_drops`` only logs them, for a drop a person
+    has checked is real."""
+    drops = count_drops(current, previous)
+    if not drops:
+        log.info("counts: none fell more than %.0f%% since the previous Release", MAX_DROP * 100)
+        return
+    listed = "; ".join(drops)
+    message = f"counts fell more than {MAX_DROP:.0%} since the previous Release: {listed}"
+    if not accept_drops:
+        raise DataValidationError(message)
+    log.warning("%s (accepted)", message)
 
 
 def _stats_from_records(cur: psycopg.Cursor, path: str) -> dict[str, float | None]:
