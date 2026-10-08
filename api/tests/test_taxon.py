@@ -206,8 +206,8 @@ def test_taxon_stats(client):
     with BUSCO a percentage."""
     body = client.get("/taxons/9606/stats").json()
     assert body["taxid"] == 9606 and body["name"] == "Homo sapiens"
-    assert [s["key"] for s in body["stats"]] == list(QUALITY_KEYS)
-    stats = {s["key"]: s["value"] for s in body["stats"]}
+    stats = body["stats"]
+    assert list(stats) == list(QUALITY_KEYS)
     assert stats["genome_size"] > 0 and stats["contig_n50"] > 0  # human has genomes
     assert 0.0 <= stats["busco"] <= 100.0
 

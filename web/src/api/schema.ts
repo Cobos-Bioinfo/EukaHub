@@ -301,7 +301,9 @@ export interface components {
              * Stats
              * @description As for a taxon, over the records in the set.
              */
-            stats: components["schemas"]["QualityStatValue"][];
+            stats: {
+                [key: string]: number | null;
+            };
         };
         /** AggregatePage */
         AggregatePage: {
@@ -610,7 +612,7 @@ export interface components {
         /**
          * QualityStatConfig
          * @description Static chrome for one quality stat — served once in ``/config`` and
-         *     joined client-side to the per-taxon ``QualityStatValue`` by ``key``.
+         *     joined client-side to a taxon's ``stats`` by ``key``.
          *     The analogue of ``MetricConfig`` for the annotation/assembly-quality
          *     dimension (BUSCO %, gene count, genome size, N50).
          */
@@ -635,20 +637,6 @@ export interface components {
             source: string;
             /** Unit */
             unit: string | null;
-        };
-        /**
-         * QualityStatValue
-         * @description A quality stat of a taxon: the median or the maximum (see ``aggregation`` in
-         *     ``/config``) of one field over the records on or below it.
-         */
-        QualityStatValue: {
-            /** Key */
-            key: string;
-            /**
-             * Value
-             * @description Null when no record under the taxon has the field.
-             */
-            value: number | null;
         };
         /**
          * ResourceSummary
@@ -774,9 +762,11 @@ export interface components {
             name: string;
             /**
              * Stats
-             * @description As in /taxons/{taxid}: computed per request from every record on or below the taxon; /config says which aggregation each one is.
+             * @description Per quality stat, keyed by the keys in /config: the median or the best (see `aggregation` there) of one field over the records on or below the taxon, computed at build time. Null when no such record has the field.
              */
-            stats: components["schemas"]["QualityStatValue"][];
+            stats: {
+                [key: string]: number | null;
+            };
             /** Taxid */
             taxid: number;
         };

@@ -140,8 +140,9 @@ Streamlit app that answered the same questions but was slow to build and to serv
   `resources.assemblies.missing`, `composition.chromosome`), as Annotrieve's
   `sort_by` takes a field path, so a client sorts by what it reads. Each resource has
   one name (`assemblies`, `annotations`, `rna_seq`, `long_read_rna_seq`) in
-  `resources`, `filter`, `/config` and the TSV report's columns. The database's short
-  column names (`n_rows`, `c_ass`, `s_ass`) never reach a client.
+  `resources`, `filter`, `/config` and the TSV report's columns. Quality stats are
+  an object keyed by stat, like `resources`. The database's short column names
+  (`n_rows`, `c_ass`, `s_ass`) never reach a client.
 - **The API is served under `/api/v1`.** Clients of a public API can't be asked to
   change their URLs, so the version is in the path from the first deployment, as
   Annotrieve serves `/api/v0`. It is a mount point: the proxy (nginx, or Vite in

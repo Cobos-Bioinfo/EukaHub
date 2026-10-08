@@ -14,7 +14,7 @@ import type {
   MetricConfig,
   MetricFilter,
   QualityStatConfig,
-  QualityStatValue,
+  QualityStats,
   SortOrder,
   TargetRank,
   Taxon,
@@ -207,7 +207,7 @@ export async function getOverview(): Promise<Overview> {
 }
 
 /** One group in the compare view: its counts and quality stats. */
-export type CompareGroup = Taxon & { quality: QualityStatValue[] };
+export type CompareGroup = Taxon & { quality: QualityStats };
 
 // Several groups side by side, in the order given; unknown taxids are dropped.
 export async function getCompare(taxids: number[]): Promise<{ groups: CompareGroup[] }> {
@@ -219,7 +219,7 @@ export async function getCompare(taxids: number[]): Promise<{ groups: CompareGro
   return {
     groups: taxids.flatMap((id) => {
       const t = byId.get(id);
-      return t ? [{ ...t, quality: quality.get(id) ?? [] }] : [];
+      return t ? [{ ...t, quality: quality.get(id) ?? {} }] : [];
     }),
   };
 }
@@ -233,7 +233,7 @@ export interface GapItem {
   covered: number; // species with the resource
   percent: number; // covered / species * 100
   gap: number; // species - covered
-  stats: QualityStatValue[];
+  stats: QualityStats;
 }
 
 // The biggest under-sequenced groups ("Where are the gaps?"): the taxa of `rank`
@@ -259,7 +259,7 @@ export async function getGaps({
     getTaxa(params),
     include_quality ? getTaxaStats(params) : null,
   ]);
-  const quality = stats ? statsById(stats) : new Map<number, QualityStatValue[]>();
+  const quality = stats ? statsById(stats) : new Map<number, QualityStats>();
   const items = page.results
     .map((t) => {
       const r = t.resources[resource];
@@ -271,7 +271,7 @@ export async function getGaps({
         covered: r.covered,
         percent: r.percent,
         gap: r.missing,
-        stats: quality.get(t.taxid) ?? [],
+        stats: quality.get(t.taxid) ?? {},
       };
     })
     .filter((it) => it.gap > 0);
@@ -372,7 +372,7 @@ export async function getBreakdown(taxid: number, params: BreakdownParams): Prom
 
 export interface BucketQuality {
   taxid: number;
-  stats: QualityStatValue[];
+  stats: QualityStats;
 }
 
 // Per-tile quality stats (BUSCO / median genes / genome size / N50) for the taxa
@@ -384,7 +384,7 @@ export async function getBreakdownQuality(
 ): Promise<BucketQuality[]> {
   const page = await getTaxaStats(breakdownQuery(taxid, params));
   return page.results
-    .filter((t) => t.stats.some((s) => s.value !== null))
+    .filter((t) => Object.values(t.stats).some((v) => v !== null))
     .map((t) => ({ taxid: t.taxid, stats: t.stats }));
 }
 

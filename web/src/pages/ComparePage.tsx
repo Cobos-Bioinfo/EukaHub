@@ -275,7 +275,6 @@ function CompareTable({
 }) {
   const [sort, setSort] = useState<SortState>(null);
 
-  const qMap = (g: CompareGroup) => Object.fromEntries(g.quality.map((q) => [q.key, q.value]));
   // Numeric columns: species, each resource coverage %, each quality stat.
   const columns = [
     { key: "species", label: "Species", get: (g: CompareGroup) => g.species, fmt: (v: number) => fmt(v) },
@@ -288,7 +287,7 @@ function CompareTable({
     ...quality.map((q) => ({
       key: `q_${q.key}`,
       label: q.card_title,
-      get: (g: CompareGroup) => qMap(g)[q.key] ?? null,
+      get: (g: CompareGroup) => g.quality[q.key] ?? null,
       fmt: (v: number) => fmtQuality(v, q.fmt),
     })),
   ];

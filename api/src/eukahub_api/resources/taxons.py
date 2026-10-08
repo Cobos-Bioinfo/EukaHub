@@ -39,7 +39,6 @@ from eukahub_api.schemas import (
     AggregatePage,
     AssemblyComposition,
     CladeSummary,
-    QualityStatValue,
     ResourceSummary,
     Taxon,
     TaxonPage,
@@ -206,13 +205,7 @@ def taxons_stats(
         next=result.next,
         previous=result.previous,
         results=[
-            TaxonStats(
-                taxid=r.meta.taxid,
-                name=r.name,
-                stats=[
-                    QualityStatValue(key=k, value=v) for k, v in quality[r.meta.taxid].items()
-                ],
-            )
+            TaxonStats(taxid=r.meta.taxid, name=r.name, stats=quality[r.meta.taxid])
             for r in result.rows
         ],
     )
@@ -292,7 +285,7 @@ def aggregate(
         species=meta.n_rows,
         resources=ResourceSummary.by_metric(meta),
         composition=AssemblyComposition.from_metadata(meta),
-        stats=[QualityStatValue(key=q.key, value=quality[q.key]) for q in QUALITY_STATS],
+        stats={q.key: quality[q.key] for q in QUALITY_STATS},
     )
     return AggregatePage(total=1, limit=1, next=None, previous=None, results=[aggregate])
 
@@ -320,6 +313,4 @@ def taxon_stats(taxid: int, conn: Conn) -> TaxonStats:
     records on or below one taxon, the same object ``/taxons/stats`` lists,
     computed at build time."""
     name, stats = fetch_taxon_stats(conn, taxid)
-    return TaxonStats(
-        taxid=taxid, name=name, stats=[QualityStatValue(key=k, value=v) for k, v in stats.items()]
-    )
+    return TaxonStats(taxid=taxid, name=name, stats=stats)

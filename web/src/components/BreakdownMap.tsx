@@ -249,15 +249,10 @@ export default function BreakdownMap({
     () => (params && !resolving ? getBreakdownQuality(focus.taxid, params) : Promise.resolve(null)),
     [focus.taxid, targetRank, resolving],
   );
-  const qmap = useMemo(() => {
-    const m = new Map<number, BucketStats>();
-    for (const b of quality.data ?? []) {
-      const o: BucketStats = {};
-      for (const s of b.stats) o[s.key] = s.value;
-      m.set(b.taxid, o);
-    }
-    return m;
-  }, [quality.data]);
+  const qmap = useMemo(
+    () => new Map<number, BucketStats>((quality.data ?? []).map((b) => [b.taxid, b.stats])),
+    [quality.data],
+  );
 
   const dark = useTheme() === "dark";
   const lens = LENSES.find((l) => l.key === lensKey) ?? LENSES[0];

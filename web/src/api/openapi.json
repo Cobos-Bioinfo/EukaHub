@@ -33,12 +33,19 @@
             "type": "integer"
           },
           "stats": {
-            "description": "As for a taxon, over the records in the set.",
-            "items": {
-              "$ref": "#/components/schemas/QualityStatValue"
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
+            "description": "As for a taxon, over the records in the set.",
             "title": "Stats",
-            "type": "array"
+            "type": "object"
           }
         },
         "required": [
@@ -931,7 +938,7 @@
         "type": "object"
       },
       "QualityStatConfig": {
-        "description": "Static chrome for one quality stat \u2014 served once in ``/config`` and\njoined client-side to the per-taxon ``QualityStatValue`` by ``key``.\nThe analogue of ``MetricConfig`` for the annotation/assembly-quality\ndimension (BUSCO %, gene count, genome size, N50).",
+        "description": "Static chrome for one quality stat \u2014 served once in ``/config`` and\njoined client-side to a taxon's ``stats`` by ``key``.\nThe analogue of ``MetricConfig`` for the annotation/assembly-quality\ndimension (BUSCO %, gene count, genome size, N50).",
         "properties": {
           "aggregation": {
             "description": "How the records' values are summarized: their median or their maximum.",
@@ -989,33 +996,6 @@
           "headline"
         ],
         "title": "QualityStatConfig",
-        "type": "object"
-      },
-      "QualityStatValue": {
-        "description": "A quality stat of a taxon: the median or the maximum (see ``aggregation`` in\n``/config``) of one field over the records on or below it.",
-        "properties": {
-          "key": {
-            "title": "Key",
-            "type": "string"
-          },
-          "value": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "Null when no record under the taxon has the field.",
-            "title": "Value"
-          }
-        },
-        "required": [
-          "key",
-          "value"
-        ],
-        "title": "QualityStatValue",
         "type": "object"
       },
       "ResourceSummary": {
@@ -1261,12 +1241,19 @@
             "type": "string"
           },
           "stats": {
-            "description": "As in /taxons/{taxid}: computed per request from every record on or below the taxon; /config says which aggregation each one is.",
-            "items": {
-              "$ref": "#/components/schemas/QualityStatValue"
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
+            "description": "Per quality stat, keyed by the keys in /config: the median or the best (see `aggregation` there) of one field over the records on or below the taxon, computed at build time. Null when no such record has the field.",
             "title": "Stats",
-            "type": "array"
+            "type": "object"
           },
           "taxid": {
             "title": "Taxid",

@@ -216,7 +216,7 @@ function GapRow({
   // genes). Null across the board means the covered species have no functional
   // annotation yet — itself part of the gap.
   const present = headlineQ
-    .map((q) => ({ q, value: item.stats.find((s) => s.key === q.key)?.value ?? null }))
+    .map((q) => ({ q, value: item.stats[q.key] ?? null }))
     .filter((s) => s.value !== null);
   return (
     <li className="gaps-row">

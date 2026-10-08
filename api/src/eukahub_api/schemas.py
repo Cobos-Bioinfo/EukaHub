@@ -238,20 +238,12 @@ class TaxonRef(BaseModel):
     rank: str
 
 
-class QualityStatValue(BaseModel):
-    """A quality stat of a taxon: the median or the maximum (see ``aggregation`` in
-    ``/config``) of one field over the records on or below it."""
-
-    key: str
-    value: float | None = Field(description="Null when no record under the taxon has the field.")
-
-
 # --- Quality dimension (per-record drill-down + distribution stats) ----------
 
 
 class QualityStatConfig(BaseModel):
     """Static chrome for one quality stat — served once in ``/config`` and
-    joined client-side to the per-taxon ``QualityStatValue`` by ``key``.
+    joined client-side to a taxon's ``stats`` by ``key``.
     The analogue of ``MetricConfig`` for the annotation/assembly-quality
     dimension (BUSCO %, gene count, genome size, N50)."""
 
@@ -359,9 +351,10 @@ class TaxonStats(BaseModel):
 
     taxid: int
     name: str
-    stats: list[QualityStatValue] = Field(
-        description="As in /taxons/{taxid}: computed per request from every record on or "
-        "below the taxon; /config says which aggregation each one is."
+    stats: dict[str, float | None] = Field(
+        description="Per quality stat, keyed by the keys in /config: the median or the best "
+        "(see `aggregation` there) of one field over the records on or below the taxon, "
+        "computed at build time. Null when no such record has the field."
     )
 
 
@@ -379,7 +372,7 @@ class Aggregate(BaseModel):
     species: int  # species in the set
     resources: dict[str, ResourceSummary]  # keyed by resource name, in METRICS order
     composition: AssemblyComposition
-    stats: list[QualityStatValue] = Field(
+    stats: dict[str, float | None] = Field(
         description="As for a taxon, over the records in the set."
     )
 

@@ -50,7 +50,7 @@ def test_stats_follow_the_list_page_for_page(client, params):
     }
     for s in stats["results"][:3]:
         assert set(s) == {"taxid", "name", "stats"}
-        assert [v["key"] for v in s["stats"]] == list(QUALITY_KEYS)
+        assert list(s["stats"]) == list(QUALITY_KEYS)
         assert s == client.get(f"/taxons/{s['taxid']}/stats").json()
 
 
@@ -61,7 +61,7 @@ def test_stats_page_with_the_list_cursor(client):
     stats = client.get("/taxons/stats", params={**params, "cursor": first["next"]}).json()
     assert [s["taxid"] for s in stats["results"]] == [it["taxid"] for it in listed["results"]]
     for s in stats["results"]:
-        busco = next(v["value"] for v in s["stats"] if v["key"] == "busco")
+        busco = s["stats"]["busco"]
         assert busco is None or 0.0 <= busco <= 100.0
 
 

@@ -175,7 +175,7 @@ export default function GapsScatter({
           {headline.length > 0 && (
             <div className="gscatter__tip-q">
               {headline.map((q) => {
-                const v = active.stats.find((s) => s.key === q.key)?.value ?? null;
+                const v = active.stats[q.key] ?? null;
                 return (
                   <span key={q.key} className="gscatter__tip-qstat">
                     {q.card_title}: <strong>{fmtQuality(v, q.fmt)}</strong>

@@ -242,7 +242,7 @@ def _counts(body: dict) -> list[int]:
 
 
 def _stats(body: dict) -> dict[str, float | None]:
-    return {s["key"]: s["value"] for s in body["stats"]}
+    return body["stats"]
 
 
 def _aggregate(client, include: list[int], exclude: list[int] = ()) -> dict:
