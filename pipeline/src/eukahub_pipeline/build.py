@@ -32,6 +32,7 @@ from eukahub_pipeline.download import download_taxdump
 from eukahub_pipeline.fetch_annotations import ANNOTATION_COLUMNS, fetch_annotations
 from eukahub_pipeline.fetch_assemblies import (
     ASSEMBLY_COLUMNS,
+    DatasetsCLIFailed,
     drop_duplicate_assemblies,
     fetch_assemblies,
 )
@@ -237,6 +238,7 @@ def main(argv: list[str] | None = None) -> int:
         _ASSEMBLY_SCHEMA,
         args.sources_dir,
         refresh=args.refresh_sources,
+        retry_on=(DatasetsCLIFailed,),
     )
     n_fetched = assemblies.height
     assemblies = drop_duplicate_assemblies(assemblies)

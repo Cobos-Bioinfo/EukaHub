@@ -47,6 +47,11 @@ class DatasetsCLIError(RuntimeError):
     """Raised when the NCBI datasets CLI is missing or exits non-zero."""
 
 
+class DatasetsCLIFailed(DatasetsCLIError):
+    """The CLI ran and exited with an error, such as NCBI being unreachable or a
+    dropped connection: worth another try, unlike a missing CLI."""
+
+
 def _to_int(value: object) -> int | None:
     """Cast to int, tolerating the numeric *strings* datasets uses for big
     fields (e.g. ``total_sequence_length: "143706478"``). None on failure."""
@@ -177,7 +182,7 @@ def fetch_assemblies(
     proc.wait()
     if proc.returncode != 0:
         stderr = (proc.stderr.read() if proc.stderr else "").strip()
-        raise DatasetsCLIError(f"datasets exited {proc.returncode}: {stderr}")
+        raise DatasetsCLIFailed(f"datasets exited {proc.returncode}: {stderr}")
     log.info("Parsed %d assembly records (%d usable) under taxon %d", n_seen, n_kept, txid)
 
 
