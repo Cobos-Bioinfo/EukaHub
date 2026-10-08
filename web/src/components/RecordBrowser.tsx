@@ -230,7 +230,7 @@ function AssemblyTable({ items }: { items: AssemblyRecord[] }) {
         {items.map((a) => (
           <tr key={a.assembly_accession}>
             <td className="bd-name">
-              <Organism taxid={a.taxid} name={a.organism} />
+              <Organism taxid={a.taxid} name={a.organism_name} />
             </td>
             <td data-label="Assembly">
               <span className="rec-acc">{a.assembly_accession}</span>
@@ -280,7 +280,7 @@ function AnnotationTable({ items }: { items: AnnotationRecord[] }) {
         {items.map((a) => (
           <tr key={a.annotation_id}>
             <td className="bd-name">
-              <Organism taxid={a.taxid} name={a.organism} />
+              <Organism taxid={a.taxid} name={a.organism_name} />
             </td>
             <td data-label="Source">
               <span className="rec-src" title={a.provider ?? undefined}>

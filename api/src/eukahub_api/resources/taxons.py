@@ -15,6 +15,7 @@ from eukahub_api.pagination import Page
 from eukahub_api.params import Cursor, Within, within_path
 from eukahub_api.queries import (
     MAX_PAGE,
+    METRIC_KEY_OF,
     FilterLogic,
     MetricFilter,
     SortOrder,
@@ -38,7 +39,6 @@ from eukahub_api.schemas import (
     AggregatePage,
     AssemblyComposition,
     CladeSummary,
-    QualityStatValue,
     ResourceSummary,
     Taxon,
     TaxonPage,
@@ -91,10 +91,10 @@ def taxon_filter(
     ] = None,
     filter: Annotated[
         list[MetricFilter] | None,
-        Query(description="Only taxa with data for these resources."),
+        Query(description="Only taxa with data for these resources (their names in /config)."),
     ] = None,
     logic: Annotated[
-        FilterLogic, Query(description="Whether `filter` needs every resource (AND) or any (OR).")
+        FilterLogic, Query(description="Whether `filter` needs every resource (`and`) or any (`or`).")
     ] = FilterLogic.AND,
     exclude_empty: Annotated[
         bool, Query(description="Only taxa with data for at least one resource.")
@@ -116,7 +116,7 @@ def taxon_filter(
         within_path=within_path(conn, within),
         rank=rank.value if rank else None,
         taxids=_parse_taxids(taxids, "taxids", MAX_TAXIDS) if taxids is not None else (),
-        filter_keys=[f.value for f in filter or ()],
+        filter_keys=[METRIC_KEY_OF[f.value] for f in filter or ()],
         logic=logic,
         exclude_empty=exclude_empty,
     )
@@ -126,8 +126,9 @@ _TaxonFilter = Annotated[TaxonFilter, Depends(taxon_filter)]
 _TaxonSortBy = Annotated[
     TaxonSort | None,
     Query(
-        description="A count column, `gap_<resource>` (species without that resource) or "
-        "`name`. Without it: relevance for `q`, else species count (`n_rows`)."
+        description="The path of a number in a taxon: `species`, "
+        "`resources.<resource>.covered`, `.missing` or `.total`, or `composition.<field>`; "
+        "or `name`. Without it: relevance for `q`, else `species`."
     ),
 ]
 
@@ -171,8 +172,8 @@ def taxons(
     """Taxa with their counts: a name search (``q``), a taxon's children
     (``parent``), every taxon of a rank under a taxon (``within`` and ``rank``), or
     chosen taxa (``taxids``), narrowed by the data they have. Sort by
-    ``gap_<resource>`` for the groups with the most species still missing it. Their
-    quality stats are in ``/taxons/stats``."""
+    ``resources.<resource>.missing`` for the groups with the most species still
+    missing it. Their quality stats are in ``/taxons/stats``."""
     total, result = _taxa_page(conn, f, sort_by, sort_order, limit, cursor)
     return TaxonPage(
         total=total,
@@ -204,13 +205,7 @@ def taxons_stats(
         next=result.next,
         previous=result.previous,
         results=[
-            TaxonStats(
-                taxid=r.meta.taxid,
-                name=r.name,
-                stats=[
-                    QualityStatValue(key=k, value=v) for k, v in quality[r.meta.taxid].items()
-                ],
-            )
+            TaxonStats(taxid=r.meta.taxid, name=r.name, stats=quality[r.meta.taxid])
             for r in result.rows
         ],
     )
@@ -287,10 +282,10 @@ def aggregate(
     aggregate = Aggregate(
         include=taxon_refs((t for t in inc if marks.get(t) is True), taxa),
         exclude=taxon_refs((t for t in exc if marks.get(t) is False), taxa),
-        n_rows=meta.n_rows,
+        species=meta.n_rows,
         resources=ResourceSummary.by_metric(meta),
         composition=AssemblyComposition.from_metadata(meta),
-        stats=[QualityStatValue(key=q.key, value=quality[q.key]) for q in QUALITY_STATS],
+        stats={q.key: quality[q.key] for q in QUALITY_STATS},
     )
     return AggregatePage(total=1, limit=1, next=None, previous=None, results=[aggregate])
 
@@ -304,15 +299,12 @@ def taxon(taxid: int, conn: Conn) -> Taxon:
     return _taxon(fetch_taxon(conn, taxid))
 
 
-@router.get("/taxons/{taxid}/ancestors", response_model=TaxonPage)
-def taxon_ancestors(taxid: int, conn: Conn) -> TaxonPage:
+@router.get("/taxons/{taxid}/ancestors", response_model=list[Taxon])
+def taxon_ancestors(taxid: int, conn: Conn) -> list[Taxon]:
     """The root, every taxon below it down to this one, and this one, in that order,
-    as the same objects ``/taxons`` lists. One page: a lineage is at most a few
-    dozen taxa."""
-    rows = fetch_ancestors(conn, taxid)
-    return TaxonPage(
-        total=len(rows), limit=len(rows), next=None, previous=None, results=list(map(_taxon, rows))
-    )
+    as the same objects ``/taxons`` lists. The whole lineage, unpaged: it is at
+    most a few dozen taxa."""
+    return list(map(_taxon, fetch_ancestors(conn, taxid)))
 
 
 @router.get("/taxons/{taxid}/stats", response_model=TaxonStats)
@@ -321,6 +313,4 @@ def taxon_stats(taxid: int, conn: Conn) -> TaxonStats:
     records on or below one taxon, the same object ``/taxons/stats`` lists,
     computed at build time."""
     name, stats = fetch_taxon_stats(conn, taxid)
-    return TaxonStats(
-        taxid=taxid, name=name, stats=[QualityStatValue(key=k, value=v) for k, v in stats.items()]
-    )
+    return TaxonStats(taxid=taxid, name=name, stats=stats)

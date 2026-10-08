@@ -21,10 +21,6 @@
             "title": "Include",
             "type": "array"
           },
-          "n_rows": {
-            "title": "N Rows",
-            "type": "integer"
-          },
           "resources": {
             "additionalProperties": {
               "$ref": "#/components/schemas/ResourceSummary"
@@ -32,19 +28,30 @@
             "title": "Resources",
             "type": "object"
           },
+          "species": {
+            "title": "Species",
+            "type": "integer"
+          },
           "stats": {
-            "description": "As for a taxon, over the records in the set.",
-            "items": {
-              "$ref": "#/components/schemas/QualityStatValue"
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
+            "description": "As for a taxon, over the records in the set.",
             "title": "Stats",
-            "type": "array"
+            "type": "object"
           }
         },
         "required": [
           "include",
           "exclude",
-          "n_rows",
+          "species",
           "resources",
           "composition",
           "stats"
@@ -236,8 +243,8 @@
             ],
             "title": "Gff Url"
           },
-          "organism": {
-            "title": "Organism",
+          "organism_name": {
+            "title": "Organism Name",
             "type": "string"
           },
           "protein_coding_count": {
@@ -294,7 +301,7 @@
           "annotation_id",
           "assembly_accession",
           "taxid",
-          "organism",
+          "organism_name",
           "source_database",
           "provider",
           "release_date",
@@ -526,8 +533,8 @@
             ],
             "title": "Gc Percent"
           },
-          "organism": {
-            "title": "Organism",
+          "organism_name": {
+            "title": "Organism Name",
             "type": "string"
           },
           "refseq_category": {
@@ -605,7 +612,7 @@
         "required": [
           "assembly_accession",
           "taxid",
-          "organism",
+          "organism_name",
           "assembly_level",
           "contig_n50",
           "scaffold_n50",
@@ -753,26 +760,13 @@
         "type": "object"
       },
       "FilterLogic": {
-        "description": "How multiple resource-presence filters combine (ported verbatim).",
+        "description": "How multiple resource-presence filters combine.",
         "enum": [
-          "AND",
-          "OR"
+          "and",
+          "or"
         ],
         "title": "FilterLogic",
         "type": "string"
-      },
-      "HTTPValidationError": {
-        "properties": {
-          "detail": {
-            "items": {
-              "$ref": "#/components/schemas/ValidationError"
-            },
-            "title": "Detail",
-            "type": "array"
-          }
-        },
-        "title": "HTTPValidationError",
-        "type": "object"
       },
       "MetricConfig": {
         "description": "Static per-resource card chrome \u2014 served once in ``/config`` and joined\nclient-side to the numbers in each per-clade payload (by ``key``).",
@@ -796,10 +790,6 @@
             "title": "Color",
             "type": "string"
           },
-          "coverage_column": {
-            "title": "Coverage Column",
-            "type": "string"
-          },
           "empty_text": {
             "title": "Empty Text",
             "type": "string"
@@ -817,6 +807,7 @@
             "type": "string"
           },
           "key": {
+            "description": "The resource's name: its key in `resources`, its value for `filter`, and the middle of its `sort_by` values.",
             "title": "Key",
             "type": "string"
           },
@@ -844,10 +835,6 @@
             "title": "Species Help",
             "type": "string"
           },
-          "total_column": {
-            "title": "Total Column",
-            "type": "string"
-          },
           "total_help": {
             "title": "Total Help",
             "type": "string"
@@ -868,8 +855,6 @@
           "color",
           "external_source_name",
           "external_url_template",
-          "coverage_column",
-          "total_column",
           "filter_label",
           "sort_count_label",
           "sort_total_label",
@@ -882,16 +867,78 @@
       },
       "MetricFilter": {
         "enum": [
-          "ass",
-          "ann",
-          "rna",
-          "lng"
+          "assemblies",
+          "annotations",
+          "rna_seq",
+          "long_read_rna_seq"
         ],
         "title": "MetricFilter",
         "type": "string"
       },
+      "ParameterError": {
+        "description": "One parameter a request got wrong.",
+        "properties": {
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "parameter": {
+            "title": "Parameter",
+            "type": "string"
+          }
+        },
+        "required": [
+          "parameter",
+          "detail"
+        ],
+        "title": "ParameterError",
+        "type": "object"
+      },
+      "Problem": {
+        "description": "Every error response: problem details (RFC 9457), sent as\n``application/problem+json``.",
+        "properties": {
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "errors": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ParameterError"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Errors"
+          },
+          "status": {
+            "title": "Status",
+            "type": "integer"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "type": {
+            "default": "about:blank",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "status",
+          "detail"
+        ],
+        "title": "Problem",
+        "type": "object"
+      },
       "QualityStatConfig": {
-        "description": "Static chrome for one quality stat \u2014 served once in ``/config`` and\njoined client-side to the per-taxon ``QualityStatValue`` by ``key``.\nThe analogue of ``MetricConfig`` for the annotation/assembly-quality\ndimension (BUSCO %, gene count, genome size, N50).",
+        "description": "Static chrome for one quality stat \u2014 served once in ``/config`` and\njoined client-side to a taxon's ``stats`` by ``key``.\nThe analogue of ``MetricConfig`` for the annotation/assembly-quality\ndimension (BUSCO %, gene count, genome size, N50).",
         "properties": {
           "aggregation": {
             "description": "How the records' values are summarized: their median or their maximum.",
@@ -951,33 +998,6 @@
         "title": "QualityStatConfig",
         "type": "object"
       },
-      "QualityStatValue": {
-        "description": "A quality stat of a taxon: the median or the maximum (see ``aggregation`` in\n``/config``) of one field over the records on or below it.",
-        "properties": {
-          "key": {
-            "title": "Key",
-            "type": "string"
-          },
-          "value": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "Null when no record under the taxon has the field.",
-            "title": "Value"
-          }
-        },
-        "required": [
-          "key",
-          "value"
-        ],
-        "title": "QualityStatValue",
-        "type": "object"
-      },
       "ResourceSummary": {
         "description": "One resource's counts for a taxon, summed over the taxon and everything\nbelow it when the dataset is built.",
         "properties": {
@@ -986,8 +1006,13 @@
             "title": "Covered",
             "type": "integer"
           },
+          "missing": {
+            "description": "Species on or below the taxon without any: species - covered.",
+            "title": "Missing",
+            "type": "integer"
+          },
           "percent": {
-            "description": "covered / n_rows * 100, or 0 when n_rows is 0.",
+            "description": "covered / species * 100, or 0 when species is 0.",
             "title": "Percent",
             "type": "number"
           },
@@ -999,6 +1024,7 @@
         },
         "required": [
           "covered",
+          "missing",
           "total",
           "percent"
         ],
@@ -1015,6 +1041,7 @@
       },
       "TargetRank": {
         "enum": [
+          "kingdom",
           "phylum",
           "class",
           "order",
@@ -1068,11 +1095,6 @@
             "title": "Is Infraspecific",
             "type": "boolean"
           },
-          "n_rows": {
-            "description": "Species on or below the taxon (1 for a species or a finer taxon).",
-            "title": "N Rows",
-            "type": "integer"
-          },
           "name": {
             "title": "Name",
             "type": "string"
@@ -1085,9 +1107,14 @@
             "additionalProperties": {
               "$ref": "#/components/schemas/ResourceSummary"
             },
-            "description": "Per resource, keyed by the metric keys in /config.",
+            "description": "Per resource, keyed by the resource names in /config.",
             "title": "Resources",
             "type": "object"
+          },
+          "species": {
+            "description": "Species on or below the taxon (1 for a species or a finer taxon).",
+            "title": "Species",
+            "type": "integer"
           },
           "taxid": {
             "title": "Taxid",
@@ -1098,7 +1125,7 @@
           "taxid",
           "name",
           "rank",
-          "n_rows",
+          "species",
           "resources",
           "composition",
           "context",
@@ -1183,24 +1210,24 @@
       },
       "TaxonSort": {
         "enum": [
-          "n_rows",
-          "c_ass",
-          "c_ann",
-          "c_rna",
-          "c_lng",
-          "s_ass",
-          "s_ann",
-          "s_rna",
-          "s_lng",
-          "n_ass_complete",
-          "n_ass_chromosome",
-          "n_ass_scaffold",
-          "n_ass_contig",
-          "n_reference",
-          "gap_ass",
-          "gap_ann",
-          "gap_rna",
-          "gap_lng",
+          "species",
+          "resources.assemblies.covered",
+          "resources.assemblies.missing",
+          "resources.assemblies.total",
+          "resources.annotations.covered",
+          "resources.annotations.missing",
+          "resources.annotations.total",
+          "resources.rna_seq.covered",
+          "resources.rna_seq.missing",
+          "resources.rna_seq.total",
+          "resources.long_read_rna_seq.covered",
+          "resources.long_read_rna_seq.missing",
+          "resources.long_read_rna_seq.total",
+          "composition.complete",
+          "composition.chromosome",
+          "composition.scaffold",
+          "composition.contig",
+          "composition.reference",
           "name"
         ],
         "title": "TaxonSort",
@@ -1214,12 +1241,19 @@
             "type": "string"
           },
           "stats": {
-            "description": "As in /taxons/{taxid}: computed per request from every record on or below the taxon; /config says which aggregation each one is.",
-            "items": {
-              "$ref": "#/components/schemas/QualityStatValue"
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
+            "description": "Per quality stat, keyed by the keys in /config: the median or the best (see `aggregation` there) of one field over the records on or below the taxon, computed at build time. Null when no such record has the field.",
             "title": "Stats",
-            "type": "array"
+            "type": "object"
           },
           "taxid": {
             "title": "Taxid",
@@ -1282,46 +1316,6 @@
           "results"
         ],
         "title": "TaxonStatsPage",
-        "type": "object"
-      },
-      "ValidationError": {
-        "properties": {
-          "ctx": {
-            "title": "Context",
-            "type": "object"
-          },
-          "input": {
-            "title": "Input"
-          },
-          "loc": {
-            "items": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "integer"
-                }
-              ]
-            },
-            "title": "Location",
-            "type": "array"
-          },
-          "msg": {
-            "title": "Message",
-            "type": "string"
-          },
-          "type": {
-            "title": "Error Type",
-            "type": "string"
-          }
-        },
-        "required": [
-          "loc",
-          "msg",
-          "type"
-        ],
-        "title": "ValidationError",
         "type": "object"
       }
     }
@@ -1416,15 +1410,15 @@
             },
             "description": "Successful Response"
           },
-          "422": {
+          "default": {
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "An error, as problem details (RFC 9457)."
           }
         },
         "summary": "Annotations",
@@ -1517,15 +1511,15 @@
             },
             "description": "Successful Response"
           },
-          "422": {
+          "default": {
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "An error, as problem details (RFC 9457)."
           }
         },
         "summary": "Assemblies",
@@ -1548,6 +1542,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "An error, as problem details (RFC 9457)."
           }
         },
         "summary": "Config",
@@ -1574,6 +1578,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "An error, as problem details (RFC 9457)."
           }
         },
         "summary": "Health",
@@ -1600,6 +1614,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "An error, as problem details (RFC 9457)."
           }
         },
         "summary": "Readiness",
@@ -1610,11 +1634,11 @@
     },
     "/taxons": {
       "get": {
-        "description": "Taxa with their counts: a name search (``q``), a taxon's children\n(``parent``), every taxon of a rank under a taxon (``within`` and ``rank``), or\nchosen taxa (``taxids``), narrowed by the data they have. Sort by\n``gap_<resource>`` for the groups with the most species still missing it. Their\nquality stats are in ``/taxons/stats``.",
+        "description": "Taxa with their counts: a name search (``q``), a taxon's children\n(``parent``), every taxon of a rank under a taxon (``within`` and ``rank``), or\nchosen taxa (``taxids``), narrowed by the data they have. Sort by\n``resources.<resource>.missing`` for the groups with the most species still\nmissing it. Their quality stats are in ``/taxons/stats``.",
         "operationId": "taxons_taxons_get",
         "parameters": [
           {
-            "description": "A count column, `gap_<resource>` (species without that resource) or `name`. Without it: relevance for `q`, else species count (`n_rows`).",
+            "description": "The path of a number in a taxon: `species`, `resources.<resource>.covered`, `.missing` or `.total`, or `composition.<field>`; or `name`. Without it: relevance for `q`, else `species`.",
             "in": "query",
             "name": "sort_by",
             "required": false,
@@ -1627,7 +1651,7 @@
                   "type": "null"
                 }
               ],
-              "description": "A count column, `gap_<resource>` (species without that resource) or `name`. Without it: relevance for `q`, else species count (`n_rows`).",
+              "description": "The path of a number in a taxon: `species`, `resources.<resource>.covered`, `.missing` or `.total`, or `composition.<field>`; or `name`. Without it: relevance for `q`, else `species`.",
               "title": "Sort By"
             }
           },
@@ -1776,7 +1800,7 @@
             }
           },
           {
-            "description": "Only taxa with data for these resources.",
+            "description": "Only taxa with data for these resources (their names in /config).",
             "in": "query",
             "name": "filter",
             "required": false,
@@ -1792,19 +1816,19 @@
                   "type": "null"
                 }
               ],
-              "description": "Only taxa with data for these resources.",
+              "description": "Only taxa with data for these resources (their names in /config).",
               "title": "Filter"
             }
           },
           {
-            "description": "Whether `filter` needs every resource (AND) or any (OR).",
+            "description": "Whether `filter` needs every resource (`and`) or any (`or`).",
             "in": "query",
             "name": "logic",
             "required": false,
             "schema": {
               "$ref": "#/components/schemas/FilterLogic",
-              "default": "AND",
-              "description": "Whether `filter` needs every resource (AND) or any (OR)."
+              "default": "and",
+              "description": "Whether `filter` needs every resource (`and`) or any (`or`)."
             }
           },
           {
@@ -1831,15 +1855,15 @@
             },
             "description": "Successful Response"
           },
-          "422": {
+          "default": {
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "An error, as problem details (RFC 9457)."
           }
         },
         "summary": "Taxons",
@@ -1888,15 +1912,15 @@
             },
             "description": "Successful Response"
           },
-          "422": {
+          "default": {
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "An error, as problem details (RFC 9457)."
           }
         },
         "summary": "Aggregate",
@@ -1911,7 +1935,7 @@
         "operationId": "taxons_report_taxons_report_get",
         "parameters": [
           {
-            "description": "A count column, `gap_<resource>` (species without that resource) or `name`. Without it: relevance for `q`, else species count (`n_rows`).",
+            "description": "The path of a number in a taxon: `species`, `resources.<resource>.covered`, `.missing` or `.total`, or `composition.<field>`; or `name`. Without it: relevance for `q`, else `species`.",
             "in": "query",
             "name": "sort_by",
             "required": false,
@@ -1924,7 +1948,7 @@
                   "type": "null"
                 }
               ],
-              "description": "A count column, `gap_<resource>` (species without that resource) or `name`. Without it: relevance for `q`, else species count (`n_rows`).",
+              "description": "The path of a number in a taxon: `species`, `resources.<resource>.covered`, `.missing` or `.total`, or `composition.<field>`; or `name`. Without it: relevance for `q`, else `species`.",
               "title": "Sort By"
             }
           },
@@ -2042,7 +2066,7 @@
             }
           },
           {
-            "description": "Only taxa with data for these resources.",
+            "description": "Only taxa with data for these resources (their names in /config).",
             "in": "query",
             "name": "filter",
             "required": false,
@@ -2058,19 +2082,19 @@
                   "type": "null"
                 }
               ],
-              "description": "Only taxa with data for these resources.",
+              "description": "Only taxa with data for these resources (their names in /config).",
               "title": "Filter"
             }
           },
           {
-            "description": "Whether `filter` needs every resource (AND) or any (OR).",
+            "description": "Whether `filter` needs every resource (`and`) or any (`or`).",
             "in": "query",
             "name": "logic",
             "required": false,
             "schema": {
               "$ref": "#/components/schemas/FilterLogic",
-              "default": "AND",
-              "description": "Whether `filter` needs every resource (AND) or any (OR)."
+              "default": "and",
+              "description": "Whether `filter` needs every resource (`and`) or any (`or`)."
             }
           },
           {
@@ -2095,15 +2119,15 @@
             },
             "description": "Successful Response"
           },
-          "422": {
+          "default": {
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "An error, as problem details (RFC 9457)."
           }
         },
         "summary": "Taxons Report",
@@ -2118,7 +2142,7 @@
         "operationId": "taxons_stats_taxons_stats_get",
         "parameters": [
           {
-            "description": "A count column, `gap_<resource>` (species without that resource) or `name`. Without it: relevance for `q`, else species count (`n_rows`).",
+            "description": "The path of a number in a taxon: `species`, `resources.<resource>.covered`, `.missing` or `.total`, or `composition.<field>`; or `name`. Without it: relevance for `q`, else `species`.",
             "in": "query",
             "name": "sort_by",
             "required": false,
@@ -2131,7 +2155,7 @@
                   "type": "null"
                 }
               ],
-              "description": "A count column, `gap_<resource>` (species without that resource) or `name`. Without it: relevance for `q`, else species count (`n_rows`).",
+              "description": "The path of a number in a taxon: `species`, `resources.<resource>.covered`, `.missing` or `.total`, or `composition.<field>`; or `name`. Without it: relevance for `q`, else `species`.",
               "title": "Sort By"
             }
           },
@@ -2280,7 +2304,7 @@
             }
           },
           {
-            "description": "Only taxa with data for these resources.",
+            "description": "Only taxa with data for these resources (their names in /config).",
             "in": "query",
             "name": "filter",
             "required": false,
@@ -2296,19 +2320,19 @@
                   "type": "null"
                 }
               ],
-              "description": "Only taxa with data for these resources.",
+              "description": "Only taxa with data for these resources (their names in /config).",
               "title": "Filter"
             }
           },
           {
-            "description": "Whether `filter` needs every resource (AND) or any (OR).",
+            "description": "Whether `filter` needs every resource (`and`) or any (`or`).",
             "in": "query",
             "name": "logic",
             "required": false,
             "schema": {
               "$ref": "#/components/schemas/FilterLogic",
-              "default": "AND",
-              "description": "Whether `filter` needs every resource (AND) or any (OR)."
+              "default": "and",
+              "description": "Whether `filter` needs every resource (`and`) or any (`or`)."
             }
           },
           {
@@ -2335,15 +2359,15 @@
             },
             "description": "Successful Response"
           },
-          "422": {
+          "default": {
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "An error, as problem details (RFC 9457)."
           }
         },
         "summary": "Taxons Stats",
@@ -2378,15 +2402,15 @@
             },
             "description": "Successful Response"
           },
-          "422": {
+          "default": {
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "An error, as problem details (RFC 9457)."
           }
         },
         "summary": "Taxon",
@@ -2397,7 +2421,7 @@
     },
     "/taxons/{taxid}/ancestors": {
       "get": {
-        "description": "The root, every taxon below it down to this one, and this one, in that order,\nas the same objects ``/taxons`` lists. One page: a lineage is at most a few\ndozen taxa.",
+        "description": "The root, every taxon below it down to this one, and this one, in that order,\nas the same objects ``/taxons`` lists. The whole lineage, unpaged: it is at\nmost a few dozen taxa.",
         "operationId": "taxon_ancestors_taxons__taxid__ancestors_get",
         "parameters": [
           {
@@ -2415,21 +2439,25 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/TaxonPage"
+                  "items": {
+                    "$ref": "#/components/schemas/Taxon"
+                  },
+                  "title": "Response Taxon Ancestors Taxons  Taxid  Ancestors Get",
+                  "type": "array"
                 }
               }
             },
             "description": "Successful Response"
           },
-          "422": {
+          "default": {
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "An error, as problem details (RFC 9457)."
           }
         },
         "summary": "Taxon Ancestors",
@@ -2464,15 +2492,15 @@
             },
             "description": "Successful Response"
           },
-          "422": {
+          "default": {
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "An error, as problem details (RFC 9457)."
           }
         },
         "summary": "Taxon Stats",

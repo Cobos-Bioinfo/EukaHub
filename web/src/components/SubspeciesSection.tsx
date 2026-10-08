@@ -26,7 +26,7 @@ export default function SubspeciesSection({
   direct?: Record<string, number> | null;
   metrics: MetricConfig[];
 }) {
-  const children = useAsync(() => getChildren(taxid, { sort_by: "s_ass", limit: MAX }), [taxid]);
+  const children = useAsync(() => getChildren(taxid, { sort_by: "resources.assemblies.total", limit: MAX }), [taxid]);
 
   const data = children.data;
   if (children.error) {

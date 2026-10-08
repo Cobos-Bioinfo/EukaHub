@@ -18,6 +18,7 @@ from eukahub_core.metrics import (
     COMPOSITION_COLUMNS,
     COVERAGE_KEYS,
     METRIC_KEYS,
+    METRIC_NAMES,
     METRICS,
     QUALITY_KEYS,
     QUALITY_STATS,
@@ -31,6 +32,7 @@ from psycopg_pool import ConnectionPool
 from eukahub_api.clade_sets import SetTaxon
 from eukahub_api.pagination import Key, Page, beyond, key_columns, order_by, page
 from eukahub_api.pagination import decode as decode_cursor
+from eukahub_api.schemas import COMPOSITION_FIELDS
 from eukahub_api.totals import counts
 
 # n_rows, then c_* (COVERAGE_KEYS), then s_* (TOTAL_KEYS), then the additive
@@ -40,29 +42,53 @@ _FEATURE_COLS: tuple[str, ...] = (
     ("n_rows",) + COVERAGE_KEYS + TOTAL_KEYS + COMPOSITION_COLUMNS
 )
 
-# --- Breakdown query-param enums --------------------------------------------
+# --- /taxons query-parameter enums ------------------------------------------
 # Derived from the metric config, so the API contract (and the OpenAPI/TS
 # types generated from it) can't drift from the tracked resources. They also
 # make the identifiers interpolated into SQL below a closed, safe set.
 
-# Resource-presence filter keys ("ass", "ann", "rna", "lng").
-MetricFilter = Enum("MetricFilter", {k: k for k in METRIC_KEYS}, type=str)
+# Resource-presence filters, by resource name ("assemblies", ...).
+MetricFilter = Enum("MetricFilter", {n: n for n in METRIC_NAMES}, type=str)
+METRIC_KEY_OF: dict[str, str] = {m.name: m.key for m in METRICS}
 
-# /taxons sorts: any feature column, the species without each resource
-# ("gap_ass", ...), or the name.
-TaxonSort = Enum(
-    "TaxonSort",
-    {c: c for c in _FEATURE_COLS}
-    | {f"gap_{k}": f"gap_{k}" for k in METRIC_KEYS}
-    | {"name": "name"},
-    type=str,
-)
+
+def _count(column: str) -> str:
+    return f"COALESCE(f.{column}, 0)"
+
+
+# /taxons sorts, each named by the path of its number in a taxon object, with the
+# SQL it orders by and the SQL that breaks its ties.
+_COUNT_SORTS: dict[str, tuple[str, str]] = {
+    "species": (_count("n_rows"), _count("c_ass")),
+    **{
+        f"resources.{m.name}.{field}": sql
+        for m in METRICS
+        for field, sql in (
+            ("covered", (_count(m.coverage_key), _count(m.total_key))),
+            ("missing", (f"{_count('n_rows')} - {_count(m.coverage_key)}", _count("n_rows"))),
+            ("total", (_count(m.total_key), _count("c_ass"))),
+        )
+    },
+    **{
+        f"composition.{field}": (_count(column), _count("c_ass"))
+        for field, column in COMPOSITION_FIELDS.items()
+    },
+}
+TaxonSort = Enum("TaxonSort", {s: s for s in (*_COUNT_SORTS, "name")}, type=str)
 
 # Most rows one page of a list may hold.
 MAX_PAGE = 1000
 
-# Ranks the breakdown can target (ported from Euka-Survey's ALLOWED_RANKS).
-ALLOWED_RANKS: tuple[str, ...] = ("phylum", "class", "order", "family", "genus", "species")
+# Ranks `rank` takes: the major ranks, as on Annotrieve's taxonomy page.
+ALLOWED_RANKS: tuple[str, ...] = (
+    "kingdom",
+    "phylum",
+    "class",
+    "order",
+    "family",
+    "genus",
+    "species",
+)
 TargetRank = Enum("TargetRank", {r: r for r in ALLOWED_RANKS}, type=str)
 
 # Sort columns for the per-record drill-down lists (interpolated as identifiers,
@@ -94,10 +120,10 @@ class SortOrder(str, Enum):
 
 
 class FilterLogic(str, Enum):
-    """How multiple resource-presence filters combine (ported verbatim)."""
+    """How multiple resource-presence filters combine."""
 
-    AND = "AND"
-    OR = "OR"
+    AND = "and"
+    OR = "or"
 
 # A taxon is "infraspecific" (below species) iff a proper ancestor in its path
 # is a species or an informal species: subspecies, strains, varietas, etc. Each
@@ -148,8 +174,8 @@ def _direct_totals(
     }
     return {
         taxid: {
-            key: getattr(meta, f"s_{key}") - int(n)
-            for key, n in zip(METRIC_KEYS, below.get(taxid, [0] * len(TOTAL_KEYS)), strict=True)
+            m.name: getattr(meta, m.total_key) - int(n)
+            for m, n in zip(METRICS, below.get(taxid, [0] * len(TOTAL_KEYS)), strict=True)
         }
         for taxid, meta in units.items()
     }
@@ -198,15 +224,6 @@ def fetch_dataset_meta(
     ).fetchone()
 
 
-def _secondary_sort_key(sort_by_key: str) -> str:
-    """Tiebreaker column for a primary sort column (ported verbatim from
-    Euka-Survey): a ``c_*`` sort tie-breaks by its matching ``s_*``, anything
-    else by ``c_ass``. Both are applied DESC, so ordering matches the old app."""
-    if sort_by_key.startswith("c_"):
-        return sort_by_key.replace("c_", "s_", 1)
-    return "c_ass"
-
-
 @dataclass(frozen=True, slots=True)
 class TaxonFilter:
     """Which taxa ``/taxons`` lists; every field set narrows the list further."""
@@ -218,7 +235,7 @@ class TaxonFilter:
     within_path: str | None = None  # the path of ``within``
     rank: str | None = None
     taxids: Sequence[int] = ()
-    filter_keys: Sequence[str] = ()  # MetricFilter values: has data for these resources
+    filter_keys: Sequence[str] = ()  # metric keys: has data for these resources
     logic: FilterLogic = FilterLogic.AND
     exclude_empty: bool = False  # has data for any resource
 
@@ -300,17 +317,11 @@ def _taxon_keys(
             ],
             [f.q, *[f"{_escape_like(f.q)}%"] * 3],
         )
-    sort = _identifier(sort or "n_rows", [t.value for t in TaxonSort])
+    sort = _identifier(sort or "species", [t.value for t in TaxonSort])
     order = "desc" if descending else "asc"
     if sort == "name":
         return f"name:{order}", [Key("t.name", "text", descending), Key("t.taxid", "integer")], []
-    if sort.startswith("gap_"):
-        key = _identifier(sort.removeprefix("gap_"), METRIC_KEYS)
-        primary = f"COALESCE(f.n_rows, 0) - COALESCE(f.c_{key}, 0)"
-        secondary = "COALESCE(f.n_rows, 0)"
-    else:
-        primary = f"COALESCE(f.{sort}, 0)"
-        secondary = f"COALESCE(f.{_secondary_sort_key(sort)}, 0)"
+    primary, secondary = _COUNT_SORTS[sort]
     return (
         f"{sort}:{order}",
         [Key(primary, "integer", descending), Key(secondary, "integer", descending), *_NAME_KEYS],
@@ -469,13 +480,13 @@ def iter_report_tsv(
 # SELECT lists alias every column to the response-model field name, so the
 # endpoint can build the Pydantic model straight from a dict_row.
 _ASSEMBLY_RECORD_SELECT = (
-    "a.assembly_accession, a.taxid, t.name AS organism, a.assembly_level, "
+    "a.assembly_accession, a.taxid, t.name AS organism_name, a.assembly_level, "
     "a.contig_n50, a.scaffold_n50, a.total_sequence_length, a.gc_percent, "
     "a.refseq_category, a.release_date, a.submitter, a.source_database, "
     "a.bioprojects, a.download_url"
 )
 _ANNOTATION_RECORD_SELECT = (
-    "a.annotation_id, a.assembly_accession, a.taxid, t.name AS organism, "
+    "a.annotation_id, a.assembly_accession, a.taxid, t.name AS organism_name, "
     "a.source_database, a.provider, a.release_date, a.gff_url, a.gene_count, "
     "a.protein_coding_count, a.busco_complete, a.busco_single_copy, "
     "a.busco_duplicated, a.busco_lineage"

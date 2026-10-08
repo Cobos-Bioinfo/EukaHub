@@ -47,7 +47,7 @@ export default function GapsScatter({
   // points sit off the frame. Ticks are the whole powers of 10 inside the
   // padded range (clean 10K / 100K labels) rather than the enclosing decades,
   // so a cluster that stops mid-decade doesn't leave an empty decade of space.
-  const xs = items.map((it) => Math.max(it.n_rows, 1));
+  const xs = items.map((it) => Math.max(it.species, 1));
   const xLo = Math.log10(Math.min(...xs)) - 0.12;
   const xHi = Math.log10(Math.max(...xs)) + 0.12;
   const xSpan = xHi - xLo || 1;
@@ -74,7 +74,7 @@ export default function GapsScatter({
 
   const tip = active
     ? {
-        left: Math.min(88, Math.max(12, (xScale(active.n_rows) / VBW) * 100)),
+        left: Math.min(88, Math.max(12, (xScale(active.species) / VBW) * 100)),
         top: (yScale(active.percent) / VBH) * 100,
         below: yScale(active.percent) < M.top + PH * 0.4,
       }
@@ -144,7 +144,7 @@ export default function GapsScatter({
           return (
             <circle
               key={it.taxid}
-              cx={xScale(it.n_rows)}
+              cx={xScale(it.species)}
               cy={yScale(it.percent)}
               r={rScale(it.gap)}
               className={`gscatter__dot${on ? " gscatter__dot--on" : ""}`}
@@ -152,7 +152,7 @@ export default function GapsScatter({
               onMouseLeave={() => setHover((h) => (h === i ? null : h))}
             >
               <title>
-                {`${cladeLabel(it.taxid) ?? it.name}: ${fmt(it.gap)} of ${fmt(it.n_rows)} species missing ${resourceLower}`}
+                {`${cladeLabel(it.taxid) ?? it.name}: ${fmt(it.gap)} of ${fmt(it.species)} species missing ${resourceLower}`}
               </title>
             </circle>
           );
@@ -166,7 +166,7 @@ export default function GapsScatter({
         >
           <div className="gscatter__tip-name">{cladeLabel(active.taxid) ?? active.name}</div>
           <div className="gscatter__tip-row">
-            <strong>{fmtCompact(active.gap)}</strong> of {fmt(active.n_rows)} species missing{" "}
+            <strong>{fmtCompact(active.gap)}</strong> of {fmt(active.species)} species missing{" "}
             {resourceLower}
           </div>
           <div className="gscatter__tip-row gscatter__tip-muted">
@@ -175,7 +175,7 @@ export default function GapsScatter({
           {headline.length > 0 && (
             <div className="gscatter__tip-q">
               {headline.map((q) => {
-                const v = active.stats.find((s) => s.key === q.key)?.value ?? null;
+                const v = active.stats[q.key] ?? null;
                 return (
                   <span key={q.key} className="gscatter__tip-qstat">
                     {q.card_title}: <strong>{fmtQuality(v, q.fmt)}</strong>

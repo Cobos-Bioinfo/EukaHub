@@ -66,7 +66,7 @@ type BucketStats = Record<string, number | null>;
 // cards' pale assemblies/RNA-Seq tints have too little tone to fill a treemap, so
 // those two are saturated here (keeping the blue/green identity); annotations
 // already reads well, so it stays its exact card colour.
-const COVERAGE_HUES: Record<string, string> = { ass: "#2f8fd8", ann: "#1f78b4", rna: "#55ad39" };
+const COVERAGE_HUES: Record<string, string> = { assemblies: "#2f8fd8", annotations: "#1f78b4", rna_seq: "#55ad39" };
 const QUALITY_HUE = "#6a3d9a"; // one hue shared by every quality lens
 type Scale = "pct" | "relative";
 interface Lens {
@@ -88,9 +88,9 @@ function contiguityPct(n: CladeSummary): number | null {
 }
 
 const COVERAGE_LENSES: Lens[] = [
-  { key: "ass", label: "Assemblies", hue: COVERAGE_HUES.ass, scale: "pct", value: (n) => (n.resources.ass.covered > 0 ? n.resources.ass.percent : null), legend: "share of species with a genome assembly" },
-  { key: "ann", label: "Annotations", hue: COVERAGE_HUES.ann, scale: "pct", value: (n) => (n.resources.ann.covered > 0 ? n.resources.ann.percent : null), legend: "share of species with an annotation" },
-  { key: "rna", label: "RNA-Seq", hue: COVERAGE_HUES.rna, scale: "pct", value: (n) => (n.resources.rna.covered > 0 ? n.resources.rna.percent : null), legend: "share of species with RNA-Seq" },
+  { key: "assemblies", label: "Assemblies", hue: COVERAGE_HUES.assemblies, scale: "pct", value: (n) => (n.resources.assemblies.covered > 0 ? n.resources.assemblies.percent : null), legend: "share of species with a genome assembly" },
+  { key: "annotations", label: "Annotations", hue: COVERAGE_HUES.annotations, scale: "pct", value: (n) => (n.resources.annotations.covered > 0 ? n.resources.annotations.percent : null), legend: "share of species with an annotation" },
+  { key: "rna_seq", label: "RNA-Seq", hue: COVERAGE_HUES.rna_seq, scale: "pct", value: (n) => (n.resources.rna_seq.covered > 0 ? n.resources.rna_seq.percent : null), legend: "share of species with RNA-Seq" },
 ];
 const QUALITY_LENSES: Lens[] = [
   { key: "contig", label: "Contiguity", hue: QUALITY_HUE, scale: "pct", value: (n) => contiguityPct(n), legend: "share of assemblies at chromosome level or better" },
@@ -103,7 +103,7 @@ const NEEDS_QUALITY = new Set(["busco", "genes", "genome"]);
 
 type SizeBy = "species" | "assemblies";
 const sizeValue = (n: CladeSummary, by: SizeBy): number =>
-  Math.max(0, by === "species" ? n.n_rows : n.resources.ass.total);
+  Math.max(0, by === "species" ? n.species : n.resources.assemblies.total);
 
 interface Tile {
   node: CladeSummary;
@@ -232,7 +232,7 @@ export default function BreakdownMap({
 }) {
   const navigate = useNavigate();
   const { trail, resolving, drillTo, truncateTo } = useDrillTrail(root, rootLineage, variant === "page");
-  const [lensKey, setLensKey] = useState("ass");
+  const [lensKey, setLensKey] = useState("assemblies");
   const [sizeBy, setSizeBy] = useState<SizeBy>("species");
   const [hover, setHover] = useState<Hover | null>(null);
 
@@ -240,7 +240,7 @@ export default function BreakdownMap({
   const rootRanks = useMemo(() => (rootLineage ?? []).map((t) => t.rank), [rootLineage]);
   const targetRank = targetRankFor(focus, rootRanks);
 
-  const params = targetRank && { rank: targetRank, sort: "n_rows" as const, exclude_empty: false, limit: 250 };
+  const params = targetRank && { rank: targetRank, sort: "species" as const, exclude_empty: false, limit: 250 };
   const bd = useAsync(
     () => (params && !resolving ? getBreakdown(focus.taxid, params) : Promise.resolve(null)),
     [focus.taxid, targetRank, resolving],
@@ -249,15 +249,10 @@ export default function BreakdownMap({
     () => (params && !resolving ? getBreakdownQuality(focus.taxid, params) : Promise.resolve(null)),
     [focus.taxid, targetRank, resolving],
   );
-  const qmap = useMemo(() => {
-    const m = new Map<number, BucketStats>();
-    for (const b of quality.data ?? []) {
-      const o: BucketStats = {};
-      for (const s of b.stats) o[s.key] = s.value;
-      m.set(b.taxid, o);
-    }
-    return m;
-  }, [quality.data]);
+  const qmap = useMemo(
+    () => new Map<number, BucketStats>((quality.data ?? []).map((b) => [b.taxid, b.stats])),
+    [quality.data],
+  );
 
   const dark = useTheme() === "dark";
   const lens = LENSES.find((l) => l.key === lensKey) ?? LENSES[0];
@@ -454,17 +449,17 @@ export default function BreakdownMap({
                 type="button"
                 className="bmap-tile"
                 style={{ left: t.x0, top: t.y0, width: w, height: h, background: t.fill, color: t.ink }}
-                title={`${t.node.name} · ${fmt(t.node.n_rows)} species`}
+                title={`${t.node.name} · ${fmt(t.node.species)} species`}
                 onClick={() => activate(t.node)}
                 onMouseMove={(e) => setHover({ node: t.node, q: qmap.get(t.node.taxid), x: e.clientX, y: e.clientY })}
                 onMouseLeave={() => setHover(null)}
-                aria-label={`${t.node.name}, ${fmt(t.node.n_rows)} species. ${canDrill ? "Open its subgroups." : "Open its dashboard."}`}
+                aria-label={`${t.node.name}, ${fmt(t.node.species)} species. ${canDrill ? "Open its subgroups." : "Open its dashboard."}`}
               >
                 {labelled && (
                   <span className="bmap-tile__body">
                     <span className="bmap-tile__name">{t.node.name}</span>
                     <span className="bmap-tile__stat">
-                      {sizeBy === "species" ? `${fmt(t.node.n_rows)} sp` : `${fmt(t.node.resources.ass.total)} asm`}
+                      {sizeBy === "species" ? `${fmt(t.node.species)} sp` : `${fmt(t.node.resources.assemblies.total)} asm`}
                     </span>
                   </span>
                 )}
@@ -557,7 +552,7 @@ function TileList({
               </button>
               <span className="bmap-list__rank">{n.rank}</span>
               <span className="bmap-list__meta">
-                {fmt(n.n_rows)} species · {lens.legendLabel ?? lens.label} {lensText(n)}
+                {fmt(n.species)} species · {lens.legendLabel ?? lens.label} {lensText(n)}
               </span>
               <Link className="bmap-list__open" to={`/clade/${n.taxid}`}>
                 {drillable ? "Open" : "Dashboard"}
@@ -577,13 +572,13 @@ function TileTooltip({ hover }: { hover: Hover }) {
     <div className="chart-tip bmap-tip" style={{ left: hover.x + 14, top: hover.y + 14 }} role="tooltip">
       <div className="chart-tip__name">{node.name}</div>
       <div className="chart-tip__sub">
-        {node.rank} · {fmt(node.n_rows)} species
+        {node.rank} · {fmt(node.species)} species
       </div>
       <div className="bmap-tip__group">Coverage</div>
-      <CovRow label="Assemblies" r={node.resources.ass} />
-      <CovRow label="Annotations" r={node.resources.ann} />
-      <CovRow label="RNA-Seq" r={node.resources.rna} />
-      <CovRow label="Long-read RNA" r={node.resources.lng} />
+      <CovRow label="Assemblies" r={node.resources.assemblies} />
+      <CovRow label="Annotations" r={node.resources.annotations} />
+      <CovRow label="RNA-Seq" r={node.resources.rna_seq} />
+      <CovRow label="Long-read RNA" r={node.resources.long_read_rna_seq} />
       <div className="bmap-tip__group">Quality</div>
       <ValRow label="Chromosome-level+" value={contig != null ? `${fmtPct(contig)}%` : "—"} />
       <ValRow label="Best BUSCO" value={q?.busco != null ? `${fmtPct(q.busco)}%` : "—"} />

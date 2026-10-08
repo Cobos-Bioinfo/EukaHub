@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
 
+import { API_BASE } from "../api/client";
 import { useSiteConfig } from "../hooks/useSiteConfig";
 
 /** The "more" dropdown in the header: feedback, API docs, and the FAQ. */
@@ -52,7 +53,7 @@ export default function HeaderMenu() {
             <a
               className="menu__item"
               role="menuitem"
-              href="/api/docs"
+              href={`${API_BASE}/docs`}
               target="_blank"
               rel="noreferrer"
               onClick={() => setOpen(false)}

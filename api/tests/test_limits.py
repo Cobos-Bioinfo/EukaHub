@@ -67,7 +67,7 @@ def test_export_timeout_fails_before_the_download_starts(client, monkeypatch):
     monkeypatch.setattr(taxons, "iter_report_tsv", _cancelled_export)
     resp = client.get("/taxons/report?within=2759&rank=species")
     assert resp.status_code == 504
-    assert resp.headers["content-type"].startswith("application/json")
+    assert resp.headers["content-type"] == "application/problem+json"
 
 
 def test_pool_exhaustion_is_a_retryable_503(client, monkeypatch):

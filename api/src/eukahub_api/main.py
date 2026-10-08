@@ -9,6 +9,7 @@ The application itself: CORS, the middleware every response goes through
 import logging
 import os
 from contextlib import asynccontextmanager
+from typing import Any
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -28,11 +29,12 @@ log = logging.getLogger("eukahub.api")
 # per deploy; the default covers local dev + the prod web container.
 _DEFAULT_CORS_ORIGINS = "http://localhost:5173,http://localhost:8080"
 
-# The SPA reaches the API through a proxy (Vite in dev, nginx in prod) that
-# strips a `/api` prefix. Setting root_path tells FastAPI its external mount
-# point so the docs at `/api/docs` reference `/api/openapi.json` correctly.
-# Override with API_ROOT_PATH="" to serve the docs when hitting uvicorn directly.
-_ROOT_PATH = os.environ.get("API_ROOT_PATH", "/api")
+# Clients reach the API at /api/v1 through a proxy (Vite in dev, nginx in prod)
+# that strips the prefix, as Annotrieve serves /api/v0. Setting root_path tells
+# FastAPI its external mount point so the docs at `/api/v1/docs` reference
+# `/api/v1/openapi.json` correctly. Override with API_ROOT_PATH="" to serve the
+# docs when hitting uvicorn directly.
+_ROOT_PATH = os.environ.get("API_ROOT_PATH", "/api/v1")
 
 
 def cors_allow_origins() -> list[str]:
@@ -73,3 +75,13 @@ app.middleware("http")(add_response_headers)
 app.middleware("http")(log_requests)
 
 app.include_router(router)
+
+
+def openapi() -> dict[str, Any]:
+    """FastAPI's OpenAPI document, with the error responses as problem details."""
+    if app.openapi_schema is None:
+        app.openapi_schema = errors.document(FastAPI.openapi(app))
+    return app.openapi_schema
+
+
+app.openapi = openapi

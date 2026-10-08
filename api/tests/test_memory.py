@@ -232,11 +232,11 @@ REQUESTS = {
     "ancestors": f"/taxons/{SPECIES}/ancestors",
     "every species, first page": "/taxons?within=2759&rank=species&limit=1000",
     "every species, deep page": "/taxons?within=2759&rank=species&limit=1000&cursor="
-    + _cursor("n_rows:desc", 1, 0, "Species 20900000", 20900000),
+    + _cursor("species:desc", 1, 0, "Species 20900000", 20900000),
     "children of a big node": "/taxons?parent=2759&limit=1000",
     "search matching 1.8M names": "/taxons?q=pecies&limit=50",
     "close spellings": "/taxons?q=Specis%2020000001&fuzzy=true&limit=50",
-    "gaps of every genus": "/taxons?within=2759&rank=genus&sort_by=gap_ass&limit=1000",
+    "gaps of every genus": "/taxons?within=2759&rank=genus&sort_by=resources.assemblies.missing&limit=1000",
     "100 chosen taxa": "/taxons?taxids="
     + ",".join(str(SPECIES + i) for i in range(100))
     + "&limit=100",

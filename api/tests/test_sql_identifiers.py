@@ -14,8 +14,8 @@ HOSTILE = "n_rows; DROP TABLE taxon --"
 
 _CALLS = {
     "taxon sort": lambda: queries._taxon_keys(HOSTILE, True, queries.TaxonFilter()),
-    "taxon gap sort": lambda: queries._taxon_keys(
-        "gap_" + HOSTILE, True, queries.TaxonFilter()
+    "taxon resource sort": lambda: queries._taxon_keys(
+        f"resources.{HOSTILE}.missing", True, queries.TaxonFilter()
     ),
     "taxon filter": lambda: queries._taxon_where(queries.TaxonFilter(filter_keys=[HOSTILE])),
     "report sort": lambda: next(queries.iter_report_tsv(
@@ -37,7 +37,9 @@ def test_everything_the_api_accepts_passes_the_guard():
     for sort in queries.TaxonSort:
         assert queries._taxon_keys(sort.value, True, queries.TaxonFilter())
     for key in queries.MetricFilter:
-        filters = queries.TaxonFilter(filter_keys=[key.value], logic=FilterLogic.OR)
+        filters = queries.TaxonFilter(
+            filter_keys=[queries.METRIC_KEY_OF[key.value]], logic=FilterLogic.OR
+        )
         assert queries._taxon_where(filters)
     for source, enum in (("assembly", queries.AssemblySort), ("annotation", queries.AnnotationSort)):
         for sort in enum:

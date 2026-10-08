@@ -12,7 +12,7 @@ def test_page_envelope(client):
     assert set(body) == {"total", "limit", "next", "previous", "results"}
     assert body["limit"] == 2 and body["previous"] is None
     item = body["results"][0]
-    assert {"taxid", "name", "rank", "context", "n_rows", "resources", "composition"} <= set(item)
+    assert {"taxid", "name", "rank", "context", "species", "resources", "composition"} <= set(item)
     assert item["direct"] is None
 
 
@@ -24,7 +24,7 @@ def test_taxids_lists_those_taxa(client):
     assert body["total"] == 2
     for it in body["results"]:
         taxon = client.get(f"/taxons/{it['taxid']}").json()
-        assert it["n_rows"] == taxon["n_rows"]
+        assert it["species"] == taxon["species"]
         assert it["resources"] == taxon["resources"]
         assert "stats" not in it
 
@@ -33,8 +33,8 @@ def test_taxids_lists_those_taxa(client):
     "params",
     [
         {"taxids": "9606,40674,99999999"},
-        {"within": 40674, "rank": "order", "sort_by": "gap_ass", "limit": 4},
-        {"within": 2759, "rank": "species", "sort_by": "s_ass", "limit": 5},
+        {"within": 40674, "rank": "order", "sort_by": "resources.assemblies.missing", "limit": 4},
+        {"within": 2759, "rank": "species", "sort_by": "resources.assemblies.total", "limit": 5},
         {"q": "homo", "limit": 3},
     ],
 )
@@ -50,7 +50,7 @@ def test_stats_follow_the_list_page_for_page(client, params):
     }
     for s in stats["results"][:3]:
         assert set(s) == {"taxid", "name", "stats"}
-        assert [v["key"] for v in s["stats"]] == list(QUALITY_KEYS)
+        assert list(s["stats"]) == list(QUALITY_KEYS)
         assert s == client.get(f"/taxons/{s['taxid']}/stats").json()
 
 
@@ -61,7 +61,7 @@ def test_stats_page_with_the_list_cursor(client):
     stats = client.get("/taxons/stats", params={**params, "cursor": first["next"]}).json()
     assert [s["taxid"] for s in stats["results"]] == [it["taxid"] for it in listed["results"]]
     for s in stats["results"]:
-        busco = next(v["value"] for v in s["stats"] if v["key"] == "busco")
+        busco = s["stats"]["busco"]
         assert busco is None or 0.0 <= busco <= 100.0
 
 
@@ -101,7 +101,7 @@ def test_backward_cursor_returns_the_previous_page(client):
 def test_cursor_of_another_sort_is_rejected(client):
     first = client.get("/taxons", params={"parent": 2759, "limit": 2}).json()
     resp = client.get(
-        "/taxons", params={"parent": 2759, "limit": 2, "sort_by": "s_ass", "cursor": first["next"]}
+        "/taxons", params={"parent": 2759, "limit": 2, "sort_by": "resources.assemblies.total", "cursor": first["next"]}
     )
     assert resp.status_code == 422
 

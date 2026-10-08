@@ -125,8 +125,8 @@ export interface paths {
          * @description Taxa with their counts: a name search (``q``), a taxon's children
          *     (``parent``), every taxon of a rank under a taxon (``within`` and ``rank``), or
          *     chosen taxa (``taxids``), narrowed by the data they have. Sort by
-         *     ``gap_<resource>`` for the groups with the most species still missing it. Their
-         *     quality stats are in ``/taxons/stats``.
+         *     ``resources.<resource>.missing`` for the groups with the most species still
+         *     missing it. Their quality stats are in ``/taxons/stats``.
          */
         get: operations["taxons_taxons_get"];
         put?: never;
@@ -241,8 +241,8 @@ export interface paths {
         /**
          * Taxon Ancestors
          * @description The root, every taxon below it down to this one, and this one, in that order,
-         *     as the same objects ``/taxons`` lists. One page: a lineage is at most a few
-         *     dozen taxa.
+         *     as the same objects ``/taxons`` lists. The whole lineage, unpaged: it is at
+         *     most a few dozen taxa.
          */
         get: operations["taxon_ancestors_taxons__taxid__ancestors_get"];
         put?: never;
@@ -291,17 +291,19 @@ export interface components {
             exclude: components["schemas"]["TaxonRef"][];
             /** Include */
             include: components["schemas"]["TaxonRef"][];
-            /** N Rows */
-            n_rows: number;
             /** Resources */
             resources: {
                 [key: string]: components["schemas"]["ResourceSummary"];
             };
+            /** Species */
+            species: number;
             /**
              * Stats
              * @description As for a taxon, over the records in the set.
              */
-            stats: components["schemas"]["QualityStatValue"][];
+            stats: {
+                [key: string]: number | null;
+            };
         };
         /** AggregatePage */
         AggregatePage: {
@@ -351,8 +353,8 @@ export interface components {
             gene_count: number | null;
             /** Gff Url */
             gff_url: string | null;
-            /** Organism */
-            organism: string;
+            /** Organism Name */
+            organism_name: string;
             /** Protein Coding Count */
             protein_coding_count: number | null;
             /** Provider */
@@ -446,8 +448,8 @@ export interface components {
             download_url: string | null;
             /** Gc Percent */
             gc_percent: number | null;
-            /** Organism */
-            organism: string;
+            /** Organism Name */
+            organism_name: string;
             /** Refseq Category */
             refseq_category: string | null;
             /** Release Date */
@@ -526,15 +528,10 @@ export interface components {
         };
         /**
          * FilterLogic
-         * @description How multiple resource-presence filters combine (ported verbatim).
+         * @description How multiple resource-presence filters combine.
          * @enum {string}
          */
-        FilterLogic: "AND" | "OR";
-        /** HTTPValidationError */
-        HTTPValidationError: {
-            /** Detail */
-            detail?: components["schemas"]["ValidationError"][];
-        };
+        FilterLogic: "and" | "or";
         /**
          * MetricConfig
          * @description Static per-resource card chrome — served once in ``/config`` and joined
@@ -547,8 +544,6 @@ export interface components {
             card_title_help: string | null;
             /** Color */
             color: string;
-            /** Coverage Column */
-            coverage_column: string;
             /** Empty Text */
             empty_text: string;
             /** External Source Name */
@@ -557,7 +552,10 @@ export interface components {
             external_url_template: string;
             /** Filter Label */
             filter_label: string;
-            /** Key */
+            /**
+             * Key
+             * @description The resource's name: its key in `resources`, its value for `filter`, and the middle of its `sort_by` values.
+             */
             key: string;
             /** Legend Label */
             legend_label: string;
@@ -571,8 +569,6 @@ export interface components {
             sort_total_label: string;
             /** Species Help */
             species_help: string;
-            /** Total Column */
-            total_column: string;
             /** Total Help */
             total_help: string;
             /** Total Label */
@@ -582,11 +578,41 @@ export interface components {
          * MetricFilter
          * @enum {string}
          */
-        MetricFilter: "ass" | "ann" | "rna" | "lng";
+        MetricFilter: "assemblies" | "annotations" | "rna_seq" | "long_read_rna_seq";
+        /**
+         * ParameterError
+         * @description One parameter a request got wrong.
+         */
+        ParameterError: {
+            /** Detail */
+            detail: string;
+            /** Parameter */
+            parameter: string;
+        };
+        /**
+         * Problem
+         * @description Every error response: problem details (RFC 9457), sent as
+         *     ``application/problem+json``.
+         */
+        Problem: {
+            /** Detail */
+            detail: string;
+            /** Errors */
+            errors?: components["schemas"]["ParameterError"][] | null;
+            /** Status */
+            status: number;
+            /** Title */
+            title: string;
+            /**
+             * Type
+             * @default about:blank
+             */
+            type: string;
+        };
         /**
          * QualityStatConfig
          * @description Static chrome for one quality stat — served once in ``/config`` and
-         *     joined client-side to the per-taxon ``QualityStatValue`` by ``key``.
+         *     joined client-side to a taxon's ``stats`` by ``key``.
          *     The analogue of ``MetricConfig`` for the annotation/assembly-quality
          *     dimension (BUSCO %, gene count, genome size, N50).
          */
@@ -613,20 +639,6 @@ export interface components {
             unit: string | null;
         };
         /**
-         * QualityStatValue
-         * @description A quality stat of a taxon: the median or the maximum (see ``aggregation`` in
-         *     ``/config``) of one field over the records on or below it.
-         */
-        QualityStatValue: {
-            /** Key */
-            key: string;
-            /**
-             * Value
-             * @description Null when no record under the taxon has the field.
-             */
-            value: number | null;
-        };
-        /**
          * ResourceSummary
          * @description One resource's counts for a taxon, summed over the taxon and everything
          *     below it when the dataset is built.
@@ -638,8 +650,13 @@ export interface components {
              */
             covered: number;
             /**
+             * Missing
+             * @description Species on or below the taxon without any: species - covered.
+             */
+            missing: number;
+            /**
              * Percent
-             * @description covered / n_rows * 100, or 0 when n_rows is 0.
+             * @description covered / species * 100, or 0 when species is 0.
              */
             percent: number;
             /**
@@ -657,7 +674,7 @@ export interface components {
          * TargetRank
          * @enum {string}
          */
-        TargetRank: "phylum" | "class" | "order" | "family" | "genus" | "species";
+        TargetRank: "kingdom" | "phylum" | "class" | "order" | "family" | "genus" | "species";
         /**
          * Taxon
          * @description One taxon: the object ``/taxons/{taxid}`` returns and ``/taxons`` lists. Its
@@ -686,22 +703,22 @@ export interface components {
              * @default false
              */
             is_infraspecific: boolean;
-            /**
-             * N Rows
-             * @description Species on or below the taxon (1 for a species or a finer taxon).
-             */
-            n_rows: number;
             /** Name */
             name: string;
             /** Rank */
             rank: string;
             /**
              * Resources
-             * @description Per resource, keyed by the metric keys in /config.
+             * @description Per resource, keyed by the resource names in /config.
              */
             resources: {
                 [key: string]: components["schemas"]["ResourceSummary"];
             };
+            /**
+             * Species
+             * @description Species on or below the taxon (1 for a species or a finer taxon).
+             */
+            species: number;
             /** Taxid */
             taxid: number;
         };
@@ -734,7 +751,7 @@ export interface components {
          * TaxonSort
          * @enum {string}
          */
-        TaxonSort: "n_rows" | "c_ass" | "c_ann" | "c_rna" | "c_lng" | "s_ass" | "s_ann" | "s_rna" | "s_lng" | "n_ass_complete" | "n_ass_chromosome" | "n_ass_scaffold" | "n_ass_contig" | "n_reference" | "gap_ass" | "gap_ann" | "gap_rna" | "gap_lng" | "name";
+        TaxonSort: "species" | "resources.assemblies.covered" | "resources.assemblies.missing" | "resources.assemblies.total" | "resources.annotations.covered" | "resources.annotations.missing" | "resources.annotations.total" | "resources.rna_seq.covered" | "resources.rna_seq.missing" | "resources.rna_seq.total" | "resources.long_read_rna_seq.covered" | "resources.long_read_rna_seq.missing" | "resources.long_read_rna_seq.total" | "composition.complete" | "composition.chromosome" | "composition.scaffold" | "composition.contig" | "composition.reference" | "name";
         /**
          * TaxonStats
          * @description The quality stats of one taxon: the object ``/taxons/{taxid}/stats`` returns
@@ -745,9 +762,11 @@ export interface components {
             name: string;
             /**
              * Stats
-             * @description As in /taxons/{taxid}: computed per request from every record on or below the taxon; /config says which aggregation each one is.
+             * @description Per quality stat, keyed by the keys in /config: the median or the best (see `aggregation` there) of one field over the records on or below the taxon, computed at build time. Null when no such record has the field.
              */
-            stats: components["schemas"]["QualityStatValue"][];
+            stats: {
+                [key: string]: number | null;
+            };
             /** Taxid */
             taxid: number;
         };
@@ -763,19 +782,6 @@ export interface components {
             results: components["schemas"]["TaxonStats"][];
             /** Total */
             total: number;
-        };
-        /** ValidationError */
-        ValidationError: {
-            /** Context */
-            ctx?: Record<string, never>;
-            /** Input */
-            input?: unknown;
-            /** Location */
-            loc: (string | number)[];
-            /** Message */
-            msg: string;
-            /** Error Type */
-            type: string;
         };
     };
     responses: never;
@@ -812,13 +818,13 @@ export interface operations {
                     "application/json": components["schemas"]["AnnotationPage"];
                 };
             };
-            /** @description Validation Error */
-            422: {
+            /** @description An error, as problem details (RFC 9457). */
+            default: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };
@@ -849,13 +855,13 @@ export interface operations {
                     "application/json": components["schemas"]["AssemblyPage"];
                 };
             };
-            /** @description Validation Error */
-            422: {
+            /** @description An error, as problem details (RFC 9457). */
+            default: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };
@@ -876,6 +882,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AppConfig"];
+                };
+            };
+            /** @description An error, as problem details (RFC 9457). */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };
@@ -900,6 +915,15 @@ export interface operations {
                     };
                 };
             };
+            /** @description An error, as problem details (RFC 9457). */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
         };
     };
     readiness_health_ready_get: {
@@ -922,12 +946,21 @@ export interface operations {
                     };
                 };
             };
+            /** @description An error, as problem details (RFC 9457). */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
         };
     };
     taxons_taxons_get: {
         parameters: {
             query?: {
-                /** @description A count column, `gap_<resource>` (species without that resource) or `name`. Without it: relevance for `q`, else species count (`n_rows`). */
+                /** @description The path of a number in a taxon: `species`, `resources.<resource>.covered`, `.missing` or `.total`, or `composition.<field>`; or `name`. Without it: relevance for `q`, else `species`. */
                 sort_by?: components["schemas"]["TaxonSort"] | null;
                 sort_order?: components["schemas"]["SortOrder"];
                 limit?: number;
@@ -945,9 +978,9 @@ export interface operations {
                 rank?: components["schemas"]["TargetRank"] | null;
                 /** @description Only these taxa: comma-separated taxids, at most 100. */
                 taxids?: string | null;
-                /** @description Only taxa with data for these resources. */
+                /** @description Only taxa with data for these resources (their names in /config). */
                 filter?: components["schemas"]["MetricFilter"][] | null;
-                /** @description Whether `filter` needs every resource (AND) or any (OR). */
+                /** @description Whether `filter` needs every resource (`and`) or any (`or`). */
                 logic?: components["schemas"]["FilterLogic"];
                 /** @description Only taxa with data for at least one resource. */
                 exclude_empty?: boolean;
@@ -967,13 +1000,13 @@ export interface operations {
                     "application/json": components["schemas"]["TaxonPage"];
                 };
             };
-            /** @description Validation Error */
-            422: {
+            /** @description An error, as problem details (RFC 9457). */
+            default: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };
@@ -1001,13 +1034,13 @@ export interface operations {
                     "application/json": components["schemas"]["AggregatePage"];
                 };
             };
-            /** @description Validation Error */
-            422: {
+            /** @description An error, as problem details (RFC 9457). */
+            default: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };
@@ -1015,7 +1048,7 @@ export interface operations {
     taxons_report_taxons_report_get: {
         parameters: {
             query?: {
-                /** @description A count column, `gap_<resource>` (species without that resource) or `name`. Without it: relevance for `q`, else species count (`n_rows`). */
+                /** @description The path of a number in a taxon: `species`, `resources.<resource>.covered`, `.missing` or `.total`, or `composition.<field>`; or `name`. Without it: relevance for `q`, else `species`. */
                 sort_by?: components["schemas"]["TaxonSort"] | null;
                 sort_order?: components["schemas"]["SortOrder"];
                 /** @description Only taxa whose name contains this text, ignoring case (or is spelled like it, with `fuzzy`). The root and 'cellular organisms' are left out. */
@@ -1030,9 +1063,9 @@ export interface operations {
                 rank?: components["schemas"]["TargetRank"] | null;
                 /** @description Only these taxa: comma-separated taxids, at most 100. */
                 taxids?: string | null;
-                /** @description Only taxa with data for these resources. */
+                /** @description Only taxa with data for these resources (their names in /config). */
                 filter?: components["schemas"]["MetricFilter"][] | null;
-                /** @description Whether `filter` needs every resource (AND) or any (OR). */
+                /** @description Whether `filter` needs every resource (`and`) or any (`or`). */
                 logic?: components["schemas"]["FilterLogic"];
                 /** @description Only taxa with data for at least one resource. */
                 exclude_empty?: boolean;
@@ -1052,13 +1085,13 @@ export interface operations {
                     "application/json": unknown;
                 };
             };
-            /** @description Validation Error */
-            422: {
+            /** @description An error, as problem details (RFC 9457). */
+            default: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };
@@ -1066,7 +1099,7 @@ export interface operations {
     taxons_stats_taxons_stats_get: {
         parameters: {
             query?: {
-                /** @description A count column, `gap_<resource>` (species without that resource) or `name`. Without it: relevance for `q`, else species count (`n_rows`). */
+                /** @description The path of a number in a taxon: `species`, `resources.<resource>.covered`, `.missing` or `.total`, or `composition.<field>`; or `name`. Without it: relevance for `q`, else `species`. */
                 sort_by?: components["schemas"]["TaxonSort"] | null;
                 sort_order?: components["schemas"]["SortOrder"];
                 limit?: number;
@@ -1084,9 +1117,9 @@ export interface operations {
                 rank?: components["schemas"]["TargetRank"] | null;
                 /** @description Only these taxa: comma-separated taxids, at most 100. */
                 taxids?: string | null;
-                /** @description Only taxa with data for these resources. */
+                /** @description Only taxa with data for these resources (their names in /config). */
                 filter?: components["schemas"]["MetricFilter"][] | null;
-                /** @description Whether `filter` needs every resource (AND) or any (OR). */
+                /** @description Whether `filter` needs every resource (`and`) or any (`or`). */
                 logic?: components["schemas"]["FilterLogic"];
                 /** @description Only taxa with data for at least one resource. */
                 exclude_empty?: boolean;
@@ -1106,13 +1139,13 @@ export interface operations {
                     "application/json": components["schemas"]["TaxonStatsPage"];
                 };
             };
-            /** @description Validation Error */
-            422: {
+            /** @description An error, as problem details (RFC 9457). */
+            default: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };
@@ -1137,13 +1170,13 @@ export interface operations {
                     "application/json": components["schemas"]["Taxon"];
                 };
             };
-            /** @description Validation Error */
-            422: {
+            /** @description An error, as problem details (RFC 9457). */
+            default: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };
@@ -1165,16 +1198,16 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["TaxonPage"];
+                    "application/json": components["schemas"]["Taxon"][];
                 };
             };
-            /** @description Validation Error */
-            422: {
+            /** @description An error, as problem details (RFC 9457). */
+            default: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };
@@ -1199,13 +1232,13 @@ export interface operations {
                     "application/json": components["schemas"]["TaxonStats"];
                 };
             };
-            /** @description Validation Error */
-            422: {
+            /** @description An error, as problem details (RFC 9457). */
+            default: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };

@@ -64,7 +64,7 @@ export default function Dashboard() {
   const isUnit = isInfra || isInformal || s.rank === "species";
   // Per-record drill-down only when the clade actually has assemblies or
   // annotations (avoids an empty browser + its fetches for data-less taxa).
-  const hasRecords = s.resources.ass.total > 0 || s.resources.ann.total > 0;
+  const hasRecords = s.resources.assemblies.total > 0 || s.resources.annotations.total > 0;
   const noData = Object.values(s.resources).every((r) => r.total === 0);
   const rankWord = s.rank && s.rank !== "no rank" ? s.rank : "infraspecific taxon";
   const belowLabel = isInfra ? "from finer subdivisions" : "from subspecies and strains";
@@ -94,7 +94,7 @@ export default function Dashboard() {
             ) : (
               !isUnit && (
                 <p className="dashboard__species">
-                  <strong>{fmt(s.n_rows)}</strong> species in this clade
+                  <strong>{fmt(s.species)}</strong> species in this clade
                 </p>
               )
             )}
@@ -111,8 +111,8 @@ export default function Dashboard() {
               name={s.name}
               rank={s.rank}
               isUnit={isUnit}
-              species={s.n_rows}
-              ncbiUrlTemplate={metrics.data.find((m) => m.key === "ass")?.external_url_template}
+              species={s.species}
+              ncbiUrlTemplate={metrics.data.find((m) => m.key === "assemblies")?.external_url_template}
             />
           ) : (
             <div className="card-grid">
@@ -140,8 +140,8 @@ export default function Dashboard() {
               loading={stats.loading}
               error={stats.error}
               retry={stats.reload}
-              assemblies={s.resources.ass.total}
-              annotations={s.resources.ann.total}
+              assemblies={s.resources.assemblies.total}
+              annotations={s.resources.annotations.total}
               composition={s.composition}
             />
           )}

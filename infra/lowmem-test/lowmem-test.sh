@@ -7,7 +7,7 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 # A throwaway stack, but the prod compose file still requires a password.
 export POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-lowmemtest}"
 C=(docker compose -f "$REPO/infra/docker-compose.prod.yml" -f "$HERE/lowmem.test.yml")
-API=http://localhost:8080/api
+API=http://localhost:8080/api/v1
 echo "== Testing $REPO @ $(git -C "$REPO" rev-parse --short HEAD 2>/dev/null)$(git -C "$REPO" diff --quiet 2>/dev/null || echo ' + uncommitted changes')"
 
 "${C[@]}" down -v
@@ -27,7 +27,7 @@ hit() {  # label, url  -> status, size, seconds (never aborts the script)
 
 echo "== What the UI requests (expect 200, ideally well under 15s each)"
 hit "overview (landing)"                  "$API/taxons?taxids=2759,40674,8782,7898,50557,4751,3398&limit=7"
-hit "gaps teaser (landing)"               "$API/taxons?within=2759&rank=order&sort_by=gap_ass&limit=5"
+hit "gaps teaser (landing)"               "$API/taxons?within=2759&rank=order&sort_by=resources.assemblies.missing&limit=5"
 hit "summary Eukaryota (dashboard)"       "$API/taxons/2759/ancestors"
 hit "stats Eukaryota (dashboard)"         "$API/taxons/2759/stats"
 hit "assemblies Eukaryota (records)"      "$API/assemblies?within=2759&limit=50"
@@ -37,7 +37,7 @@ hit "quality Eukaryota phylum (map)"      "$API/taxons/stats?within=2759&rank=ph
 hit "quality Metazoa phylum (map)"        "$API/taxons/stats?within=33208&rank=phylum&limit=250"
 hit "quality Insecta order (map)"         "$API/taxons/stats?within=50557&rank=order&limit=250"
 hit "children Eukaryota (tree)"           "$API/taxons?parent=2759&limit=100"
-hit "gaps order (gaps page)"              "$API/taxons/stats?within=2759&rank=order&sort_by=gap_ass&limit=25"
+hit "gaps order (gaps page)"              "$API/taxons/stats?within=2759&rank=order&sort_by=resources.assemblies.missing&limit=25"
 hit "compare 6 groups"                    "$API/taxons/stats?taxids=40674,8782,50557,4751,33090,7898&limit=6"
 hit "report Eukaryota phylum (download)"  "$API/taxons/report?within=2759&rank=phylum"
 
@@ -49,7 +49,7 @@ hit "report every eukaryote species"      "$API/taxons/report?within=2759&rank=s
 echo "== Six different requests at once (expect all 200, slower than alone)"
 hit "quality Metazoa genus"   "$API/taxons/stats?within=33208&rank=genus&limit=1000" &
 hit "quality Fungi genus"     "$API/taxons/stats?within=4751&rank=genus&limit=1000" &
-hit "gaps family"             "$API/taxons/stats?within=2759&rank=family&sort_by=gap_ass&limit=200" &
+hit "gaps family"             "$API/taxons/stats?within=2759&rank=family&sort_by=resources.assemblies.missing&limit=200" &
 hit "report Insecta species"  "$API/taxons/report?within=50557&rank=species" &
 hit "stats Mammalia"          "$API/taxons/40674/stats" &
 hit "children Metazoa"        "$API/taxons?parent=33208&limit=100" &

@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from eukahub_core.metrics import METRIC_KEYS, QUALITY_KEYS
+from eukahub_core.metrics import METRIC_NAMES, QUALITY_KEYS
 
 
 def test_config_shape(client):
@@ -48,14 +48,12 @@ def test_config_dataset(client):
 
 def test_config_metrics(client):
     metrics = client.get("/config").json()["metrics"]
-    assert [m["key"] for m in metrics] == list(METRIC_KEYS)
+    assert [m["key"] for m in metrics] == list(METRIC_NAMES)
     for m in metrics:
         assert m["card_title"]
         assert m["empty_text"].startswith("No ")
         assert m["color"].startswith("#")
         assert "{taxid}" in m["external_url_template"]  # client substitutes
-        assert m["coverage_column"] == f"c_{m['key']}"
-        assert m["total_column"] == f"s_{m['key']}"
 
 
 def test_config_quality_stats(client):
