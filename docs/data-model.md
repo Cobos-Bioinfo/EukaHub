@@ -137,6 +137,9 @@ as `dataset-counts.json`, and fails when one fell by more than 10%. A drop that 
 real can be published by running the rebuild by hand with "Publish even if counts
 fell sharply" ticked.
 
+`taxon` is loaded sorted by path, so each subtree's rows sit together on disk and
+a subtree query reads only its own pages.
+
 ## Sizes (full dataset, September 2026)
 
 Database about 950 MB on disk: `taxon` 290 MB plus 410 MB for its `path` index,

@@ -122,9 +122,11 @@ assert tuple(_READS_SCHEMA) == READS_COLUMNS
 def _taxon_copy_rows(
     nodes: dict[int, tuple[int, str]], names: dict[int, str], paths: dict[int, str]
 ) -> Iterator[tuple]:
-    """Stream (taxid, name, rank, parent_id, path) tuples for COPY — a
-    generator so the full tree is never materialized as a row list."""
-    for taxid, (parent, rank) in nodes.items():
+    """Stream (taxid, name, rank, parent_id, path) tuples for COPY, sorted by path
+    so that each subtree's rows sit together on disk and a subtree scan reads only
+    its own pages (NCBI's file order scatters them across the table)."""
+    for taxid in sorted(nodes, key=paths.__getitem__):
+        parent, rank = nodes[taxid]
         yield (taxid, names.get(taxid, str(taxid)), rank, parent, paths[taxid])
 
 
