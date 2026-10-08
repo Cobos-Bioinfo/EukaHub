@@ -10,12 +10,14 @@ data are dropped; records are loaded per-record and rolled up every lineage. Run
     uv run --package eukahub-pipeline python -m eukahub_pipeline.build
 
 Reuse an unpacked taxdump with ``--skip-download``; re-fetch the live sources
-(ignoring snapshots) with ``--refresh-sources``.
+(ignoring snapshots) with ``--refresh-sources``. ``--previous-counts`` compares the
+build with the previous Release's counts, which ``--counts-out`` writes.
 """
 
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import os
 import time
@@ -58,7 +60,7 @@ from eukahub_pipeline.taxdump import (
     parse_names,
     parse_nodes,
 )
-from eukahub_pipeline.validate import validate
+from eukahub_pipeline.validate import check_against_previous, release_counts, validate
 
 log = logging.getLogger("eukahub.build")
 
@@ -181,6 +183,17 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="assume the schema already exists (skip applying schema-dir)",
     )
+    p.add_argument(
+        "--previous-counts",
+        type=Path,
+        help="the previous Release's counts (JSON); fail if a count fell sharply since",
+    )
+    p.add_argument(
+        "--accept-drops",
+        action="store_true",
+        help="log the counts that fell since the previous Release instead of failing",
+    )
+    p.add_argument("--counts-out", type=Path, help="write this build's counts here (JSON)")
     args = p.parse_args(argv)
     try:
         sources = load_sources(os.environ)
@@ -293,6 +306,10 @@ def main(argv: list[str] | None = None) -> int:
         # Gate on the invariants BEFORE stamping — a broken build raises here and
         # never records a (misleading) "updated" timestamp.
         validate(conn, args.leaf_db)
+        counts = release_counts(conn)
+        if args.previous_counts:
+            previous = json.loads(args.previous_counts.read_text())
+            check_against_previous(counts, previous, accept_drops=args.accept_drops)
 
         load_dataset_meta(
             conn,
@@ -302,6 +319,10 @@ def main(argv: list[str] | None = None) -> int:
             clade_count=n_clade,
         )
         log.info("Stamped dataset_meta (built_at = now)")
+
+    if args.counts_out:
+        args.counts_out.write_text(json.dumps(counts, indent=2) + "\n")
+        log.info("Wrote the counts to %s", args.counts_out)
 
     log.info("Build finished in %.1fs", time.time() - t0)
     return 0

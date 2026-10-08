@@ -113,16 +113,29 @@ computes each clade's quality statistics from its records the same way (each
 record's ancestors are the labels of its taxon's `path`), and loads Postgres. Before a dataset is published or installed,
 `validate.check_invariants` requires that:
 
-1. no core table is empty;
+1. no core table is empty, and Eukaryota has a taxon and a rollup row;
 2. Eukaryota's species count equals a direct count of `species`-rank taxa under it;
 3. Eukaryota's assembly and annotation totals equal the rows in those tables;
 4. every informal species carries data;
 5. no clade has more species with data than species;
 6. the assembly-level counts at Eukaryota are positive and do not exceed its total;
-7. `clade_stats` has a row for exactly the clades with records below them;
-8. the stored statistics of a few large clades (Eukaryota, Metazoa, Mammalia,
-   Primates, Fungi, plants) equal Postgres' own median and maximum over their
-   records.
+7. every resource has data for at least one species;
+8. no two assembly rows share an assembly number;
+9. the fields the statistics and composition read are filled on most records
+   (assembly level, contig N50 and genome size on 90% of assemblies, protein-coding
+   genes on 90% and BUSCO on 50% of annotations), so a field a source renames fails
+   the build instead of shipping empty;
+10. `clade_stats` has a row for exactly the clades with records below them;
+11. the stored statistics of a few large clades (Eukaryota, Metazoa, Mammalia,
+    Primates, Fungi, plants) equal Postgres' own median and maximum over their
+    records.
+
+A partial download that is consistent with itself passes all of these, so the
+rebuild also compares the build's key counts (taxa, species, and per resource the
+species with data and the records) with the previous Release's, published with it
+as `dataset-counts.json`, and fails when one fell by more than 10%. A drop that is
+real can be published by running the rebuild by hand with "Publish even if counts
+fell sharply" ticked.
 
 ## Sizes (full dataset, September 2026)
 
