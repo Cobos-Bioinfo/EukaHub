@@ -35,7 +35,7 @@ def test_a_method_not_routed_keeps_allow(client):
 
 
 def test_a_bad_parameter_is_named(client):
-    body = _problem(client.get("/taxons", params={"rank": "kingdom"}), 422)
+    body = _problem(client.get("/taxons", params={"rank": "superclass"}), 422)
     assert [e["parameter"] for e in body["errors"]] == ["rank"]
     assert body["detail"].startswith("rank: ")
 

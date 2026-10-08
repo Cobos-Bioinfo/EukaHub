@@ -81,8 +81,13 @@ def test_breakdown_limit(client):
 
 
 def test_breakdown_invalid_rank_422(client):
-    # "kingdom" is a real NCBI rank but not one the breakdown offers.
-    assert client.get("/taxons", params={"within": 2759, "rank": "kingdom"}).status_code == 422
+    # "superclass" is a real NCBI rank but not one of the major ranks `rank` takes.
+    assert client.get("/taxons", params={"within": 2759, "rank": "superclass"}).status_code == 422
+
+
+def test_breakdown_by_kingdom(client):
+    body = client.get("/taxons", params={"within": 2759, "rank": "kingdom"}).json()
+    assert body["results"] and all(it["rank"] == "kingdom" for it in body["results"])
 
 
 def test_breakdown_unknown_root_404(client):

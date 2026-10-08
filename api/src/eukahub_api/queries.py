@@ -61,8 +61,16 @@ TaxonSort = Enum(
 # Most rows one page of a list may hold.
 MAX_PAGE = 1000
 
-# Ranks the breakdown can target (ported from Euka-Survey's ALLOWED_RANKS).
-ALLOWED_RANKS: tuple[str, ...] = ("phylum", "class", "order", "family", "genus", "species")
+# Ranks `rank` takes: the major ranks, as on Annotrieve's taxonomy page.
+ALLOWED_RANKS: tuple[str, ...] = (
+    "kingdom",
+    "phylum",
+    "class",
+    "order",
+    "family",
+    "genus",
+    "species",
+)
 TargetRank = Enum("TargetRank", {r: r for r in ALLOWED_RANKS}, type=str)
 
 # Sort columns for the per-record drill-down lists (interpolated as identifiers,

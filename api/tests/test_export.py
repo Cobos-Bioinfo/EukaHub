@@ -57,7 +57,7 @@ def test_report_without_within_is_named_after_the_taxa(client):
 
 def test_report_bad_filters(client):
     assert client.get("/taxons/report?within=999999999&rank=phylum").status_code == 404
-    assert client.get("/taxons/report?within=2759&rank=kingdom").status_code == 422
+    assert client.get("/taxons/report?within=2759&rank=superclass").status_code == 422
 
 
 def test_report_streams_one_chunk_per_batch(client, monkeypatch):

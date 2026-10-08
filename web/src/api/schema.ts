@@ -682,7 +682,7 @@ export interface components {
          * TargetRank
          * @enum {string}
          */
-        TargetRank: "phylum" | "class" | "order" | "family" | "genus" | "species";
+        TargetRank: "kingdom" | "phylum" | "class" | "order" | "family" | "genus" | "species";
         /**
          * Taxon
          * @description One taxon: the object ``/taxons/{taxid}`` returns and ``/taxons`` lists. Its
