@@ -304,15 +304,12 @@ def taxon(taxid: int, conn: Conn) -> Taxon:
     return _taxon(fetch_taxon(conn, taxid))
 
 
-@router.get("/taxons/{taxid}/ancestors", response_model=TaxonPage)
-def taxon_ancestors(taxid: int, conn: Conn) -> TaxonPage:
+@router.get("/taxons/{taxid}/ancestors", response_model=list[Taxon])
+def taxon_ancestors(taxid: int, conn: Conn) -> list[Taxon]:
     """The root, every taxon below it down to this one, and this one, in that order,
-    as the same objects ``/taxons`` lists. One page: a lineage is at most a few
-    dozen taxa."""
-    rows = fetch_ancestors(conn, taxid)
-    return TaxonPage(
-        total=len(rows), limit=len(rows), next=None, previous=None, results=list(map(_taxon, rows))
-    )
+    as the same objects ``/taxons`` lists. The whole lineage, unpaged: it is at
+    most a few dozen taxa."""
+    return list(map(_taxon, fetch_ancestors(conn, taxid)))
 
 
 @router.get("/taxons/{taxid}/stats", response_model=TaxonStats)

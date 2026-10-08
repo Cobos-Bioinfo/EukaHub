@@ -121,7 +121,8 @@ Streamlit app that answered the same questions but was slow to build and to serv
   overlap, so that they and the parent's "rest" group always add up to the parent.
 - **The API has one main resource, taxons, named like Annotrieve's.** A taxon is
   one object everywhere: `/taxons/{taxid}` returns it, `/taxons` lists it, and
-  `/taxons/{taxid}/ancestors` gives the lineage as the same objects, root first.
+  `/taxons/{taxid}/ancestors` gives the whole lineage as a plain list of the same
+  objects, root first (a few dozen taxa at most, so it is not paged).
   `/taxons` lists taxa by name, parent, rank under a taxon or taxid, sorted by any
   count or by the species still missing a resource (`gap_<key>`). Search, the tree's
   children, the data map, the gaps list, compare and the landing numbers are that

@@ -30,7 +30,7 @@ def test_search_puts_the_exact_name_first(client):
 
 def test_search_hits_name_their_nearest_major_rank(client):
     for hit in _search(client, "Homo", limit=5):
-        lineage = client.get(f"/taxons/{hit['taxid']}/ancestors").json()["results"]
+        lineage = client.get(f"/taxons/{hit['taxid']}/ancestors").json()
         above = [a for a in lineage[:-1] if a["rank"] in ("class", "phylum", "kingdom")]
         assert hit["context"] == (above[-1]["name"] if above else None)
 

@@ -80,10 +80,10 @@ export type TaxonWithLineage = Taxon & { lineage: Taxon[] };
 
 // One taxon and its ancestors in one request: the ancestors end with the taxon.
 export async function getTaxon(taxid: number): Promise<TaxonWithLineage> {
-  const { results } = unwrap(
+  const lineage = unwrap(
     await api.GET("/taxons/{taxid}/ancestors", { params: { path: { taxid } } }),
   );
-  return { ...results[results.length - 1], lineage: results };
+  return { ...lineage[lineage.length - 1], lineage };
 }
 
 // The quality stats of the records on or below one taxon.

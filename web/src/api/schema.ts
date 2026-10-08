@@ -241,8 +241,8 @@ export interface paths {
         /**
          * Taxon Ancestors
          * @description The root, every taxon below it down to this one, and this one, in that order,
-         *     as the same objects ``/taxons`` lists. One page: a lineage is at most a few
-         *     dozen taxa.
+         *     as the same objects ``/taxons`` lists. The whole lineage, unpaged: it is at
+         *     most a few dozen taxa.
          */
         get: operations["taxon_ancestors_taxons__taxid__ancestors_get"];
         put?: never;
@@ -1204,7 +1204,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["TaxonPage"];
+                    "application/json": components["schemas"]["Taxon"][];
                 };
             };
             /** @description An error, as problem details (RFC 9457). */

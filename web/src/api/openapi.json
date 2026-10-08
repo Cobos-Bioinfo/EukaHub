@@ -2437,7 +2437,7 @@
     },
     "/taxons/{taxid}/ancestors": {
       "get": {
-        "description": "The root, every taxon below it down to this one, and this one, in that order,\nas the same objects ``/taxons`` lists. One page: a lineage is at most a few\ndozen taxa.",
+        "description": "The root, every taxon below it down to this one, and this one, in that order,\nas the same objects ``/taxons`` lists. The whole lineage, unpaged: it is at\nmost a few dozen taxa.",
         "operationId": "taxon_ancestors_taxons__taxid__ancestors_get",
         "parameters": [
           {
@@ -2455,7 +2455,11 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/TaxonPage"
+                  "items": {
+                    "$ref": "#/components/schemas/Taxon"
+                  },
+                  "title": "Response Taxon Ancestors Taxons  Taxid  Ancestors Get",
+                  "type": "array"
                 }
               }
             },

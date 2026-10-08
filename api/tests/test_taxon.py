@@ -184,9 +184,7 @@ def test_taxon_is_the_object_the_list_returns(client):
 
 
 def test_taxon_ancestors_homo_sapiens(client):
-    body = client.get("/taxons/9606/ancestors").json()
-    lin = body["results"]
-    assert body["total"] == len(lin) and body["next"] is None
+    lin = client.get("/taxons/9606/ancestors").json()
     assert lin[0]["taxid"] == 1  # root first
     assert lin[-1] == client.get("/taxons/9606").json()  # the taxon itself last
     assert any(a["taxid"] == 2759 and a["name"] == "Eukaryota" for a in lin)
@@ -198,7 +196,7 @@ def test_taxon_ancestors_homo_sapiens(client):
 
 
 def test_taxon_ancestors_of_the_root(client):
-    assert [a["taxid"] for a in client.get("/taxons/1/ancestors").json()["results"]] == [1]
+    assert [a["taxid"] for a in client.get("/taxons/1/ancestors").json()] == [1]
 
 
 def test_taxon_stats(client):
