@@ -1,11 +1,13 @@
 """Install a dataset snapshot (``pg_dump -Fc``) as the live serving database.
 
 Restores into ``<db>_next`` while the live database keeps serving, collects planner
-statistics, verifies it with the pipeline's ``check_invariants``, then swaps by renaming databases and keeps the
-old one as ``<db>_prev`` for ``--rollback``. Any failure before the swap leaves the
-live database untouched. Databases are renamed rather than schemas because the
-``ltree``/``pg_trgm`` extensions live in ``public``; the swap terminates open
-sessions on the renamed databases.
+statistics, verifies it with the pipeline's ``check_invariants``, records which
+Release it came from, then swaps by renaming databases and keeps the old one as
+``<db>_prev`` for ``--rollback``. Any failure before the swap leaves the live
+database untouched, and ``repair`` finishes a swap that was interrupted. Databases
+are renamed rather than schemas because the ``ltree``/``pg_trgm`` extensions live
+in ``public``; a rename refuses new sessions on the database, then closes the open
+ones.
 
     uv run python scripts/restore_snapshot.py --dump snap.dump [--dry-run]
     uv run python scripts/restore_snapshot.py --url https://.../eukahub-dataset.dump
@@ -25,6 +27,7 @@ import subprocess
 import tempfile
 import urllib.request
 from pathlib import Path
+from typing import NamedTuple
 
 import psycopg
 from eukahub_pipeline.validate import DataValidationError, check_invariants
@@ -37,6 +40,47 @@ DEFAULT_URL = "postgresql://eukahub:eukahub@localhost:5432/eukahub"
 # Postgres caps identifiers at 63 bytes; the suffixed names must still fit.
 STAGING_SUFFIX = "_next"
 PREVIOUS_SUFFIX = "_prev"
+# The live database while a rollback swaps it with the previous one.
+SWAP_SUFFIX = "_swap"
+# Left by rollbacks of older versions of this script, which kept a third copy.
+FAILED_SUFFIX = "_failed"
+
+# Which Release a database was installed from, and the one a rollback left it
+# for, which the refresher must not install again. Written by the installer into
+# the database it installs; a dataset dump never carries a row.
+_INSTALLED_TABLE = """
+CREATE TABLE IF NOT EXISTS installed_release (
+    id           BOOLEAN     PRIMARY KEY DEFAULT TRUE CHECK (id),
+    tag          TEXT,
+    sha256       TEXT,
+    installed_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    skip_tag     TEXT,
+    skip_sha256  TEXT
+)
+"""
+
+
+class ReleaseId(NamedTuple):
+    """A Release's tag and the SHA-256 of its dump, when GitHub published one."""
+
+    tag: str
+    sha256: str | None = None
+
+    def same_as(self, other: ReleaseId | None) -> bool:
+        """The same tag, and the same dump when both digests are known: a rebuild
+        run twice on one day keeps its tag but replaces the dump."""
+        return (
+            other is not None
+            and self.tag == other.tag
+            and (self.sha256 is None or other.sha256 is None or self.sha256 == other.sha256)
+        )
+
+
+class Installed(NamedTuple):
+    """What ``installed_release`` says about the live database."""
+
+    release: ReleaseId | None
+    skip: ReleaseId | None
 
 
 class RestoreError(RuntimeError):
@@ -75,25 +119,37 @@ def _database_exists(conn: psycopg.Connection, name: str) -> bool:
 def _drop_database(conn: psycopg.Connection, name: str) -> None:
     if not _database_exists(conn, name):
         return
-    _terminate_connections(conn, name)
-    conn.execute(sql.SQL("DROP DATABASE {}").format(sql.Identifier(name)))
+    conn.execute(sql.SQL("DROP DATABASE {} WITH (FORCE)").format(sql.Identifier(name)))
     log.info("dropped %s", name)
 
 
-def _terminate_connections(conn: psycopg.Connection, name: str) -> None:
-    """Close other sessions on ``name`` so it can be renamed or dropped."""
+def _allow_connections(conn: psycopg.Connection, name: str, allow: bool) -> None:
     conn.execute(
-        "SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
-        "WHERE datname = %s AND pid <> pg_backend_pid()",
-        (name,),
+        sql.SQL("ALTER DATABASE {} WITH ALLOW_CONNECTIONS {}").format(
+            sql.Identifier(name), sql.Literal(allow)
+        )
     )
 
 
 def _rename_database(conn: psycopg.Connection, old: str, new: str) -> None:
-    _terminate_connections(conn, old)
-    conn.execute(
-        sql.SQL("ALTER DATABASE {} RENAME TO {}").format(sql.Identifier(old), sql.Identifier(new))
-    )
+    """Rename ``old``: refuse new sessions first, so that a client reconnecting
+    between closing the open ones and the rename cannot block it."""
+    _allow_connections(conn, old, False)
+    renamed = False
+    try:
+        conn.execute(
+            "SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
+            "WHERE datname = %s AND pid <> pg_backend_pid()",
+            (old,),
+        )
+        conn.execute(
+            sql.SQL("ALTER DATABASE {} RENAME TO {}").format(
+                sql.Identifier(old), sql.Identifier(new)
+            )
+        )
+        renamed = True
+    finally:
+        _allow_connections(conn, new if renamed else old, True)
     log.info("renamed %s -> %s", old, new)
 
 
@@ -163,10 +219,104 @@ def _verify(url: str, dbname: str) -> None:
         )
 
 
-def restore(url: str, dump: Path, *, dry_run: bool = False) -> None:
+def _names(url: str) -> tuple[str, str, str, str]:
+    """The live database's name, and those of its staging, previous and swap copies."""
     live = _live_dbname(url)
-    staging = f"{live}{STAGING_SUFFIX}"
-    previous = f"{live}{PREVIOUS_SUFFIX}"
+    return live, f"{live}{STAGING_SUFFIX}", f"{live}{PREVIOUS_SUFFIX}", f"{live}{SWAP_SUFFIX}"
+
+
+def installed_release(url: str) -> Installed | None:
+    """What the live database says it was installed from, or None when nothing is
+    installed or recorded (no live database, or one installed before records were
+    kept). Any other error is raised: a database that can't be read is not a reason
+    to install again."""
+    live = _live_dbname(url)
+    with _connect_admin(url) as admin:
+        if not _database_exists(admin, live):
+            return None
+    try:
+        with psycopg.connect(url, connect_timeout=10) as conn:
+            row = conn.execute(
+                "SELECT tag, sha256, skip_tag, skip_sha256 FROM installed_release"
+            ).fetchone()
+    except psycopg.errors.UndefinedTable:
+        return None
+    if row is None:
+        return None
+    tag, sha256, skip_tag, skip_sha256 = row
+    return Installed(
+        ReleaseId(tag, sha256) if tag else None,
+        ReleaseId(skip_tag, skip_sha256) if skip_tag else None,
+    )
+
+
+def _record(url: str, dbname: str, release: ReleaseId) -> None:
+    """Record in ``dbname`` that it was installed from ``release``."""
+    with psycopg.connect(_admin_url(url, dbname)) as conn:
+        conn.execute(_INSTALLED_TABLE)
+        conn.execute(
+            "INSERT INTO installed_release (tag, sha256) VALUES (%s, %s) "
+            "ON CONFLICT (id) DO UPDATE SET tag = EXCLUDED.tag, sha256 = EXCLUDED.sha256, "
+            "installed_at = now(), skip_tag = NULL, skip_sha256 = NULL",
+            release,
+        )
+
+
+def _pin(url: str, dbname: str, skip: ReleaseId) -> None:
+    """Record in ``dbname`` that ``skip`` was rolled back from, so the refresher
+    leaves it alone until another Release is published."""
+    with psycopg.connect(_admin_url(url, dbname)) as conn:
+        conn.execute(_INSTALLED_TABLE)
+        conn.execute(
+            "INSERT INTO installed_release (skip_tag, skip_sha256) VALUES (%s, %s) "
+            "ON CONFLICT (id) DO UPDATE SET skip_tag = EXCLUDED.skip_tag, "
+            "skip_sha256 = EXCLUDED.skip_sha256",
+            skip,
+        )
+
+
+def repair(url: str) -> None:
+    """Finish a swap that was interrupted, so the site serves again without
+    downloading anything, and drop copies that are no longer needed.
+
+    With no live database, the verified staging copy goes live if there is one
+    (an install stopped between its two renames), else the copy a rollback set
+    aside, else the previous dataset."""
+    live, staging, previous, swap = _names(url)
+    with _connect_admin(url) as admin:
+        _drop_database(admin, f"{live}{FAILED_SUFFIX}")
+        if _database_exists(admin, live):
+            if _database_exists(admin, swap) and not _database_exists(admin, previous):
+                log.warning("finishing an interrupted rollback")
+                _rename_database(admin, swap, previous)
+            return
+        exists = {name: _database_exists(admin, name) for name in (staging, swap, previous)}
+    if exists[staging]:
+        try:
+            _verify(url, staging)
+        except DataValidationError as exc:
+            log.error("the staged copy fails verification (%s); dropping it", exc)
+            with _connect_admin(url) as admin:
+                _drop_database(admin, staging)
+        else:
+            log.warning("no live database: finishing an interrupted install")
+            with _connect_admin(url) as admin:
+                _rename_database(admin, staging, live)
+            return
+    for name in (swap, previous):
+        if exists[name]:
+            log.warning("no live database: serving %s again", name)
+            with _connect_admin(url) as admin:
+                _rename_database(admin, name, live)
+            return
+
+
+def restore(
+    url: str, dump: Path, *, dry_run: bool = False, release: ReleaseId | None = None
+) -> None:
+    """Stage, verify and promote ``dump``, recording ``release`` as its source."""
+    repair(url)
+    live, staging, previous, _swap = _names(url)
 
     with _connect_admin(url) as admin:
         # A staging DB may survive an earlier interrupted run; start clean.
@@ -178,6 +328,8 @@ def restore(url: str, dump: Path, *, dry_run: bool = False) -> None:
         _pg_restore(url, staging, dump)
         _analyze(url, staging)
         _verify(url, staging)
+        if release is not None:
+            _record(url, staging, release)
     except BaseException:
         # Verification failed, or the restore died. The live dataset was never
         # touched, so the site keeps serving. Clear the staging DB and re-raise.
@@ -202,17 +354,33 @@ def restore(url: str, dump: Path, *, dry_run: bool = False) -> None:
 
 
 def rollback(url: str) -> None:
-    live = _live_dbname(url)
-    previous = f"{live}{PREVIOUS_SUFFIX}"
-    failed = f"{live}_failed"
+    """Swap the live and previous datasets, and keep the refresher from installing
+    the Release just rolled back from until another one is published. Running it
+    again swaps them back."""
+    repair(url)
+    live, _staging, previous, swap = _names(url)
     with _connect_admin(url) as admin:
         if not _database_exists(admin, previous):
             raise RestoreError(f"no {previous} database to roll back to")
-        _drop_database(admin, failed)
-        if _database_exists(admin, live):
-            _rename_database(admin, live, failed)
+    # After the first install the previous copy is the empty initial database.
+    _verify(url, previous)
+    current = installed_release(url)
+    with _connect_admin(url) as admin:
+        _rename_database(admin, live, swap)
         _rename_database(admin, previous, live)
-    log.info("rolled back: %s restored, the promoted dataset kept as %s", live, failed)
+        _rename_database(admin, swap, previous)
+    if current and current.release:
+        _pin(url, live, current.release)
+    else:
+        log.warning(
+            "the dataset rolled back from has no recorded Release; the refresher may "
+            "install it again"
+        )
+    log.info(
+        "rolled back: %s serves the previous dataset; the one it replaced is %s",
+        live,
+        previous,
+    )
 
 
 def main() -> None:

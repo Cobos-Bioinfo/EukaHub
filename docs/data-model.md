@@ -86,6 +86,7 @@ and those on finer taxa (`direct` in the summary API).
 | `assembly` | genome assembly | Level, N50s, genome size, GC, reference category, release date, submitter, BioProjects, NCBI link. |
 | `annotation` | genome annotation | Source database, provider, GFF link, gene and protein-coding counts, BUSCO scores. |
 | `dataset_meta` | (single row) | When the dataset was built and its row counts; written last, so its presence marks a complete build. |
+| `installed_release` | (single row) | Not part of a dataset: the installer writes it on each server. The Release (tag and dump digest) the database was installed from, and the one a rollback left, which the refresher does not install again. |
 
 There are no foreign keys: the data is bulk-loaded and never modified afterwards.
 
