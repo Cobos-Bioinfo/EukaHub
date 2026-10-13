@@ -79,8 +79,14 @@ Streamlit app that answered the same questions but was slow to build and to serv
   `<db>_next` while the live one keeps serving, verified, then swapped in by
   renaming; the previous one stays as `<db>_prev` for rollback. Databases rather
   than schemas, because the `ltree` and `pg_trgm` extensions live in `public`.
-- **The first install is the same path as an update.** An empty database simply
-  looks outdated, so bringing the stack up installs the data.
+- **A server installs a Release unless it is the one it serves.** The installer
+  records the Release's tag and dump digest in the database it installs, and the
+  refresher compares those rather than dates: comparing a tag's date with the build
+  time reinstalled a rebuild that ran past midnight every day and never installed a
+  second rebuild on the same day. A rollback records the Release it left, which is
+  then not installed again until another one is published.
+- **The first install is the same path as an update.** An empty database has no
+  Release recorded, so bringing the stack up installs the data.
 - **Failure is safe, not impossible.** Upstream APIs will change eventually, and the
   monthly rebuild will then fail. It fails closed: nothing is published, servers
   keep the previous data, and the scheduled run opens an issue.

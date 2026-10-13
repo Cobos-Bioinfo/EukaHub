@@ -1,4 +1,4 @@
-"""Unit tests for the refresher's "is there newer data?" decision.
+"""Unit tests for the refresher's "which Release should be serving?" decision.
 
 The network and database calls are stubbed: what matters here is the branch
 that decides whether to promote a snapshot. Getting it wrong either pins the
@@ -11,9 +11,10 @@ import hashlib
 import importlib.util
 import io
 import json
+import logging
 import sys
 from collections import Counter
-from datetime import UTC, date, datetime
+from datetime import date
 from pathlib import Path
 
 import pytest
@@ -31,49 +32,85 @@ _spec.loader.exec_module(auto_refresh)
 RELEASE = date(2026, 9, 1)
 TAG = "dataset-20260901"
 URL = "postgresql://eukahub:eukahub@db:5432/eukahub"
+NEWEST = auto_refresh.Release(TAG, RELEASE, "https://example/snap.dump", sha256="a" * 64)
+ReleaseId = auto_refresh.ReleaseId
+Installed = auto_refresh.restore_snapshot.Installed
+VERIFY_DOWNLOAD = auto_refresh._verify_download
 
 
 @pytest.fixture
 def stubbed(monkeypatch):
-    """Stub the network and the restore, recording whether a restore happened."""
-    calls: list[str] = []
+    """Stub the network, the database and the restore, recording each step."""
+    calls: list[object] = []
+    monkeypatch.setattr(auto_refresh, "_newest_release", lambda repo: NEWEST)
     monkeypatch.setattr(
-        auto_refresh,
-        "_latest_release",
-        lambda repo: auto_refresh.Release(TAG, RELEASE, "https://example/snap.dump"),
+        auto_refresh.restore_snapshot, "repair", lambda url: calls.append("repaired")
     )
     monkeypatch.setattr(auto_refresh.restore_snapshot, "download", lambda url, dest: dest)
+    monkeypatch.setattr(auto_refresh, "_verify_download", lambda dump, release: None)
     monkeypatch.setattr(
         auto_refresh.restore_snapshot,
         "restore",
-        lambda url, dump, **kw: calls.append("restored"),
+        lambda url, dump, **kw: calls.append(("restored", kw["release"])),
     )
+    installed(monkeypatch, None)
     return calls
 
 
-def test_installs_when_no_dataset_is_loaded(monkeypatch, stubbed):
-    monkeypatch.setattr(auto_refresh, "_loaded_dataset_date", lambda url: None)
+def installed(monkeypatch, release: ReleaseId | None, skip: ReleaseId | None = None) -> None:
+    record = Installed(release, skip) if release or skip else None
+    monkeypatch.setattr(auto_refresh.restore_snapshot, "installed_release", lambda url: record)
+
+
+def test_repairs_an_interrupted_swap_first_then_installs_when_nothing_is_recorded(stubbed):
     assert auto_refresh.refresh_once(URL, "owner/repo") is True
-    assert stubbed == ["restored"]
+    assert stubbed == ["repaired", ("restored", NEWEST.id)]
 
 
-def test_promotes_a_newer_release(monkeypatch, stubbed):
-    monkeypatch.setattr(auto_refresh, "_loaded_dataset_date", lambda url: date(2026, 8, 1))
+def test_installs_a_newer_release(monkeypatch, stubbed):
+    installed(monkeypatch, ReleaseId("dataset-20260801", "b" * 64))
     assert auto_refresh.refresh_once(URL, "owner/repo") is True
-    assert stubbed == ["restored"]
+    assert ("restored", NEWEST.id) in stubbed
 
 
-def test_does_nothing_when_already_current(monkeypatch, stubbed):
-    monkeypatch.setattr(auto_refresh, "_loaded_dataset_date", lambda url: RELEASE)
+def test_does_nothing_when_the_release_is_already_installed(monkeypatch, stubbed):
+    installed(monkeypatch, NEWEST.id)
     assert auto_refresh.refresh_once(URL, "owner/repo") is False
-    assert stubbed == []
+    assert stubbed == ["repaired"]
+
+
+def test_reinstalls_a_release_whose_dump_was_replaced(monkeypatch, stubbed):
+    """A second rebuild on the same day keeps the tag and replaces the dump."""
+    installed(monkeypatch, ReleaseId(TAG, "b" * 64))
+    assert auto_refresh.refresh_once(URL, "owner/repo") is True
+
+
+def test_a_release_without_a_digest_is_compared_by_tag(monkeypatch, stubbed):
+    installed(monkeypatch, ReleaseId(TAG, None))
+    assert auto_refresh.refresh_once(URL, "owner/repo") is False
 
 
 def test_does_not_downgrade_to_an_older_release(monkeypatch, stubbed):
-    """A Release republished out of order must not replace newer loaded data."""
-    monkeypatch.setattr(auto_refresh, "_loaded_dataset_date", lambda url: date(2026, 10, 1))
+    """A newer Release deleted after install must not send servers back."""
+    installed(monkeypatch, ReleaseId("dataset-20261001", "b" * 64))
     assert auto_refresh.refresh_once(URL, "owner/repo") is False
-    assert stubbed == []
+    assert stubbed == ["repaired"]
+
+
+def test_a_release_rolled_back_from_is_not_installed_again(monkeypatch, stubbed, caplog):
+    caplog.set_level(logging.INFO)
+    installed(monkeypatch, ReleaseId("dataset-20260801", "b" * 64), skip=NEWEST.id)
+    assert auto_refresh.refresh_once(URL, "owner/repo") is False
+    assert "rolled back" in caplog.text
+
+
+def test_a_newer_release_ends_a_rollback(monkeypatch, stubbed):
+    installed(
+        monkeypatch,
+        ReleaseId("dataset-20260701", "c" * 64),
+        skip=ReleaseId("dataset-20260801", "b" * 64),
+    )
+    assert auto_refresh.refresh_once(URL, "owner/repo") is True
 
 
 def _failing_restore(monkeypatch, exc: Exception) -> list[str]:
@@ -84,11 +121,10 @@ def _failing_restore(monkeypatch, exc: Exception) -> list[str]:
         raise exc
 
     monkeypatch.setattr(auto_refresh.restore_snapshot, "restore", restore)
-    monkeypatch.setattr(auto_refresh, "_loaded_dataset_date", lambda url: None)
     return calls
 
 
-def test_a_release_that_keeps_failing_is_skipped(monkeypatch, stubbed):
+def test_a_release_that_keeps_failing_is_skipped_until_republished(monkeypatch, stubbed):
     calls = _failing_restore(monkeypatch, auto_refresh.restore_snapshot.RestoreError("boom"))
     failures = Counter()
     for _ in range(auto_refresh.MAX_INSTALL_ATTEMPTS):
@@ -96,6 +132,12 @@ def test_a_release_that_keeps_failing_is_skipped(monkeypatch, stubbed):
             auto_refresh.refresh_once(URL, "owner/repo", failures)
     assert auto_refresh.refresh_once(URL, "owner/repo", failures) is False
     assert len(calls) == auto_refresh.MAX_INSTALL_ATTEMPTS
+
+    republished = NEWEST._replace(sha256="d" * 64)
+    monkeypatch.setattr(auto_refresh, "_newest_release", lambda repo: republished)
+    with pytest.raises(auto_refresh.restore_snapshot.RestoreError):
+        auto_refresh.refresh_once(URL, "owner/repo", failures)
+    assert len(calls) == auto_refresh.MAX_INSTALL_ATTEMPTS + 1
 
 
 @pytest.mark.parametrize(
@@ -114,13 +156,10 @@ def test_main_survives_any_failed_cycle(monkeypatch, stubbed, exc):
     auto_refresh.main()
 
 
-def test_warns_when_the_loaded_dataset_is_stale(monkeypatch, stubbed, caplog):
-    monkeypatch.setattr(auto_refresh, "_loaded_dataset_date", lambda url: date(2020, 1, 1))
-    monkeypatch.setattr(
-        auto_refresh,
-        "_latest_release",
-        lambda repo: auto_refresh.Release("dataset-20200101", date(2020, 1, 1), "https://x"),
-    )
+def test_warns_when_the_installed_dataset_is_stale(monkeypatch, stubbed, caplog):
+    old = auto_refresh.Release("dataset-20200101", date(2020, 1, 1), "https://x", sha256="e" * 64)
+    monkeypatch.setattr(auto_refresh, "_newest_release", lambda repo: old)
+    installed(monkeypatch, old.id)
     assert auto_refresh.refresh_once(URL, "owner/repo") is False
     assert "days old" in caplog.text
 
@@ -149,51 +188,52 @@ def test_asset_name_matches_the_stable_release_url():
     assert auto_refresh.ASSET_NAME == "eukahub-dataset.dump"
 
 
-def test_loaded_date_accepts_a_timestamp(monkeypatch):
-    """dataset_meta.built_at is a timestamptz; only its date is compared."""
-
-    class _Conn:
-        def execute(self, *_):
-            return self
-
-        def fetchone(self):
-            return (datetime(2026, 9, 1, 4, 30, tzinfo=UTC),)
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *_):
-            return False
-
-    monkeypatch.setattr(auto_refresh.psycopg, "connect", lambda *a, **k: _Conn())
-    assert auto_refresh._loaded_dataset_date(URL) == date(2026, 9, 1)
-
-
 def _release_for(data: bytes, **overrides) -> auto_refresh.Release:
     """A Release whose published size and digest describe ``data``."""
     fields = {"size": len(data), "sha256": hashlib.sha256(data).hexdigest()} | overrides
     return auto_refresh.Release(TAG, RELEASE, "https://example/snap.dump", **fields)
 
 
-def test_latest_release_reads_the_published_size_and_digest(monkeypatch):
-    payload = {
-        "tag_name": TAG,
-        "assets": [
-            {
-                "name": auto_refresh.ASSET_NAME,
-                "browser_download_url": "https://example/snap.dump",
-                "size": 51_570_408,
-                "digest": "sha256:1620c25c",
-            }
-        ],
+def _payload(tag: str, *, dump: bool = True, **flags) -> dict:
+    asset = {
+        "name": auto_refresh.ASSET_NAME,
+        "browser_download_url": f"https://example/{tag}.dump",
+        "size": 51_570_408,
+        "digest": "sha256:1620c25c",
     }
+    return {"tag_name": tag, "assets": [asset] if dump else [], **flags}
+
+
+def _serve_releases(monkeypatch, payloads: list[dict]) -> None:
     monkeypatch.setattr(
         auto_refresh.urllib.request,
         "urlopen",
-        lambda request, timeout: io.BytesIO(json.dumps(payload).encode()),
+        lambda request, timeout: io.BytesIO(json.dumps(payloads).encode()),
     )
-    release = auto_refresh._latest_release("owner/repo")
+
+
+def test_newest_release_skips_other_releases_and_ones_without_the_dump(monkeypatch):
+    _serve_releases(
+        monkeypatch,
+        [
+            _payload("v2.0.0"),  # a code release marked latest
+            _payload("dataset-20261201", draft=True),
+            _payload("dataset-20261101", prerelease=True),
+            _payload("dataset-20261015", dump=False),
+            _payload("dataset-20260901"),
+            _payload("dataset-20261001"),
+        ],
+    )
+    release = auto_refresh._newest_release("owner/repo")
+    assert release.tag == "dataset-20261001"
     assert (release.size, release.sha256) == (51_570_408, "1620c25c")
+    assert release.download_url == "https://example/dataset-20261001.dump"
+
+
+def test_no_dataset_release_is_an_error(monkeypatch):
+    _serve_releases(monkeypatch, [_payload("v2.0.0")])
+    with pytest.raises(RuntimeError, match="no dataset-YYYYMMDD Release"):
+        auto_refresh._newest_release("owner/repo")
 
 
 def test_a_download_matching_the_digest_passes(tmp_path):
@@ -218,8 +258,8 @@ def test_a_release_without_a_digest_is_checked_by_size_only(tmp_path, caplog):
 
 
 def test_a_download_that_fails_verification_is_never_restored(monkeypatch, stubbed):
-    monkeypatch.setattr(auto_refresh, "_loaded_dataset_date", lambda url: None)
-    monkeypatch.setattr(auto_refresh, "_latest_release", lambda repo: _release_for(b"expected"))
+    monkeypatch.setattr(auto_refresh, "_newest_release", lambda repo: _release_for(b"expected"))
+    monkeypatch.setattr(auto_refresh, "_verify_download", VERIFY_DOWNLOAD)
 
     def download(url, dest):
         dest.write_bytes(b"tampered")  # same length, different content
@@ -229,5 +269,5 @@ def test_a_download_that_fails_verification_is_never_restored(monkeypatch, stubb
     failures = Counter()
     with pytest.raises(RuntimeError, match="checksum"):
         auto_refresh.refresh_once(URL, "owner/repo", failures)
-    assert stubbed == []
-    assert failures[TAG] == 1
+    assert stubbed == ["repaired"]
+    assert failures[_release_for(b"expected").id] == 1
