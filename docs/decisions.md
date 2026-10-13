@@ -93,7 +93,8 @@ Streamlit app that answered the same questions but was slow to build and to serv
 - **React + TypeScript SPA built with Vite**, no server-side rendering: every page
   is a view over API data.
 - **No user accounts.** The API serves public, read-only data derived from public
-  sources. Abuse is handled with rate limiting at the reverse proxy, not logins.
+  sources, to any client: CORS allows every origin. Abuse is handled with rate
+  limiting per client at the reverse proxy, not with logins or an origin list.
 - **Sized for one CPU core and about 1 GB of RAM.** A 15 s per-query limit, a
   four-connection pool, no parallel query workers, and an nginx response cache keep
   one expensive request from taking the server down. The TSV report streams in

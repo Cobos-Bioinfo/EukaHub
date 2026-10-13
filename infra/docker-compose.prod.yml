@@ -59,9 +59,9 @@ services:
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-eukahub}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in infra/.env}@db:5432/${POSTGRES_DB:-eukahub}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
-      # Browsers reach /api same-origin via nginx, so CORS isn't exercised here;
-      # set this to real origins if the API is called cross-origin.
-      CORS_ALLOW_ORIGINS: ${CORS_ALLOW_ORIGINS:-http://localhost:8080}
+      # Sites whose pages may call the API from the browser (the SPA itself is
+      # same-origin): any by default, or a comma-separated list of origins.
+      CORS_ALLOW_ORIGINS: ${CORS_ALLOW_ORIGINS:-*}
       # How long GET responses may be cached downstream (seconds); tune to the
       # offline-rebuild cadence.
       CACHE_MAX_AGE: ${CACHE_MAX_AGE:-3600}

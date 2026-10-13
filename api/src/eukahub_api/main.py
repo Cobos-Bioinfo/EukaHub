@@ -23,11 +23,10 @@ from eukahub_api.settings import get_settings
 
 log = logging.getLogger("eukahub.api")
 
-# CORS: the SPA calls /api same-origin via the nginx/Vite proxy, so browsers
-# don't hit the API cross-origin in normal use. This allowlist is for direct
-# API consumers / alternate origins — set CORS_ALLOW_ORIGINS (comma-separated)
-# per deploy; the default covers local dev + the prod web container.
-_DEFAULT_CORS_ORIGINS = "http://localhost:5173,http://localhost:8080"
+# A public research API: any site may call it from the browser. Abuse is limited per
+# client by the proxy in front, not by origin. CORS_ALLOW_ORIGINS (comma-separated)
+# narrows it for a deployment that wants to.
+_DEFAULT_CORS_ORIGINS = "*"
 
 # Clients reach the API at /api/v1 through a proxy (Vite in dev, nginx in prod)
 # that strips the prefix, as Annotrieve serves /api/v0. Setting root_path tells
@@ -61,8 +60,7 @@ app = FastAPI(
     exception_handlers=errors.HANDLERS,
 )
 
-# Read-only public API: allow cross-origin GETs from the configured origins; no
-# credentials (no cookies/auth), so the allowlist stays an explicit set.
+# Read-only and without credentials (no cookies or logins), so `*` is safe.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_allow_origins(),

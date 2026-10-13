@@ -67,7 +67,7 @@ defined under [Data updates](#data-updates)) with no change to the compose file.
 | `DB_POOL_MAX` | `4` | api | Most database connections the API holds. Raise only with more CPU cores. |
 | `EXPORT_BATCH_ROWS` | `5000` | api | Rows per chunk of a TSV download, 1000 to 10000. Larger is slightly faster and costs about 1 MB of API memory per 1,000 rows, for each download running at once. An invalid value is logged and the default is used. |
 | `CACHE_MAX_AGE` | `3600` | api | Seconds that browsers and the nginx cache may reuse a response. |
-| `CORS_ALLOW_ORIGINS` | `http://localhost:8080` | api | Comma-separated origins allowed to call the API from another site. The bundled SPA calls it same-origin and does not need this. |
+| `CORS_ALLOW_ORIGINS` | `*` | api | Origins allowed to call the API from a browser on another site: `*` for any, or a comma-separated list. The bundled SPA calls it same-origin and does not need this. |
 | `LOG_LEVEL` | `INFO` | api | Python log level; logs are JSON lines on stdout. |
 
 ### Links, contact and Wikipedia
