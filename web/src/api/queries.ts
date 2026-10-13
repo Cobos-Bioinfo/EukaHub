@@ -253,7 +253,7 @@ export async function getGaps({
   limit = 25,
   include_quality = true,
 }: GapsParams = {}): Promise<{ root: Taxon; total_matches: number; items: GapItem[] }> {
-  const params = { within: root, rank, sort_by: `resources.${resource}.missing` as TaxonSort, limit };
+  const params = { within: root, rank, sort_by: `${resource}_missing` as TaxonSort, limit };
   const [roots, page, stats] = await Promise.all([
     getTaxa({ taxids: [root], limit: 1 }),
     getTaxa(params),

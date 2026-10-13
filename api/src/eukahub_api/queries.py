@@ -56,12 +56,13 @@ def _count(column: str) -> str:
     return f"COALESCE(f.{column}, 0)"
 
 
-# /taxons sorts, each named by the path of its number in a taxon object, with the
-# SQL it orders by and the SQL that breaks its ties.
+# /taxons sorts, each named after its number in a taxon object
+# (`resources.assemblies.covered` is `assemblies_covered`, `composition.chromosome` is
+# `chromosome`), with the SQL it orders by and the SQL that breaks its ties.
 _COUNT_SORTS: dict[str, tuple[str, str]] = {
     "species": (_count("n_rows"), _count("c_ass")),
     **{
-        f"resources.{m.name}.{field}": sql
+        f"{m.name}_{field}": sql
         for m in METRICS
         for field, sql in (
             ("covered", (_count(m.coverage_key), _count(m.total_key))),
@@ -70,7 +71,7 @@ _COUNT_SORTS: dict[str, tuple[str, str]] = {
         )
     },
     **{
-        f"composition.{field}": (_count(column), _count("c_ass"))
+        field: (_count(column), _count("c_ass"))
         for field, column in COMPOSITION_FIELDS.items()
     },
 }

@@ -126,9 +126,10 @@ _TaxonFilter = Annotated[TaxonFilter, Depends(taxon_filter)]
 _TaxonSortBy = Annotated[
     TaxonSort | None,
     Query(
-        description="The path of a number in a taxon: `species`, "
-        "`resources.<resource>.covered`, `.missing` or `.total`, or `composition.<field>`; "
-        "or `name`. Without it: relevance for `q`, else `species`."
+        description="A number in a taxon, by its name: `species`; `<resource>_covered`, "
+        "`<resource>_missing` or `<resource>_total` (`resources.<resource>.covered`...); "
+        "or a field of `composition`. Or `name`. Without it: relevance for `q`, else "
+        "`species`."
     ),
 ]
 

@@ -15,7 +15,7 @@ HOSTILE = "n_rows; DROP TABLE taxon --"
 _CALLS = {
     "taxon sort": lambda: queries._taxon_keys(HOSTILE, True, queries.TaxonFilter()),
     "taxon resource sort": lambda: queries._taxon_keys(
-        f"resources.{HOSTILE}.missing", True, queries.TaxonFilter()
+        f"{HOSTILE}_missing", True, queries.TaxonFilter()
     ),
     "taxon filter": lambda: queries._taxon_where(queries.TaxonFilter(filter_keys=[HOSTILE])),
     "report sort": lambda: next(queries.iter_report_tsv(

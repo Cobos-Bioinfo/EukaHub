@@ -18,7 +18,7 @@ def _gaps(client, **params) -> list[dict]:
         "/taxons",
         params={
             "within": 2759,
-            "sort_by": "resources.long_read_rna_seq.missing",
+            "sort_by": "long_read_rna_seq_missing",
             "rank": "class",
             **params,
         },
@@ -49,7 +49,7 @@ def test_gap_sort_ascending_puts_the_best_covered_first(client):
 
 def test_gaps_stats_match_the_taxon(client):
     """The stats of a gap clade are the ones /taxons/{taxid}/stats serves."""
-    params = {"within": 2759, "sort_by": "resources.long_read_rna_seq.missing", "rank": "class", "limit": 1}
+    params = {"within": 2759, "sort_by": "long_read_rna_seq_missing", "rank": "class", "limit": 1}
     it = client.get("/taxons/stats", params=params).json()["results"][0]
     assert it["taxid"] == _gaps(client, limit=1)[0]["taxid"]
     assert it == client.get(f"/taxons/{it['taxid']}/stats").json()
@@ -57,9 +57,9 @@ def test_gaps_stats_match_the_taxon(client):
 
 def test_every_resource_has_a_gap_sort(client):
     for key in METRIC_NAMES:
-        gaps = [_gap(it, key) for it in _gaps(client, sort_by=f"resources.{key}.missing")]
+        gaps = [_gap(it, key) for it in _gaps(client, sort_by=f"{key}_missing")]
         assert gaps == sorted(gaps, reverse=True)
 
 
 def test_unknown_sort_is_a_422(client):
-    assert client.get("/taxons", params={"rank": "class", "sort_by": "resources.xyz.missing"}).status_code == 422
+    assert client.get("/taxons", params={"rank": "class", "sort_by": "xyz_missing"}).status_code == 422

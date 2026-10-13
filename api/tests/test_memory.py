@@ -236,7 +236,7 @@ REQUESTS = {
     "children of a big node": "/taxons?parent=2759&limit=1000",
     "search matching 1.8M names": "/taxons?q=pecies&limit=50",
     "close spellings": "/taxons?q=Specis%2020000001&fuzzy=true&limit=50",
-    "gaps of every genus": "/taxons?within=2759&rank=genus&sort_by=resources.assemblies.missing&limit=1000",
+    "gaps of every genus": "/taxons?within=2759&rank=genus&sort_by=assemblies_missing&limit=1000",
     "100 chosen taxa": "/taxons?taxids="
     + ",".join(str(SPECIES + i) for i in range(100))
     + "&limit=100",

@@ -35,7 +35,7 @@ class MetricConfig(BaseModel):
     client-side to the numbers in each per-clade payload (by ``key``)."""
 
     key: str = Field(description="The resource's name: its key in `resources`, its value for "
-        "`filter`, and the middle of its `sort_by` values.")
+        "`filter`, and the start of its `sort_by` values (`assemblies_covered`).")
     card_title: str
     card_title_help: str | None
     species_help: str

@@ -554,7 +554,7 @@ export interface components {
             filter_label: string;
             /**
              * Key
-             * @description The resource's name: its key in `resources`, its value for `filter`, and the middle of its `sort_by` values.
+             * @description The resource's name: its key in `resources`, its value for `filter`, and the start of its `sort_by` values (`assemblies_covered`).
              */
             key: string;
             /** Legend Label */
@@ -751,7 +751,7 @@ export interface components {
          * TaxonSort
          * @enum {string}
          */
-        TaxonSort: "species" | "resources.assemblies.covered" | "resources.assemblies.missing" | "resources.assemblies.total" | "resources.annotations.covered" | "resources.annotations.missing" | "resources.annotations.total" | "resources.rna_seq.covered" | "resources.rna_seq.missing" | "resources.rna_seq.total" | "resources.long_read_rna_seq.covered" | "resources.long_read_rna_seq.missing" | "resources.long_read_rna_seq.total" | "composition.complete" | "composition.chromosome" | "composition.scaffold" | "composition.contig" | "composition.reference" | "name";
+        TaxonSort: "species" | "assemblies_covered" | "assemblies_missing" | "assemblies_total" | "annotations_covered" | "annotations_missing" | "annotations_total" | "rna_seq_covered" | "rna_seq_missing" | "rna_seq_total" | "long_read_rna_seq_covered" | "long_read_rna_seq_missing" | "long_read_rna_seq_total" | "complete" | "chromosome" | "scaffold" | "contig" | "reference" | "name";
         /**
          * TaxonStats
          * @description The quality stats of one taxon: the object ``/taxons/{taxid}/stats`` returns
@@ -960,7 +960,7 @@ export interface operations {
     taxons_taxons_get: {
         parameters: {
             query?: {
-                /** @description The path of a number in a taxon: `species`, `resources.<resource>.covered`, `.missing` or `.total`, or `composition.<field>`; or `name`. Without it: relevance for `q`, else `species`. */
+                /** @description A number in a taxon, by its name: `species`; `<resource>_covered`, `<resource>_missing` or `<resource>_total` (`resources.<resource>.covered`...); or a field of `composition`. Or `name`. Without it: relevance for `q`, else `species`. */
                 sort_by?: components["schemas"]["TaxonSort"] | null;
                 sort_order?: components["schemas"]["SortOrder"];
                 limit?: number;
@@ -1048,7 +1048,7 @@ export interface operations {
     taxons_report_taxons_report_get: {
         parameters: {
             query?: {
-                /** @description The path of a number in a taxon: `species`, `resources.<resource>.covered`, `.missing` or `.total`, or `composition.<field>`; or `name`. Without it: relevance for `q`, else `species`. */
+                /** @description A number in a taxon, by its name: `species`; `<resource>_covered`, `<resource>_missing` or `<resource>_total` (`resources.<resource>.covered`...); or a field of `composition`. Or `name`. Without it: relevance for `q`, else `species`. */
                 sort_by?: components["schemas"]["TaxonSort"] | null;
                 sort_order?: components["schemas"]["SortOrder"];
                 /** @description Only taxa whose name contains this text, ignoring case (or is spelled like it, with `fuzzy`). The root and 'cellular organisms' are left out. */
@@ -1099,7 +1099,7 @@ export interface operations {
     taxons_stats_taxons_stats_get: {
         parameters: {
             query?: {
-                /** @description The path of a number in a taxon: `species`, `resources.<resource>.covered`, `.missing` or `.total`, or `composition.<field>`; or `name`. Without it: relevance for `q`, else `species`. */
+                /** @description A number in a taxon, by its name: `species`; `<resource>_covered`, `<resource>_missing` or `<resource>_total` (`resources.<resource>.covered`...); or a field of `composition`. Or `name`. Without it: relevance for `q`, else `species`. */
                 sort_by?: components["schemas"]["TaxonSort"] | null;
                 sort_order?: components["schemas"]["SortOrder"];
                 limit?: number;

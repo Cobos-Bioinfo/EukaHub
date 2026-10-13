@@ -33,8 +33,8 @@ def test_taxids_lists_those_taxa(client):
     "params",
     [
         {"taxids": "9606,40674,99999999"},
-        {"within": 40674, "rank": "order", "sort_by": "resources.assemblies.missing", "limit": 4},
-        {"within": 2759, "rank": "species", "sort_by": "resources.assemblies.total", "limit": 5},
+        {"within": 40674, "rank": "order", "sort_by": "assemblies_missing", "limit": 4},
+        {"within": 2759, "rank": "species", "sort_by": "assemblies_total", "limit": 5},
         {"q": "homo", "limit": 3},
     ],
 )
@@ -101,7 +101,7 @@ def test_backward_cursor_returns_the_previous_page(client):
 def test_cursor_of_another_sort_is_rejected(client):
     first = client.get("/taxons", params={"parent": 2759, "limit": 2}).json()
     resp = client.get(
-        "/taxons", params={"parent": 2759, "limit": 2, "sort_by": "resources.assemblies.total", "cursor": first["next"]}
+        "/taxons", params={"parent": 2759, "limit": 2, "sort_by": "assemblies_total", "cursor": first["next"]}
     )
     assert resp.status_code == 422
 

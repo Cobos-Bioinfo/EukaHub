@@ -44,7 +44,7 @@ def test_children_pages_cover_every_child_once(client):
 
 def test_children_sort_param_changes_order(client):
     by_species = _children(client, 2759, limit=25)
-    by_ann = _children(client, 2759, limit=25, sort_by="resources.annotations.covered")
+    by_ann = _children(client, 2759, limit=25, sort_by="annotations_covered")
     assert {i["taxid"] for i in by_species["results"]} == {i["taxid"] for i in by_ann["results"]}
     ann = [i["resources"]["annotations"]["covered"] for i in by_ann["results"]]
     assert ann == sorted(ann, reverse=True)

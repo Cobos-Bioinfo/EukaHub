@@ -45,10 +45,10 @@ def test_breakdown_default_sort_is_species_count(client):
 
 
 def test_breakdown_sort_by_total_assemblies_both_ways(client):
-    desc = [it["resources"]["assemblies"]["total"] for it in _phyla(client, sort_by="resources.assemblies.total")["results"]]
+    desc = [it["resources"]["assemblies"]["total"] for it in _phyla(client, sort_by="assemblies_total")["results"]]
     asc = [
         it["resources"]["assemblies"]["total"]
-        for it in _phyla(client, sort_by="resources.assemblies.total", sort_order="asc")["results"]
+        for it in _phyla(client, sort_by="assemblies_total", sort_order="asc")["results"]
     ]
     assert _is_descending(desc)
     assert _is_descending(asc[::-1])
