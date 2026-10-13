@@ -1,7 +1,6 @@
 """``/taxons`` and its sub-resources: taxa with their counts, their quality stats,
 a TSV report, sets of clades, and one taxon with its ancestors and stats."""
 
-import itertools
 from typing import Annotated
 
 import psycopg
@@ -11,6 +10,7 @@ from fastapi.responses import StreamingResponse
 
 from eukahub_api.clade_sets import clade_set, set_metadata, set_pieces, taxon_refs
 from eukahub_api.db import Conn
+from eukahub_api.downloads import tsv_download
 from eukahub_api.pagination import Page
 from eukahub_api.params import Cursor, Within, within_path
 from eukahub_api.queries import (
@@ -222,8 +222,7 @@ def taxons_report(
 ) -> StreamingResponse:
     """Every taxon ``/taxons`` lists for the same filters and sort, as a streamed
     TSV download: taxid, name, species count, then the species with each resource
-    and the total of each resource. Not cached: a report runs to tens of MB, and
-    nginx's cache is kept for the small responses the interface repeats."""
+    and the total of each resource."""
     rows = iter_report_tsv(
         request.app.state.pool,
         f,
@@ -231,20 +230,8 @@ def taxons_report(
         descending=sort_order is SortOrder.desc,
         batch_rows=get_settings().export_batch_rows,
     )
-    # Pull the header and first batch of rows now: that runs the query (its sort
-    # is the expensive part) before any byte is sent, so a statement timeout on a
-    # huge report is a clean 504 instead of a 200 that stops mid-download.
-    head = list(itertools.islice(rows, 2))
     name = fetch_root(conn, f.within)[0] if f.within is not None else "taxa"
-    filename = f"{name.replace(' ', '_')}_{f.rank or 'all'}_data.tsv"
-    return StreamingResponse(
-        itertools.chain(head, rows),
-        media_type="text/tab-separated-values",
-        headers={
-            "Content-Disposition": f'attachment; filename="{filename}"',
-            "Cache-Control": "no-store",
-        },
-    )
+    return tsv_download(rows, f"{name}_{f.rank or 'all'}_data.tsv")
 
 
 @router.get("/taxons/aggregates", response_model=AggregatePage)

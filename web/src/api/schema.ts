@@ -25,6 +25,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/annotations/report": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Annotations Report
+         * @description Every annotation ``/annotations`` lists for the same taxon and sort, as a
+         *     streamed TSV download with the record's fields as columns.
+         */
+        get: operations["annotations_report_annotations_report_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/assemblies": {
         parameters: {
             query?: never;
@@ -34,10 +55,32 @@ export interface paths {
         };
         /**
          * Assemblies
-         * @description Genome assemblies, newest first by default; records missing the sort field
-         *     come last. The quality stats of a taxon's assemblies are in ``/taxons/{taxid}/stats``.
+         * @description Genome assemblies, recommended first by default. ``total`` counts species
+         *     with ``one_per_species``. The quality stats of a taxon's assemblies are in
+         *     ``/taxons/{taxid}/stats``.
          */
         get: operations["assemblies_assemblies_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/assemblies/report": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Assemblies Report
+         * @description Every assembly ``/assemblies`` lists for the same filters and sort, as a
+         *     streamed TSV download with the record's fields as columns.
+         */
+        get: operations["assemblies_report_assemblies_report_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -173,8 +216,7 @@ export interface paths {
          * Taxons Report
          * @description Every taxon ``/taxons`` lists for the same filters and sort, as a streamed
          *     TSV download: taxid, name, species count, then the species with each resource
-         *     and the total of each resource. Not cached: a report runs to tens of MB, and
-         *     nginx's cache is kept for the small responses the interface repeats.
+         *     and the total of each resource.
          */
         get: operations["taxons_report_taxons_report_get"];
         put?: never;
@@ -378,6 +420,7 @@ export interface components {
          *     deployment's links and groups.
          */
         AppConfig: {
+            assembly_checks: components["schemas"]["AssemblyChecks"];
             /** Custom Groups */
             custom_groups: components["schemas"]["CustomGroupItem"][];
             dataset: components["schemas"]["DatasetMeta"];
@@ -395,6 +438,21 @@ export interface components {
             source_code_url: string;
             /** Wikipedia Summary Url */
             wikipedia_summary_url: string;
+        };
+        /**
+         * AssemblyChecks
+         * @description The thresholds behind an assembly's ``ebp_standard`` and ``undersized``.
+         */
+        AssemblyChecks: {
+            /** Ebp Min Contig N50 */
+            ebp_min_contig_n50: number;
+            /** Ebp Min Scaffold N50 */
+            ebp_min_scaffold_n50: number;
+            /**
+             * Undersized Share
+             * @description An assembly is undersized under this share of the median length of its species' assemblies.
+             */
+            undersized_share: number;
         };
         /**
          * AssemblyComposition
@@ -417,6 +475,11 @@ export interface components {
             /** Scaffold */
             scaffold: number;
         };
+        /**
+         * AssemblyLevel
+         * @enum {string}
+         */
+        AssemblyLevel: "complete" | "chromosome" | "scaffold" | "contig";
         /** AssemblyPage */
         AssemblyPage: {
             /** Limit */
@@ -436,6 +499,11 @@ export interface components {
          *     Fields mirror the aliased SELECT so the endpoint builds it from a dict_row.
          */
         AssemblyRecord: {
+            /**
+             * Annotations
+             * @description Annotations of this assembly, of any version of its GenBank or RefSeq accession.
+             */
+            annotations: number;
             /** Assembly Accession */
             assembly_accession: string;
             /** Assembly Level */
@@ -446,6 +514,11 @@ export interface components {
             contig_n50: number | null;
             /** Download Url */
             download_url: string | null;
+            /**
+             * Ebp Standard
+             * @description Meets the contiguity of the Earth BioGenome Project's reference standard (thresholds in /config).
+             */
+            ebp_standard: boolean;
             /** Gc Percent */
             gc_percent: number | null;
             /** Organism Name */
@@ -458,18 +531,35 @@ export interface components {
             scaffold_n50: number | null;
             /** Source Database */
             source_database: string | null;
+            /**
+             * Species Assemblies
+             * @description With `one_per_species`: how many assemblies of its species the list would hold without it. Otherwise null.
+             */
+            species_assemblies: number | null;
+            /** Species Name */
+            species_name: string;
+            /**
+             * Species Taxid
+             * @description The species the assembly counts under: its own taxon, or the species above a subspecies or strain.
+             */
+            species_taxid: number;
             /** Submitter */
             submitter: string | null;
             /** Taxid */
             taxid: number;
             /** Total Sequence Length */
             total_sequence_length: number | null;
+            /**
+             * Undersized
+             * @description Under half the median length of its species' assemblies, so it may cover only part of the genome (one chromosome, an organelle).
+             */
+            undersized: boolean;
         };
         /**
          * AssemblySort
          * @enum {string}
          */
-        AssemblySort: "release_date" | "contig_n50" | "total_sequence_length";
+        AssemblySort: "recommended" | "release_date" | "contig_n50" | "scaffold_n50" | "total_sequence_length";
         /**
          * CladeGroup
          * @description A curated group: its friendly label is shown wherever the group appears,
@@ -829,16 +919,61 @@ export interface operations {
             };
         };
     };
-    assemblies_assemblies_get: {
+    annotations_report_annotations_report_get: {
         parameters: {
             query?: {
                 /** @description Only rows on this taxon or below it (e.g. 40674 for mammals). */
                 within?: number | null;
+                sort_by?: components["schemas"]["AnnotationSort"];
+                sort_order?: components["schemas"]["SortOrder"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description An error, as problem details (RFC 9457). */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    assemblies_assemblies_get: {
+        parameters: {
+            query?: {
+                /** @description `recommended`: reference genomes first, then those of a plausible size (not `undersized`), then the most complete level, then the longest contig N50. Or a field of the record; records missing it come last. */
                 sort_by?: components["schemas"]["AssemblySort"];
                 sort_order?: components["schemas"]["SortOrder"];
                 limit?: number;
                 /** @description ``next`` or ``previous`` from a page with the same sort, for the page after or before it. */
                 cursor?: string | null;
+                /** @description Only rows on this taxon or below it (e.g. 40674 for mammals). */
+                within?: number | null;
+                /** @description Only assemblies at these levels (any of them). */
+                assembly_level?: components["schemas"]["AssemblyLevel"][] | null;
+                /** @description Only the assemblies NCBI marks as reference genomes. */
+                reference?: boolean;
+                /** @description Only assemblies with the contiguity of the Earth BioGenome Project's reference standard: contig N50 of 1 Mb or more and scaffold N50 of 10 Mb or more. */
+                ebp_standard?: boolean;
+                /** @description Only assemblies with at least this contig N50 (bp). */
+                min_contig_n50?: number | null;
+                /** @description Only the recommended assembly of each species (subspecies and strains count with their species), among those the other filters keep. */
+                one_per_species?: boolean;
             };
             header?: never;
             path?: never;
@@ -853,6 +988,51 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AssemblyPage"];
+                };
+            };
+            /** @description An error, as problem details (RFC 9457). */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    assemblies_report_assemblies_report_get: {
+        parameters: {
+            query?: {
+                /** @description `recommended`: reference genomes first, then those of a plausible size (not `undersized`), then the most complete level, then the longest contig N50. Or a field of the record; records missing it come last. */
+                sort_by?: components["schemas"]["AssemblySort"];
+                sort_order?: components["schemas"]["SortOrder"];
+                /** @description Only rows on this taxon or below it (e.g. 40674 for mammals). */
+                within?: number | null;
+                /** @description Only assemblies at these levels (any of them). */
+                assembly_level?: components["schemas"]["AssemblyLevel"][] | null;
+                /** @description Only the assemblies NCBI marks as reference genomes. */
+                reference?: boolean;
+                /** @description Only assemblies with the contiguity of the Earth BioGenome Project's reference standard: contig N50 of 1 Mb or more and scaffold N50 of 10 Mb or more. */
+                ebp_standard?: boolean;
+                /** @description Only assemblies with at least this contig N50 (bp). */
+                min_contig_n50?: number | null;
+                /** @description Only the recommended assembly of each species (subspecies and strains count with their species), among those the other filters keep. */
+                one_per_species?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description An error, as problem details (RFC 9457). */

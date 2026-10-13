@@ -201,6 +201,19 @@ PERCENT_KEYS: tuple[str, ...] = tuple(m.percent_key for m in METRICS)
 # here — they are non-additive and served live from the per-record tables.
 # --------------------------------------------------------------------------- #
 
+# The API's name for each NCBI ``assembly_level`` value, most complete first.
+ASSEMBLY_LEVELS: dict[str, str] = {
+    "complete": "Complete Genome",
+    "chromosome": "Chromosome",
+    "scaffold": "Scaffold",
+    "contig": "Contig",
+}
+
+# The contiguity part of the Earth BioGenome Project's reference standard (6.C):
+# contig N50 of 1 Mb or more and scaffold N50 of 10 Mb or more.
+EBP_MIN_CONTIG_N50 = 1_000_000
+EBP_MIN_SCAFFOLD_N50 = 10_000_000
+
 # NCBI ``assembly_level`` value -> the additive column it feeds.
 ASSEMBLY_LEVEL_TO_COLUMN: dict[str, str] = {
     "Complete Genome": "n_ass_complete",

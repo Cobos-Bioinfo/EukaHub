@@ -246,9 +246,14 @@ REQUESTS = {
     "set of clades": f"/taxons/aggregates?include=2759&exclude={PHYLUM}",
     "report of every species": "/taxons/report?within=2759&rank=species",
     "assemblies, first page": "/assemblies?within=2759&limit=200",
-    "assemblies, deep page": "/assemblies?within=2759&limit=200&cursor="
+    "assemblies, deep page": "/assemblies?within=2759&sort_by=release_date&limit=200&cursor="
     + _cursor("assembly:release_date:desc", False, "2001-01-01", "GCA_000000000.1"),
+    "assemblies, one per species": "/assemblies?within=2759&one_per_species=true&limit=200",
+    "assemblies, filtered": "/assemblies?within=2759&assembly_level=chromosome"
+    "&ebp_standard=true&one_per_species=true&limit=200",
+    "report of every assembly": "/assemblies/report?within=2759",
     "annotations by BUSCO": "/annotations?within=2759&limit=200",
+    "report of every annotation": "/annotations/report?within=2759",
 }
 
 
