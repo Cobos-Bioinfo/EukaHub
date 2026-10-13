@@ -1,8 +1,9 @@
-import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
-import { useNavigate } from "react-router";
+import { useEffect, useId, useRef, useState, type KeyboardEvent, type Ref } from "react";
+import { useLocation, useNavigate } from "react-router";
 
 import { getTaxon, searchTaxa, type SearchHit } from "../api/queries";
 import type { TaxonRef } from "../api/types";
+import { cladePath, parseCladePath } from "../lib/clade";
 import { EUKARYOTA_TAXID } from "../lib/taxonomy";
 
 /** A result row: a search hit, or the taxon a typed TaxID points to (which has
@@ -14,15 +15,18 @@ const CONTEXT_RANKS = ["class", "phylum", "kingdom"];
 /** Search box that finds a clade by name or NCBI TaxID, as an ARIA combobox:
  *  arrow keys move through the results, Enter opens the highlighted one.
  *
- *  By default it opens the picked clade's dashboard. Pass ``onPick`` to intercept
- *  the selection instead (e.g. the compare view adds the group rather than
- *  navigating); ``placeholder`` overrides the input hint. */
+ *  By default it opens the picked clade in the view you are on (its Summary from
+ *  any other page). Pass ``onPick`` to intercept the selection instead (e.g. the
+ *  compare view adds the group rather than navigating); ``placeholder`` overrides
+ *  the input hint. */
 export default function RootPicker({
   onPick,
   placeholder = "Search by name or TaxID",
+  inputRef,
 }: {
   onPick?: (taxon: TaxonRef) => void;
   placeholder?: string;
+  inputRef?: Ref<HTMLInputElement>;
 } = {}) {
   const [q, setQ] = useState("");
   const [results, setResults] = useState<Hit[]>([]);
@@ -31,6 +35,7 @@ export default function RootPicker({
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(-1);
   const navigate = useNavigate();
+  const { pathname } = useLocation();
   const boxRef = useRef<HTMLDivElement>(null);
   const latest = useRef(0);
   const listId = useId();
@@ -94,7 +99,7 @@ export default function RootPicker({
     setSearched("");
     setOpen(false);
     if (onPick) onPick({ taxid: taxon.taxid, name: taxon.name, rank: taxon.rank });
-    else navigate(`/clade/${taxon.taxid}`);
+    else navigate(cladePath(taxon.taxid, parseCladePath(pathname)?.view));
   };
 
   const fresh = searched === q.trim();
@@ -130,6 +135,7 @@ export default function RootPicker({
   return (
     <div className="picker" ref={boxRef}>
       <input
+        ref={inputRef}
         className="picker__input"
         type="search"
         role="combobox"

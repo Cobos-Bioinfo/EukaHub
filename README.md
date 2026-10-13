@@ -21,7 +21,7 @@ eukaryotic tree of life. Pick any taxon and it answers two questions:
 1. **How much data is there?** Genome assemblies, functional annotations, and
    RNA-Seq (short and long read) for the clade, with assembly-quality and
    annotation-quality statistics (BUSCO completeness, contig N50, genome size,
-   gene counts). This is the "Genomic Resource Summary" dashboard.
+   gene counts). This is a group's Summary.
 2. **How is it distributed below that taxon?** Break any clade down at a lower
    rank and compare its subgroups: as an interactive "data map", a radial Tree
    of Life, or a side-by-side comparison, so the under-sequenced groups stand

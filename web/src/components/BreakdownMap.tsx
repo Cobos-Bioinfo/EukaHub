@@ -2,9 +2,10 @@ import { hierarchy, treemap, treemapResquarify } from "d3-hierarchy";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 
-import { exportTsvUrl, getBreakdown, getBreakdownQuality, getTaxon } from "../api/queries";
+import { exportTsvUrl, getBreakdown, getBreakdownQuality } from "../api/queries";
 import type { CladeSummary, TargetRank, TaxonRef } from "../api/types";
 import { useAsync } from "../hooks/useAsync";
+import { cladePath } from "../lib/clade";
 import { fmt, fmtBp, fmtPct } from "../lib/format";
 import { NO_DATA_DARK, NO_DATA_LIGHT, buildRamp, luminance, rampRgb, rgbStr } from "../lib/ramp";
 import { useTheme } from "../lib/theme";
@@ -118,136 +119,49 @@ interface Hover {
   y: number;
 }
 
-/** The drill trail (root → focus) and the moves over it. On the standalone page
- *  it lives in the URL as `?d=t1-t2-t3` (the taxids drilled below the root), so
- *  the browser back/forward buttons walk the drill and a link is shareable; the
- *  embedded variant keeps it in component state so it never clutters the
- *  dashboard URL. Trail entries need a name + rank (breadcrumb label + rank
- *  stepping): an in-session drill carries them straight from the clicked tile,
- *  and a fresh deep-link load resolves any still-unknown taxids with one lineage
- *  fetch of the focus (every drilled node is one of its ancestors). */
-function useDrillTrail(root: TaxonRef, rootLineage: TaxonRef[] | undefined, syncUrl: boolean) {
-  const [searchParams, setSearchParams] = useSearchParams();
-  const [stateTrail, setStateTrail] = useState<TaxonRef[]>([root]);
-  const [clicked, setClicked] = useState<Record<number, TaxonRef>>({});
-
-  // Embedded variant only: reset to the new root when the parent swaps clade.
-  useEffect(() => {
-    if (!syncUrl) setStateTrail([root]);
-  }, [root.taxid, syncUrl]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const drillTaxids = useMemo(() => {
-    if (!syncUrl) return [];
-    return (searchParams.get("d") ?? "")
-      .split("-")
-      .map(Number)
-      .filter((n) => Number.isInteger(n) && n > 0);
-  }, [syncUrl, searchParams]);
-
-  const focusTaxid = drillTaxids.length ? drillTaxids[drillTaxids.length - 1] : root.taxid;
-  // Names/ranks we already hold: the root, its lineage, and tiles clicked this
-  // session. Anything left is a deep-link node we must look up.
-  const known = useMemo(() => {
-    const m = new Map<number, TaxonRef>([[root.taxid, root]]);
-    for (const t of rootLineage ?? []) m.set(t.taxid, t);
-    for (const t of Object.values(clicked)) m.set(t.taxid, t);
-    return m;
-  }, [root, rootLineage, clicked]);
-  const needLookup = syncUrl && drillTaxids.some((id) => !known.has(id));
-  const recon = useAsync(
-    () => (needLookup ? getTaxon(focusTaxid) : Promise.resolve(null)),
-    [needLookup, focusTaxid],
-  );
-
-  const trail = useMemo<TaxonRef[]>(() => {
-    if (!syncUrl) return stateTrail;
-    const fetched = new Map<number, TaxonRef>();
-    for (const t of recon.data?.lineage ?? []) fetched.set(t.taxid, t);
-    const out: TaxonRef[] = [root];
-    for (const id of drillTaxids) {
-      const ref = known.get(id) ?? fetched.get(id);
-      if (!ref) break; // still resolving — stop at what we can name
-      out.push(ref);
-    }
-    return out;
-  }, [syncUrl, stateTrail, root, drillTaxids, known, recon.data]);
-
-  // True while a deep-link trail is still being named (hold the breakdown fetch).
-  const resolving = syncUrl && trail.length < drillTaxids.length + 1;
-
-  const drillTo = (n: CladeSummary) => {
-    const ref: TaxonRef = { taxid: n.taxid, name: n.name, rank: n.rank };
-    if (!syncUrl) {
-      setStateTrail((t) => [...t, ref]);
-      return;
-    }
-    setClicked((c) => ({ ...c, [n.taxid]: ref }));
-    setSearchParams(
-      (p) => {
-        const q = new URLSearchParams(p);
-        q.set("d", [...drillTaxids, n.taxid].join("-"));
-        return q;
-      },
-      { replace: false },
-    );
-  };
-
-  // Truncate the trail to keep entries [0..i] (i is a trail index; 0 = root).
-  const truncateTo = (i: number) => {
-    if (!syncUrl) {
-      setStateTrail((tr) => tr.slice(0, i + 1));
-      return;
-    }
-    const keep = drillTaxids.slice(0, i); // trail index i keeps i drilled taxids
-    setSearchParams((p) => {
-      const q = new URLSearchParams(p);
-      if (keep.length) q.set("d", keep.join("-"));
-      else q.delete("d");
-      return q;
-    });
-  };
-
-  return { trail, resolving, drillTo, truncateTo };
-}
-
-/** The rank breakdown as a click-to-drill "data landscape". Each tile is a
+/** The rank breakdown of the current group as a "data landscape". Each tile is a
  *  subgroup at the next rank down; area is a chosen size (species or assemblies),
  *  colour is a chosen lens (coverage or quality) on one theme-aware ramp. Big and
- *  pale means a large group with little data. Reusable: the dashboard embeds it
- *  (variant "embed", with a full-screen link), the standalone page renders it
- *  tall (variant "page"). Seeded from `root` so it needs no lineage fetch. */
+ *  pale means a large group with little data. Clicking a tile makes it the
+ *  current group and stays on the map; the colour and size choices live in the
+ *  address (`?colour=`, `?size=`), so they come along and a link keeps them. */
 export default function BreakdownMap({
   root,
   rootLineage,
-  heading,
-  variant = "page",
 }: {
   root: TaxonRef;
   /** The root's root→node lineage (inclusive), used to pick the breakdown rank
-   *  when the root is rankless. Optional: an empty/late lineage just falls back
-   *  to phylum, self-correcting once it loads. */
-  rootLineage?: TaxonRef[];
-  heading: string;
-  variant?: "page" | "embed";
+   *  when the root is rankless. */
+  rootLineage: TaxonRef[];
 }) {
   const navigate = useNavigate();
-  const { trail, resolving, drillTo, truncateTo } = useDrillTrail(root, rootLineage, variant === "page");
-  const [lensKey, setLensKey] = useState("ass");
-  const [sizeBy, setSizeBy] = useState<SizeBy>("species");
+  const [params, setParams] = useSearchParams();
+  const lensKey = LENSES.find((l) => l.key === params.get("colour"))?.key ?? "ass";
+  const sizeBy: SizeBy = params.get("size") === "assemblies" ? "assemblies" : "species";
+  const choose = (key: "colour" | "size", value: string, initial: string) =>
+    setParams(
+      (p) => {
+        const q = new URLSearchParams(p);
+        if (value === initial) q.delete(key);
+        else q.set(key, value);
+        return q;
+      },
+      { replace: true },
+    );
   const [hover, setHover] = useState<Hover | null>(null);
 
-  const focus = trail[trail.length - 1];
-  const rootRanks = useMemo(() => (rootLineage ?? []).map((t) => t.rank), [rootLineage]);
+  const focus = root;
+  const rootRanks = useMemo(() => rootLineage.map((t) => t.rank), [rootLineage]);
   const targetRank = targetRankFor(focus, rootRanks);
 
-  const params = targetRank && { rank: targetRank, sort: "n_rows" as const, exclude_empty: false, limit: 250 };
+  const query = targetRank && { rank: targetRank, sort: "n_rows" as const, exclude_empty: false, limit: 250 };
   const bd = useAsync(
-    () => (params && !resolving ? getBreakdown(focus.taxid, params) : Promise.resolve(null)),
-    [focus.taxid, targetRank, resolving],
+    () => (query ? getBreakdown(focus.taxid, query) : Promise.resolve(null)),
+    [focus.taxid, targetRank],
   );
   const quality = useAsync(
-    () => (params && !resolving ? getBreakdownQuality(focus.taxid, params) : Promise.resolve(null)),
-    [focus.taxid, targetRank, resolving],
+    () => (query ? getBreakdownQuality(focus.taxid, query) : Promise.resolve(null)),
+    [focus.taxid, targetRank],
   );
   const qmap = useMemo(() => {
     const m = new Map<number, BucketStats>();
@@ -316,38 +230,32 @@ export default function BreakdownMap({
   }, [items, sizeBy, size.w, size.h, ramp, noData, dark, lens, qmap]);
 
   const activate = (n: CladeSummary) => {
-    if (nextRank(n.rank)) drillTo(n);
-    else navigate(`/clade/${n.taxid}`);
+    const search = params.toString();
+    if (nextRank(n.rank)) navigate(cladePath(n.taxid, "map") + (search ? `?${search}` : ""));
+    else navigate(cladePath(n.taxid));
   };
 
   const rankNoun = targetRank ?? "group";
   const rankPlural = targetRank ? (RANK_PLURAL[targetRank] ?? `${targetRank}s`) : "subgroups";
   const legendMax = lens.scale === "relative" ? (lens.fmt ?? fmt)(maxRaw) : "100%";
   const capped = bd.data ? bd.data.total_matches > bd.data.returned : false;
-  const Heading = variant === "page" ? "h1" : "h2";
 
   return (
-    <section className={"bmap-block bmap-block--" + variant} aria-label={heading}>
+    <section className="bmap-block bmap-block--page">
       <header className="bmap-block__head">
         <div>
-          <Heading className="bmap-block__title">{heading}</Heading>
+          <h1 className="bmap-block__title">
+            {targetRank ? `${focus.name} by ${rankNoun}` : focus.name}
+          </h1>
           {targetRank && (
             <p className="bmap-block__sub">
               Tile size is the number of {sizeBy}; colour shows {lens.legend}. The big pale tiles are
-              the gaps: large groups with little data. Click a tile to go deeper, or use the trail to
-              come back.
+              the gaps: large groups with little data. Click a tile to open it here; the trail at the
+              top takes you back up.
             </p>
           )}
         </div>
         <div className="bmap-actions">
-          <Link className="dl" to={`/clade/${focus.taxid}`}>
-            Open {focus.name}
-          </Link>
-          {variant === "embed" && (
-            <Link className="dl" to={`/map/${focus.taxid}`}>
-              Full screen
-            </Link>
-          )}
           {targetRank && (
             <a className="dl" href={exportTsvUrl(focus.taxid, { rank: targetRank })}>
               Download TSV
@@ -355,27 +263,6 @@ export default function BreakdownMap({
           )}
         </div>
       </header>
-
-      {/* The drill trail is a clickable way back; at the root it's a single node
-          the level bar below already names, so show it only once you've drilled. */}
-      {trail.length > 1 && (
-        <nav className="bmap-crumbs" aria-label="Drill path">
-          {trail.map((t, i) => (
-            <span key={t.taxid} className="bmap-crumb">
-              {i > 0 && <span className="bmap-crumb__sep">›</span>}
-              {i < trail.length - 1 ? (
-                <button type="button" className="bmap-crumb__link" onClick={() => truncateTo(i)}>
-                  {t.name}
-                </button>
-              ) : (
-                <span className="bmap-crumb__here">
-                  {t.name} <span className="bmap-crumb__rank">{t.rank}</span>
-                </span>
-              )}
-            </span>
-          ))}
-        </nav>
-      )}
 
       {targetRank && (
         <div className="bmap-level">
@@ -401,12 +288,12 @@ export default function BreakdownMap({
           <span className="tree-controls__label">Colour by</span>
           <div className="tree-controls__seg" role="group" aria-label="Colour tiles by coverage">
             {COVERAGE_LENSES.map((l) => (
-              <LensButton key={l.key} lens={l} active={l.key === lensKey} onClick={() => setLensKey(l.key)} />
+              <LensButton key={l.key} lens={l} active={l.key === lensKey} onClick={() => choose("colour", l.key, "ass")} />
             ))}
           </div>
           <div className="tree-controls__seg" role="group" aria-label="Colour tiles by quality">
             {QUALITY_LENSES.map((l) => (
-              <LensButton key={l.key} lens={l} active={l.key === lensKey} onClick={() => setLensKey(l.key)} />
+              <LensButton key={l.key} lens={l} active={l.key === lensKey} onClick={() => choose("colour", l.key, "ass")} />
             ))}
           </div>
         </div>
@@ -418,7 +305,7 @@ export default function BreakdownMap({
                 key={s}
                 type="button"
                 className={"seg-btn" + (s === sizeBy ? " seg-btn--on" : "")}
-                onClick={() => setSizeBy(s)}
+                onClick={() => choose("size", s, "species")}
               >
                 {s === "species" ? "Species" : "Assemblies"}
               </button>
@@ -427,15 +314,15 @@ export default function BreakdownMap({
         </div>
       </div>
 
-      <div className={"bmap bmap--" + variant} ref={boxRef}>
-        {bd.loading || resolving ? (
+      <div className="bmap bmap--page" ref={boxRef}>
+        {bd.loading ? (
           <p className="notice">Mapping…</p>
         ) : bd.error ? (
           <p className="notice notice--error">{bd.error}</p>
         ) : !targetRank ? (
           <p className="notice">
-            {focus.name} is a {focus.rank}, the finest rank shown here. Open its{" "}
-            <Link to={`/clade/${focus.taxid}`}>dashboard</Link> for its records.
+            {focus.name} is a {focus.rank}, the finest rank shown here. Its records are on{" "}
+            <Link to={cladePath(focus.taxid, "records")}>Records</Link>.
           </p>
         ) : tiles.length === 0 ? (
           <p className="notice">
@@ -458,7 +345,7 @@ export default function BreakdownMap({
                 onClick={() => activate(t.node)}
                 onMouseMove={(e) => setHover({ node: t.node, q: qmap.get(t.node.taxid), x: e.clientX, y: e.clientY })}
                 onMouseLeave={() => setHover(null)}
-                aria-label={`${t.node.name}, ${fmt(t.node.n_rows)} species. ${canDrill ? "Open its subgroups." : "Open its dashboard."}`}
+                aria-label={`${t.node.name}, ${fmt(t.node.n_rows)} species. ${canDrill ? "Open its subgroups." : "Open its summary."}`}
               >
                 {labelled && (
                   <span className="bmap-tile__body">
@@ -506,7 +393,7 @@ export default function BreakdownMap({
             {capped
               ? `The ${fmt(bd.data.returned)} largest ${rankPlural} by ${sizeBy}, of ${fmt(bd.data.total_matches)}.`
               : `${fmt(bd.data.returned)} ${rankPlural}.`}{" "}
-            Click a group to go deeper, or a genus or species to open its dashboard.
+            Click a group to open it here, or a species to open its summary.
           </p>
           <TileList items={items} sizeBy={sizeBy} lens={lens} qmap={qmap} onActivate={activate} />
         </>
@@ -526,7 +413,8 @@ function LensButton({ lens, active, onClick }: { lens: Lens; active: boolean; on
 }
 
 /** Keyboard and screen-reader path to the same content: the subgroups as a plain
- *  list, each with its numbers and links to go deeper or open its dashboard. */
+ *  list, each with its numbers, a button to open it on the map and a link to its
+ *  summary. */
 function TileList({
   items, sizeBy, lens, qmap, onActivate,
 }: {
@@ -549,7 +437,6 @@ function TileList({
       <summary>View as a list</summary>
       <ol className="bmap-list">
         {ranked.map((n) => {
-          const drillable = !!nextRank(n.rank);
           return (
             <li key={n.taxid} className="bmap-list__row">
               <button type="button" className="bmap-list__name" onClick={() => onActivate(n)}>
@@ -559,8 +446,8 @@ function TileList({
               <span className="bmap-list__meta">
                 {fmt(n.n_rows)} species · {lens.legendLabel ?? lens.label} {lensText(n)}
               </span>
-              <Link className="bmap-list__open" to={`/clade/${n.taxid}`}>
-                {drillable ? "Open" : "Dashboard"}
+              <Link className="bmap-list__open" to={cladePath(n.taxid)}>
+                Summary
               </Link>
             </li>
           );

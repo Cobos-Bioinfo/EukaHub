@@ -1,43 +1,42 @@
-import { useParams } from "react-router";
+import { Link } from "react-router";
 
-import { getTaxon } from "../api/queries";
 import BreakdownMap from "../components/BreakdownMap";
-import { TaxonError } from "../components/ErrorPage";
-import ViewSwitcher from "../components/ViewSwitcher";
-import { useAsync } from "../hooks/useAsync";
+import { cladePath, hasRecords, isUnit } from "../lib/clade";
+import { useClade } from "./CladeLayout";
 
-/** Full-screen home for the data map. Resolves the route taxon's name + rank
- *  (to seed the map without a redundant fetch inside the component) and renders
- *  the map tall. Drilling stays in-component; the breadcrumb walks back. */
+/** The Data map view of one group: its breakdown by the next rank down. */
 export default function BreakdownPage() {
-  const { taxid: taxidParam } = useParams();
-  const id = Number(taxidParam);
-  const lineage = useAsync(() => getTaxon(id), [id]);
-
-  if (!Number.isInteger(id) || id <= 0)
-    return <TaxonError taxid={taxidParam} />;
-  if (lineage.error) {
-    return (
-      <TaxonError
-        taxid={taxidParam}
-        status={lineage.status}
-        message={lineage.error}
-        retry={lineage.reload}
-      />
-    );
-  }
-  if (!lineage.data) return <p className="notice">Loading…</p>;
-
-  const root = { taxid: lineage.data.taxid, name: lineage.data.name, rank: lineage.data.rank };
+  const clade = useClade();
+  if (isUnit(clade)) return <NoBreakdown />;
   return (
     <section className="bmap-page">
-      <ViewSwitcher taxid={root.taxid} name={root.name} current="map" layout="row" />
       <BreakdownMap
-        root={root}
-        rootLineage={lineage.data.lineage}
-        heading="Where's the data?"
-        variant="page"
+        root={{ taxid: clade.taxid, name: clade.name, rank: clade.rank }}
+        rootLineage={clade.lineage}
       />
+    </section>
+  );
+}
+
+/** What the Data map and Gaps say for a species or a finer taxon, which have no
+ *  groups below them (reached from a link or a search that kept the view). */
+export function NoBreakdown() {
+  const clade = useClade();
+  return (
+    <section className="errpage">
+      <h1 className="errpage__title">{clade.name}</h1>
+      <p className="errpage__text">
+        {clade.name} is a single species or a part of one, with no groups below it to compare.
+        See its{" "}
+        <Link to={cladePath(clade.taxid)}>Summary</Link>
+        {hasRecords(clade) && (
+          <>
+            {" "}
+            or its <Link to={cladePath(clade.taxid, "records")}>Records</Link>
+          </>
+        )}
+        .
+      </p>
     </section>
   );
 }

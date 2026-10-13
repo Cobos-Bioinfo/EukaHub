@@ -145,49 +145,44 @@ a:hover {
   flex-direction: column;
 }
 
+/* The top bar: one pinned line with the brand, the current group's trail,
+   search, Compare, the theme and the "more" menu. The group's views (tabs) sit
+   below it and scroll with the page. */
 .app__bar {
   position: sticky;
   top: 0;
   z-index: 10;
-  display: flex;
-  align-items: center;
-  flex-wrap: nowrap;
-  gap: 0.6rem 1.35rem;
-  padding: 0.75rem clamp(1rem, 4vw, 2rem);
   background: var(--bar-bg);
   backdrop-filter: saturate(1.2) blur(8px);
   border-bottom: 1px solid var(--border);
 }
-/* Search sits to the right of the nav on wide screens; its auto margin also
-   pushes the action icons that follow it over to the right edge. */
-.app__bar > .picker {
-  margin-left: auto;
-  min-width: 0;
+.app__bar-inner {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem 1.25rem;
+  max-width: var(--maxw);
+  margin: 0 auto;
+  padding: 0.6rem clamp(1rem, 4vw, 2rem);
 }
-/* Narrow viewports: stack the bar into rows so nothing overflows off the right
-   edge — brand + action icons on the top row, the primary nav on its own row,
-   and the search full-width beneath. Every control stays reachable. */
-@media (max-width: 920px) {
-  .app__bar {
-    flex-wrap: wrap;
-  }
-  .app__brand {
-    order: 1;
-  }
-  .app__actions {
-    order: 2;
-    margin-left: auto;
-  }
-  .app__nav-group {
-    order: 3;
-    flex-basis: 100%;
-  }
-  .app__bar > .picker {
-    order: 4;
-    flex-basis: 100%;
-    width: 100%;
-    margin-left: 0;
-  }
+.app__bar .picker {
+  flex: 0 1 300px;
+  width: auto;
+  min-width: 160px;
+  margin-left: auto;
+}
+.app__compare {
+  padding: 0.4rem 0.3rem;
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: var(--ink);
+  white-space: nowrap;
+}
+.app__compare:hover {
+  color: var(--link);
+  text-decoration: none;
+}
+.app__actions .app__search-toggle {
+  display: none;
 }
 
 .app__brand {
@@ -348,34 +343,7 @@ a:hover {
   text-align: right;
 }
 
-/* ---- Dashboard ------------------------------------------------------- */
-.breadcrumb {
-  display: flex;
-  flex-wrap: wrap; /* long lineages wrap to new lines instead of overflowing */
-  align-items: baseline;
-  row-gap: 3px;
-  font-size: 0.85rem;
-  color: var(--muted);
-  margin-bottom: 1rem;
-}
-.breadcrumb__label {
-  font-weight: 600;
-  color: var(--ink-2);
-  margin-right: 0.4rem;
-}
-.breadcrumb a {
-  display: inline-block;
-  padding-block: 0.15rem;
-}
-.breadcrumb__sep {
-  margin: 0 0.4rem;
-  color: var(--border);
-}
-.breadcrumb__current {
-  color: var(--ink-2);
-  font-weight: 600;
-}
-
+/* ---- Summary --------------------------------------------------------- */
 .dashboard__head {
   margin-bottom: 1.5rem;
 }
@@ -408,6 +376,40 @@ a:hover {
 .dashboard__species strong {
   color: var(--ink);
 }
+.dashboard__compare {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-top: 0.75rem;
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+/* Where to go next: the records and the breakdown, one line each. */
+.dashboard__next {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin: 1.25rem 0 0;
+  padding: 0;
+  list-style: none;
+  max-width: var(--measure);
+  color: var(--ink-2);
+}
+
+/* ---- Records page ------------------------------------------------------ */
+.records-page__head {
+  margin-bottom: 1.25rem;
+}
+.records-page__title {
+  margin: 0;
+  font-size: clamp(1.6rem, 4vw, 2.2rem);
+  letter-spacing: -0.02em;
+}
+.records-page__sub {
+  margin: 0.4rem 0 0;
+  max-width: var(--measure);
+  color: var(--ink-2);
+}
 /* Leaf-detail note for an infraspecific taxon (subspecies/strain/...): a quiet
    callout stating its data is its own and not counted upward. */
 .dashboard__note {
@@ -433,7 +435,6 @@ a:hover {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: 1.5rem;
-  margin-top: 1.5rem;
 }
 .dashboard__side {
   display: flex;
@@ -819,26 +820,7 @@ a:hover {
   font-variant-numeric: tabular-nums;
 }
 
-/* ---- Record browser (per-record drill-down) -------------------------- */
-.rec {
-  margin-top: 2.75rem;
-}
-.rec__head {
-  display: flex;
-  align-items: baseline;
-  gap: 0.75rem;
-  flex-wrap: wrap;
-}
-.rec__title {
-  margin: 0;
-  font-size: 1.3rem;
-  letter-spacing: -0.02em;
-}
-.rec__sub {
-  margin: 0;
-  color: var(--muted);
-  font-size: 0.9rem;
-}
+/* ---- Record browser (the Records view) -------------------------------- */
 .rec__controls {
   display: flex;
   align-items: flex-start;
@@ -1381,108 +1363,6 @@ a:hover {
   color: var(--link);
   text-decoration: underline;
   cursor: pointer;
-}
-
-/* ---- Tree: nav + cross-links ----------------------------------------- */
-.app__nav-group {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 0.5rem 1.35rem;
-  /* Keep the nav one line on wide screens: let the search shrink first, not the
-     nav (which would wrap to two lines). On mobile it becomes its own full row. */
-  flex-shrink: 0;
-}
-.app__nav {
-  font-size: 0.9rem;
-  font-weight: 600;
-  color: var(--ink-2);
-  white-space: nowrap;
-}
-.app__nav:hover {
-  text-decoration: none;
-  color: var(--link);
-}
-.app__nav--active {
-  color: var(--link);
-}
-/* ---- Clade cross-navigation (CTA buttons in the sticky rail) --------- */
-.viewsw {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-.viewsw__label {
-  font-size: 0.78rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--muted);
-}
-.viewsw__label em {
-  font-style: normal;
-  text-transform: none;
-  letter-spacing: 0;
-  color: var(--ink-2);
-}
-.viewsw__btn {
-  display: flex;
-  align-items: center;
-  gap: 0.55rem;
-  padding: 0.6rem 0.9rem;
-  font-size: 0.95rem;
-  font-weight: 600;
-  color: #fff;
-  background: var(--cta);
-  border-radius: 999px;
-  box-shadow: var(--shadow);
-}
-.viewsw__btn:hover {
-  text-decoration: none;
-  filter: brightness(1.06);
-}
-/* Each view keeps a distinct identity hue: Tree of Life green (matches the
-   landing CTA + app-wide green), Data map purple (its quality-lens hue); Dashboard
-   uses the accent blue. */
-.viewsw__btn--tree {
-  background: var(--cta-tree);
-}
-.viewsw__btn--map {
-  background: var(--cta-map);
-}
-.viewsw__compare {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  margin-top: 0.15rem;
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: var(--link);
-}
-.viewsw__compare:hover {
-  text-decoration: none;
-  filter: brightness(1.05);
-}
-
-/* Horizontal variant for the full-bleed Tree / Data map headers (no rail):
-   a compact inline row instead of a full-width stack. */
-.viewsw--row {
-  flex-direction: row;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.5rem 0.65rem;
-  margin-bottom: 1rem;
-}
-.viewsw--row .viewsw__label {
-  margin-right: 0.15rem;
-}
-.viewsw--row .viewsw__btn {
-  padding: 0.45rem 0.85rem;
-  font-size: 0.88rem;
-}
-.viewsw--row .viewsw__compare {
-  margin-top: 0;
-  margin-left: 0.1rem;
 }
 
 /* ---- Tree page ------------------------------------------------------- */
@@ -2053,6 +1933,175 @@ button.tree-outline__name:hover {
   border-color: var(--muted);
 }
 
+/* The current group's lineage. In the top bar on wide screens; below it, in its
+   compact form, on narrower ones. */
+.trail {
+  min-width: 0;
+  font-size: 0.9rem;
+}
+.trail__list {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.trail__item {
+  display: inline-flex;
+  align-items: center;
+}
+.trail__item + .trail__item::before {
+  content: "›" / "";
+  margin: 0 0.45rem;
+  color: var(--muted);
+}
+.trail__current {
+  font-weight: 700;
+  color: var(--ink);
+}
+.trail__more {
+  position: relative;
+}
+.trail__more-btn {
+  min-width: 34px;
+  height: 26px;
+  padding: 0 0.5rem;
+  font: inherit;
+  line-height: 1;
+  color: var(--ink);
+  background: var(--track);
+  border: 1px solid var(--grid);
+  border-radius: 6px;
+  cursor: pointer;
+}
+.trail__more-btn:hover {
+  border-color: var(--muted);
+}
+.trail__pop {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 30;
+  min-width: 220px;
+  max-height: 60vh;
+  overflow-y: auto;
+  margin: 0;
+  padding: 0.25rem;
+  list-style: none;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+}
+.trail__pop[hidden] {
+  display: none;
+}
+.trail__pop-link {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1rem;
+  padding: 0.45rem 0.6rem;
+  border-radius: 7px;
+  color: var(--ink);
+}
+.trail__pop-link:hover {
+  text-decoration: none;
+  background: var(--track);
+}
+.trail__pop-rank {
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+.trail--compact {
+  display: none;
+}
+
+/* The current group's views, as tabs under the top bar. */
+.app__context {
+  border-bottom: 1px solid var(--border);
+}
+.app__context-inner {
+  max-width: var(--maxw);
+  margin: 0 auto;
+  padding: 0 clamp(1rem, 4vw, 2rem);
+}
+.tabs {
+  display: flex;
+  gap: 0.25rem;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.tabs__tab {
+  padding: 0.65rem 0.85rem;
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: var(--ink-2);
+  white-space: nowrap;
+  border-bottom: 3px solid transparent;
+}
+.tabs__tab:hover {
+  color: var(--ink);
+  text-decoration: none;
+}
+.tabs__tab--on {
+  font-weight: 700;
+  color: var(--ink);
+  border-bottom-color: var(--link);
+}
+
+@media (max-width: 900px) {
+  .app__bar .trail {
+    display: none;
+  }
+  .trail--compact {
+    display: block;
+    padding-top: 0.6rem;
+  }
+}
+
+/* Phones: the pinned bar is one line (brand, search button, menu); the search
+   opens on a row of its own, and Compare and the theme move into the menu. */
+@media (max-width: 640px) {
+  .app__bar-inner {
+    flex-wrap: wrap;
+    gap: 0.25rem 0.5rem;
+    padding: 0.35rem 0.5rem 0.35rem 1rem;
+  }
+  .app__bar .picker {
+    display: none;
+    order: 5;
+    flex: 1 0 100%;
+    margin: 0 0 0.4rem;
+  }
+  .app__bar--search .picker {
+    display: block;
+  }
+  .app__actions {
+    margin-left: auto;
+    gap: 0.25rem;
+  }
+  .app__wide {
+    display: none;
+  }
+  .app__actions .app__search-toggle {
+    display: inline-flex;
+  }
+  .app__actions .app__icon-btn,
+  .app__actions .menu__button {
+    width: 44px;
+    height: 44px;
+    border-color: transparent;
+    background: transparent;
+  }
+  .tabs__tab {
+    padding: 0.6rem 0.65rem;
+    font-size: 0.9rem;
+  }
+}
+
 /* Header "more" dropdown */
 .menu {
   position: relative;
@@ -2096,6 +2145,23 @@ button.tree-outline__name:hover {
 .menu__item:hover {
   text-decoration: none;
   background: var(--track);
+}
+button.menu__item {
+  width: 100%;
+  font: inherit;
+  font-size: 0.9rem;
+  text-align: left;
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+.menu__phone {
+  display: none;
+}
+@media (max-width: 640px) {
+  .menu__phone {
+    display: block;
+  }
 }
 
 /* ---- Species-level external data links ------------------------------- */
@@ -2753,14 +2819,6 @@ button.tree-outline__name:hover {
 }
 
 /* ---- Breakdown "data map" -------------------------------------------- */
-.bmap-block {
-  margin-top: 2.75rem;
-}
-/* On the dashboard the map is one section among others; on its own page it is
-   the whole thing, so it needs no top gap. */
-.bmap-page .bmap-block--page {
-  margin-top: 0;
-}
 .bmap-block__head {
   display: flex;
   align-items: flex-start;
@@ -2771,9 +2829,6 @@ button.tree-outline__name:hover {
 .bmap-block__title {
   margin: 0;
   letter-spacing: -0.02em;
-}
-.bmap-block--embed .bmap-block__title {
-  font-size: 1.3rem;
 }
 .bmap-block--page .bmap-block__title {
   font-size: clamp(1.6rem, 4vw, 2.2rem);
@@ -2794,48 +2849,6 @@ button.tree-outline__name:hover {
      forcing a one-line max-content width that overflows the viewport. */
   flex: 0 1 auto;
   min-width: 0;
-}
-
-.bmap-crumbs {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 0.15rem;
-  margin: 1rem 0 0.5rem;
-  font-size: 0.95rem;
-}
-.bmap-crumb {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 0.15rem;
-}
-.bmap-crumb__sep {
-  margin: 0 0.35rem;
-  color: var(--muted);
-}
-.bmap-crumb__link {
-  font: inherit;
-  padding: 0;
-  border: none;
-  background: none;
-  color: var(--link);
-  cursor: pointer;
-  font-weight: 600;
-}
-.bmap-crumb__link:hover {
-  text-decoration: underline;
-}
-.bmap-crumb__here {
-  font-weight: 700;
-  color: var(--ink);
-}
-.bmap-crumb__rank {
-  margin-left: 0.35rem;
-  font-size: 0.7rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-  color: var(--muted);
 }
 
 /* The "level" bar: always states which rank you're viewing and which rank the
@@ -2916,9 +2929,6 @@ button.tree-outline__name:hover {
 .bmap--page {
   height: min(66vh, 720px);
   min-height: 420px;
-}
-.bmap--embed {
-  height: clamp(360px, 46vh, 520px);
 }
 .bmap .notice {
   padding: 2rem;
@@ -3644,7 +3654,10 @@ button.tree-outline__name:hover {
 /* Links inside running text are underlined, so colour is not the only cue. */
 .faq__a a,
 .legal a,
-.nodata__text a {
+.nodata__text a,
+.dashboard__next a,
+.records-page__sub a,
+.errpage__text a {
   text-decoration: underline;
 }
 

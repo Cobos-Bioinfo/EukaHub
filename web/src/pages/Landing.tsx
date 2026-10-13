@@ -6,13 +6,14 @@ import RootPicker from "../components/RootPicker";
 import { RandomIcon, SearchIcon, TreeIcon } from "../components/icons";
 import { useAsync } from "../hooks/useAsync";
 import { useCladeLabel } from "../hooks/useSiteConfig";
+import { cladePath } from "../lib/clade";
 import { fmt, fmtCompact, fmtPct } from "../lib/format";
 import { EUKARYOTA_TAXID } from "../lib/taxonomy";
 
 /** The landing / hero page at `/`. Puts the EukaHub name front and centre, then
  *  gives a strong entry point: a prominent search, quick-jump chips, a
  *  random-clade button for undecided visitors, and the two primary journeys
- *  (dashboard + Tree of Life). Below the hero, a live "at a glance" strip and a
+ *  (Summary + Tree of Life). Below the hero, a live "at a glance" strip and a
  *  row of featured-group coverage cards give a sense of scale and of the gaps. */
 export default function Landing() {
   return (
@@ -38,7 +39,7 @@ export default function Landing() {
             <SearchIcon size={17} />
             Explore Eukaryota
           </Link>
-          <Link to={`/tree/${EUKARYOTA_TAXID}`} className="hero__btn hero__btn--tree">
+          <Link to={cladePath(EUKARYOTA_TAXID, "tree")} className="hero__btn hero__btn--tree">
             <TreeIcon size={17} />
             Tree of Life
           </Link>
@@ -71,7 +72,7 @@ function LandingGaps() {
     <section className="gaps-teaser" aria-label="Biggest data gaps">
       <div className="gaps-teaser__head">
         <h2 className="gaps-teaser__heading">Where are the gaps?</h2>
-        <Link to="/gaps" className="gaps-teaser__all">
+        <Link to={cladePath(EUKARYOTA_TAXID, "gaps")} className="gaps-teaser__all">
           See all gaps →
         </Link>
       </div>
@@ -163,7 +164,7 @@ function LandingOverview() {
 }
 
 /** One featured-group card: friendly name, species count, and two coverage
- *  meters (assembled / annotated), linking into the group's dashboard. */
+ *  meters (assembled / annotated), linking into the group's summary. */
 function FeaturedCard({ clade }: { clade: FeaturedClade }) {
   const label = useCladeLabel()(clade.taxid) ?? clade.name;
   // The gap in absolute terms: species with no genome assembly yet. Reframes the

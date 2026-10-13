@@ -1,78 +1,48 @@
-import { Link, useParams } from "react-router";
+import { Link } from "react-router";
 
-import {
-  getAbout,
-  getMetricsConfig,
-  getQualityConfig,
-  getTaxon,
-  getTaxonStats,
-} from "../api/queries";
+import { getAbout, getMetricsConfig, getQualityConfig, getTaxonStats } from "../api/queries";
 import AboutCard from "../components/AboutCard";
-import Breadcrumb from "../components/Breadcrumb";
-import BreakdownMap from "../components/BreakdownMap";
 import { TaxonError } from "../components/ErrorPage";
 import MetricCard from "../components/MetricCard";
 import NoDataNotice from "../components/NoDataNotice";
 import QualitySection from "../components/QualitySection";
-import RecordBrowser from "../components/RecordBrowser";
 import SpeciesLinks from "../components/SpeciesLinks";
 import SubspeciesSection from "../components/SubspeciesSection";
-import ViewSwitcher from "../components/ViewSwitcher";
+import { CompareIcon } from "../components/icons";
 import { useAsync } from "../hooks/useAsync";
+import { cladePath, hasRecords, isUnit } from "../lib/clade";
 import { fmt } from "../lib/format";
 import { INFORMAL_SPECIES_RANK } from "../lib/taxonomy";
+import { useClade } from "./CladeLayout";
 
-/** The Genomic Resource Summary (Q1) for one taxon. */
-export default function Dashboard() {
-  const { taxid: taxidParam } = useParams();
-  const taxid = Number(taxidParam);
-  const validId = Number.isInteger(taxid) && taxid > 0;
-
-  const summary = useAsync(() => getTaxon(taxid), [taxid]);
+/** The Summary view of one group: how much data it has and of what quality. The
+ *  breakdown is on the Data map and the records on Records. */
+export default function SummaryPage() {
+  const s = useClade();
+  const taxid = s.taxid;
   const stats = useAsync(() => getTaxonStats(taxid), [taxid]);
   const metrics = useAsync(() => getMetricsConfig(), []);
   const quality = useAsync(() => getQualityConfig(), []);
-  // Decorative Wikipedia context — never gates the page; rendered only if it
-  // resolves to a summary, its error deliberately ignored.
-  const name = summary.data?.name;
-  const about = useAsync(() => getAbout(name), [name]);
+  // Decorative Wikipedia context: never gates the page, its error ignored.
+  const about = useAsync(() => getAbout(s.name), [s.name]);
 
-  if (!validId) return <TaxonError taxid={taxidParam} />;
-  if (summary.error) {
-    return (
-      <TaxonError
-        taxid={taxidParam}
-        status={summary.status}
-        message={summary.error}
-        retry={summary.reload}
-      />
-    );
-  }
   if (metrics.error) {
-    return <TaxonError taxid={taxidParam} message={metrics.error} retry={metrics.reload} />;
+    return <TaxonError taxid={String(taxid)} message={metrics.error} retry={metrics.reload} />;
   }
-  if (summary.loading || metrics.loading || !summary.data || !metrics.data) {
-    return <p className="notice">Loading…</p>;
-  }
+  if (!metrics.data) return <p className="notice">Loading…</p>;
 
-  const s = summary.data;
   // A species, an informal species or a finer taxon is a single unit: its cards
   // count records (split into those on the taxon itself and on its finer taxa),
   // and its finer taxa are listed instead of a rank breakdown.
   const isInfra = s.is_infraspecific;
   const isInformal = s.rank === INFORMAL_SPECIES_RANK;
-  const isUnit = isInfra || isInformal || s.rank === "species";
-  // Per-record drill-down only when the clade actually has assemblies or
-  // annotations (avoids an empty browser + its fetches for data-less taxa).
-  const hasRecords = s.resources.ass.total > 0 || s.resources.ann.total > 0;
+  const unit = isUnit(s);
   const noData = Object.values(s.resources).every((r) => r.total === 0);
   const rankWord = s.rank && s.rank !== "no rank" ? s.rank : "infraspecific taxon";
   const belowLabel = isInfra ? "from finer subdivisions" : "from subspecies and strains";
 
   return (
     <section className="dashboard">
-      <Breadcrumb lineage={s.lineage} currentTaxid={taxid} />
-
       <div className="dashboard__body">
         <aside className="dashboard__side">
           <header className="dashboard__head">
@@ -92,16 +62,19 @@ export default function Dashboard() {
                 <Link to="/faq#informal-species">See FAQs</Link>
               </p>
             ) : (
-              !isUnit && (
+              !unit && (
                 <p className="dashboard__species">
                   <strong>{fmt(s.n_rows)}</strong> species in this clade
                 </p>
               )
             )}
+            <Link className="dashboard__compare" to={`/compare?taxids=${taxid}`}>
+              <CompareIcon size={15} />
+              Add to compare
+            </Link>
           </header>
           {about.data && <AboutCard about={about.data} />}
-          {!isUnit && <ViewSwitcher taxid={taxid} name={s.name} current="dashboard" />}
-          {isUnit && !noData && <SpeciesLinks metrics={metrics.data} taxid={taxid} />}
+          {unit && !noData && <SpeciesLinks metrics={metrics.data} taxid={taxid} />}
         </aside>
 
         <div className="dashboard__content">
@@ -110,7 +83,7 @@ export default function Dashboard() {
               taxid={taxid}
               name={s.name}
               rank={s.rank}
-              isUnit={isUnit}
+              isUnit={unit}
               species={s.n_rows}
               ncbiUrlTemplate={metrics.data.find((m) => m.key === "ass")?.external_url_template}
             />
@@ -124,13 +97,31 @@ export default function Dashboard() {
                     config={m}
                     value={value}
                     taxid={taxid}
-                    mode={isUnit ? "count" : "coverage"}
+                    mode={unit ? "count" : "coverage"}
                     direct={s.direct?.[m.key]}
                     belowLabel={belowLabel}
                   />
                 ) : null;
               })}
             </div>
+          )}
+
+          {!noData && (hasRecords(s) || !unit) && (
+            <ul className="dashboard__next">
+              {hasRecords(s) && (
+                <li>
+                  {recordCounts(s.resources.ass.total, s.resources.ann.total)} listed on{" "}
+                  <Link to={cladePath(taxid, "records")}>Records</Link>, with links to download
+                  them.
+                </li>
+              )}
+              {!unit && (
+                <li>
+                  See how this data is spread across the groups inside {s.name} on the{" "}
+                  <Link to={cladePath(taxid, "map")}>Data map</Link>.
+                </li>
+              )}
+            </ul>
           )}
 
           {quality.data && !noData && (
@@ -146,16 +137,7 @@ export default function Dashboard() {
             />
           )}
 
-          {!isUnit && !noData && (
-            <BreakdownMap
-              key={`bmap-${taxid}`}
-              root={{ taxid, name: s.name, rank: s.rank }}
-              rootLineage={s.lineage}
-              heading="Breakdown"
-              variant="embed"
-            />
-          )}
-          {isUnit && (
+          {unit && (
             <SubspeciesSection
               key={`subsp-${taxid}`}
               taxid={taxid}
@@ -165,9 +147,17 @@ export default function Dashboard() {
               metrics={metrics.data}
             />
           )}
-          {hasRecords && <RecordBrowser key={`rec-${taxid}`} taxid={taxid} />}
         </div>
       </div>
     </section>
   );
+}
+
+/** "5,665 assemblies and 2,343 annotations are", leaving out a count of zero. */
+function recordCounts(assemblies: number, annotations: number): string {
+  const parts = [
+    assemblies > 0 && `${fmt(assemblies)} ${assemblies === 1 ? "assembly" : "assemblies"}`,
+    annotations > 0 && `${fmt(annotations)} ${annotations === 1 ? "annotation" : "annotations"}`,
+  ].filter(Boolean);
+  return `${parts.join(" and ")} ${assemblies + annotations === 1 ? "is" : "are"}`;
 }

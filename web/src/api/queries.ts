@@ -83,12 +83,28 @@ export const getMeta = async (): Promise<DatasetMeta> => (await getConfig()).dat
 /** A taxon with its lineage: the root first, the taxon itself last. */
 export type TaxonWithLineage = Taxon & { lineage: Taxon[] };
 
+// The app shell (trail, tabs) and the view below it read the same clade, so each
+// is fetched once per page load; a failed request is not kept, so a retry refetches.
+const taxa = new Map<number, Promise<TaxonWithLineage>>();
+const MAX_TAXA = 200;
+
 // One taxon and its ancestors in one request: the ancestors end with the taxon.
-export async function getTaxon(taxid: number): Promise<TaxonWithLineage> {
-  const { results } = unwrap(
-    await api.GET("/taxons/{taxid}/ancestors", { params: { path: { taxid } } }),
-  );
-  return { ...results[results.length - 1], lineage: results };
+export function getTaxon(taxid: number): Promise<TaxonWithLineage> {
+  const known = taxa.get(taxid);
+  if (known) return known;
+  const fetched = api
+    .GET("/taxons/{taxid}/ancestors", { params: { path: { taxid } } })
+    .then((res) => {
+      const { results } = unwrap(res);
+      return { ...results[results.length - 1], lineage: results };
+    })
+    .catch((err: unknown) => {
+      taxa.delete(taxid);
+      throw err;
+    });
+  taxa.set(taxid, fetched);
+  if (taxa.size > MAX_TAXA) taxa.delete(taxa.keys().next().value as number);
+  return fetched;
 }
 
 // The quality stats of the records on or below one taxon.
