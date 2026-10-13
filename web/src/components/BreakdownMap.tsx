@@ -8,51 +8,9 @@ import { useAsync } from "../hooks/useAsync";
 import { cladePath } from "../lib/clade";
 import { fmt, fmtBp, fmtPct } from "../lib/format";
 import { RANGE_LABELS, rangeOf, rangeStyle } from "../lib/ranges";
+import { RANK_PLURAL, nextRank, ranksBelow, targetRankFor } from "../lib/ranks";
 import RangeLegend from "./RangeLegend";
 
-// Drilling jumps to the next meaningful rank, not the immediate adjacency child.
-// Taxonomy hides the interesting split several rankless clades deep (Mammalia
-// holds one child, Theria, that carries almost every species), so a map of
-// immediate children would be one giant tile. Jumping to the next canonical rank
-// keeps every level a real comparison.
-const ALLOWED: TargetRank[] = ["phylum", "class", "order", "family", "genus", "species"];
-const LADDER = [
-  "domain", "superkingdom", "kingdom", "subkingdom", "phylum", "subphylum",
-  "superclass", "class", "subclass", "infraclass", "superorder", "order",
-  "suborder", "infraorder", "superfamily", "family", "subfamily", "tribe",
-  "genus", "subgenus", "species",
-];
-function nextRank(rank: string): TargetRank | null {
-  const i = LADDER.indexOf(rank);
-  for (let j = i + 1; j < LADDER.length; j++) {
-    if (ALLOWED.includes(LADDER[j] as TargetRank)) return LADDER[j] as TargetRank;
-  }
-  return null;
-}
-
-// The rank to break a focus down into. When the focus carries a canonical rank
-// we take the next canonical rank below it. Many taxa are rankless (rank "clade"
-// or "no rank": Eutheria, Bilateria, Opisthokonta, ...), and for those
-// nextRank("clade") would fall through to phylum, wrong for a clade that sits
-// below phylum (Eutheria is under class Mammalia and has only orders below it).
-// So for a rankless focus we anchor to the deepest canonical-ranked ancestor in
-// its lineage and step down from there. `lineage` is the focus's root→node chain
-// (inclusive).
-function targetRankFor(focus: TaxonRef, lineage: string[]): TargetRank | null {
-  if (LADDER.includes(focus.rank)) return nextRank(focus.rank);
-  for (let i = lineage.length - 1; i >= 0; i--) {
-    if (LADDER.includes(lineage[i])) return nextRank(lineage[i]);
-  }
-  return nextRank(focus.rank); // no canonical ancestor → phylum via the -1 path
-}
-/** Every rank the focus can be broken down by, coarse to fine. */
-function ranksBelow(first: TargetRank | null): TargetRank[] {
-  return first ? ALLOWED.slice(ALLOWED.indexOf(first)) : [];
-}
-const RANK_PLURAL: Record<string, string> = {
-  phylum: "phyla", class: "classes", order: "orders",
-  family: "families", genus: "genera", species: "species",
-};
 const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 type BucketStats = Record<string, number | null>;

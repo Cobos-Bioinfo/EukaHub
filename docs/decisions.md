@@ -218,6 +218,21 @@ Streamlit app that answered the same questions but was slow to build and to serv
   addresses (`/map/:taxid`, `/tree/:taxid`, `/gaps?root=`) redirect. On a phone the
   pinned top bar is one line (brand, search, menu), and Compare and the theme move
   into the menu. Compare is the only page about several groups.
+- **The Summary summarises; the other views hold the detail.** A sentence (species,
+  how many have an assembly, how many one that meets the EBP standard), the
+  coverage cards, the first recommended genomes (linking to Records), the three
+  subgroups with the most species missing an assembly (linking to the Data map), the
+  quality stats, then the classification and Wikipedia's summary last. A species
+  with no data at all shows the best-sequenced species of its genus, or its family
+  or order when the genus has none, labelled by what they share ("same genus"):
+  taxonomy is not a phylogeny, so they are never called the closest.
+- **Records answer "which genome should I use, and where do I get it".** On a
+  group, the list starts as one recommended assembly per species (see the API's
+  recommended order); filters (EBP standard, reference genomes, level, minimum
+  contig N50) sit beside it, folded above it on a phone, and the download is the
+  list as shown. Filters and sort stay in the address (`?one=0`, `?ebp=1`, `?ref=1`,
+  `?level=`, `?n50=`, `?sort=`, `?show=annotations`), so a filtered list can be
+  linked to.
 - **The Tree of Life is a radial tree in SVG**, using `d3-hierarchy` and `d3-shape`
   for layout only. The radial form is the recognizable "tree of life"; SVG keeps it
   accessible and themeable; lazy expansion keeps the node count manageable.
