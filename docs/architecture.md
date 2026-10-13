@@ -39,10 +39,11 @@ API and cached for 24 hours.
 ## Data updates
 
 1. On the 1st of each month, `rebuild.yml` builds the dataset from fresh sources
-   into a throwaway Postgres, runs the invariant checks, and publishes the dump as
-   Release `dataset-YYYYMMDD` (asset `eukahub-dataset.dump`, about 50 MB). A build
-   that fails the checks publishes nothing; a failed scheduled build also opens an
-   issue in the repository.
+   into a throwaway Postgres, runs the invariant checks, compares its key counts
+   with the previous Release's, and publishes the dump as Release
+   `dataset-YYYYMMDD` (asset `eukahub-dataset.dump`, about 50 MB, with
+   `dataset-counts.json`). A build that fails the checks publishes nothing; a
+   failed scheduled build also opens an issue in the repository.
 2. The refresher on each server polls the repository's latest Release once a day.
    When it is newer than the loaded dataset (or nothing is loaded), it downloads the
    dump, checks it against the size and SHA-256 digest GitHub publishes for the

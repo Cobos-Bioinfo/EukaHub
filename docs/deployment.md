@@ -268,6 +268,16 @@ The same variables, set in the environment, apply to a local
 `python -m eukahub_pipeline.build`. The defaults live in
 `pipeline/src/eukahub_pipeline/sources.py`.
 
+### When a rebuild stops on a count drop
+
+Each rebuild compares its key counts with those of the previous Release
+(`dataset-counts.json`) and stops when one fell by more than 10%, since a partial
+download from a source looks consistent otherwise. A failed scheduled rebuild opens
+an issue; the served data stays as it is. Usually the next run fetches a complete
+copy. If the drop is real (a source withdrew records), run "Dataset rebuild" by hand
+from the Actions tab with "Publish even if counts fell sharply" ticked; later
+rebuilds compare with that Release.
+
 ## Updating the application
 
 ```bash

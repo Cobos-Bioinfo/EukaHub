@@ -40,8 +40,10 @@ changes. Put personal or machine-specific notes in a gitignored `CLAUDE.local.md
 ## Invariants
 - No ETE3 and no per-root precomputed tables: a breakdown is one indexed `ltree` subtree
   query for any root.
-- `taxon` holds Eukaryota (2759) plus its two ancestors (1, 131567). No foreign keys.
-  These taxids come from `eukahub_core.taxonomy` (web: `lib/taxonomy.ts`), never literals.
+- `taxon` holds Eukaryota (2759) plus its two ancestors (1, 131567), which `clade_features`'
+  one foreign key needs. These taxids come from `eukahub_core.taxonomy` (web:
+  `lib/taxonomy.ts`), never literals. No other foreign keys: records come from
+  independent sources.
 - Deployment-specific values (links, contact, Wikipedia, curated groups, source URLs)
   are settings with code defaults: the API falls back on an invalid value, the
   pipeline (`sources.py`) fails.
