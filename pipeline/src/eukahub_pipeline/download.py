@@ -7,6 +7,13 @@ import tarfile
 from pathlib import Path
 
 import requests
+from tenacity import (
+    before_sleep_log,
+    retry,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_exponential,
+)
 
 from eukahub_pipeline.sources import TAXDUMP, Source
 
@@ -32,10 +39,7 @@ def download_taxdump(
 
     tgz = dest / "taxdump.tar.gz"
     log.info("Downloading %s -> %s", source.url, tgz)
-    with requests.get(source.url, stream=True, timeout=source.timeout) as r:
-        r.raise_for_status()
-        with open(tgz, "wb") as fh:
-            fh.writelines(r.iter_content(chunk_size=1 << 20))
+    _download(source, tgz)
 
     log.info("Extracting %s", ", ".join(_WANTED))
     with tarfile.open(tgz) as tar:
@@ -44,3 +48,18 @@ def download_taxdump(
 
     tgz.unlink(missing_ok=True)
     return dest
+
+
+@retry(
+    retry=retry_if_exception_type(requests.RequestException),
+    stop=stop_after_attempt(5),
+    wait=wait_exponential(multiplier=1, min=2, max=60),
+    before_sleep=before_sleep_log(log, logging.WARNING),
+    reraise=True,
+)
+def _download(source: Source, path: Path) -> None:
+    """Write ``source``'s file to ``path``, retried with backoff like the other sources."""
+    with requests.get(source.url, stream=True, timeout=source.timeout) as r:
+        r.raise_for_status()
+        with open(path, "wb") as fh:
+            fh.writelines(r.iter_content(chunk_size=1 << 20))

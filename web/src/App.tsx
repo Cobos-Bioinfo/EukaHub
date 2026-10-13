@@ -1,99 +1,97 @@
-import { Link, Route, Routes, useLocation } from "react-router";
+import { useEffect, useRef, useState } from "react";
+import { Link, Navigate, Route, Routes, useLocation, useParams, useSearchParams } from "react-router";
 
 import { getMeta } from "./api/queries";
-import HeaderMenu from "./components/HeaderMenu";
-import RandomCladeButton from "./components/RandomCladeButton";
+import CladeTabs from "./components/CladeTabs";
+import CladeTrail from "./components/CladeTrail";
 import { NotFound } from "./components/ErrorPage";
+import HeaderMenu from "./components/HeaderMenu";
 import RootPicker from "./components/RootPicker";
 import ThemeToggle from "./components/ThemeToggle";
-import { RandomIcon } from "./components/icons";
+import { SearchIcon } from "./components/icons";
 import { useAsync } from "./hooks/useAsync";
-import { useSiteConfig } from "./hooks/useSiteConfig";
+import { cladePath, parseCladePath, type CladeView } from "./lib/clade";
 import { fmtDate } from "./lib/format";
 import { EUKARYOTA_TAXID } from "./lib/taxonomy";
 import BreakdownPage from "./pages/BreakdownPage";
+import CladeLayout from "./pages/CladeLayout";
 import ComparePage from "./pages/ComparePage";
-import Dashboard from "./pages/Dashboard";
 import Faq from "./pages/Faq";
 import GapsPage from "./pages/GapsPage";
 import Landing from "./pages/Landing";
 import Privacy from "./pages/Privacy";
+import RecordsPage from "./pages/RecordsPage";
+import SummaryPage from "./pages/SummaryPage";
 import TreePage from "./pages/TreePage";
 
 export default function App() {
-  const location = useLocation();
-  const sourceCodeUrl = useSiteConfig()?.source_code_url;
-  // The Tree of Life goes full-bleed (near-fullscreen); every other page keeps
-  // the centered content column.
-  const isTree = location.pathname.startsWith("/tree/");
-  // Nav links highlight for their whole route family (any clade, any tree).
-  const navClass = (prefix: string) =>
-    "app__nav" + (location.pathname.startsWith(prefix) ? " app__nav--active" : "");
-  // Context-aware nav: on a taxon-scoped page carry the current group between the
-  // views instead of resetting to Eukaryota, so hopping views keeps your place.
-  const ctxMatch = location.pathname.match(/^\/(?:clade|map|tree)\/(\d+)/);
-  const ctxTaxid = ctxMatch ? Number(ctxMatch[1]) : EUKARYOTA_TAXID;
+  const { pathname } = useLocation();
+  const route = parseCladePath(pathname);
+  // On a phone the search box folds behind a button in the one-line top bar.
+  const [searchOpen, setSearchOpen] = useState(false);
+  const searchRef = useRef<HTMLInputElement>(null);
+  useEffect(() => setSearchOpen(false), [pathname]);
+  useEffect(() => {
+    if (searchOpen) searchRef.current?.focus();
+  }, [searchOpen]);
+
   return (
     <div className="app">
       <a className="skip-link" href="#main">
         Skip to content
       </a>
-      <header className="app__bar">
-        <Link className="app__brand" to="/">
-          Euka<span>Hub</span>
-        </Link>
-        <nav className="app__nav-group" aria-label="Primary">
-          <Link className={navClass("/clade/")} to={`/clade/${ctxTaxid}`}>
-            Dashboard
+      <header className={"app__bar" + (searchOpen ? " app__bar--search" : "")}>
+        <div className="app__bar-inner">
+          <Link className="app__brand" to="/">
+            Euka<span>Hub</span>
           </Link>
-          <Link className={navClass("/tree/")} to={`/tree/${ctxTaxid}`}>
-            Tree of Life
-          </Link>
-          <Link className={navClass("/map/")} to={`/map/${ctxTaxid}`}>
-            Data map
-          </Link>
-          <Link className={navClass("/gaps")} to="/gaps">
-            Gaps
-          </Link>
-          <Link className={navClass("/compare")} to="/compare">
-            Compare
-          </Link>
-        </nav>
-        <RootPicker />
-        <div className="app__actions">
-          <RandomCladeButton className="app__icon-btn" title="Surprise me, jump to a random group">
-            <RandomIcon size={18} />
-            <span className="sr-only">Surprise me, jump to a random group</span>
-          </RandomCladeButton>
-          <ThemeToggle />
-          {sourceCodeUrl && (
-            <a
-              className="app__icon-btn"
-              href={sourceCodeUrl}
-              target="_blank"
-              rel="noreferrer"
-              aria-label="View the source code on GitHub"
-              title="Source on GitHub"
+          <CladeTrail />
+          <RootPicker placeholder="Search species, groups or TaxIDs" inputRef={searchRef} />
+          <div className="app__actions">
+            <button
+              type="button"
+              className="app__icon-btn app__search-toggle"
+              aria-label={searchOpen ? "Close search" : "Search species or groups"}
+              aria-expanded={searchOpen}
+              onClick={() => setSearchOpen((v) => !v)}
             >
-              <svg viewBox="0 0 16 16" width="20" height="20" aria-hidden="true">
-                <path
-                  fill="currentColor"
-                  d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"
-                />
-              </svg>
-            </a>
-          )}
-          <HeaderMenu />
+              <SearchIcon size={19} />
+            </button>
+            <Link className="app__compare app__wide" to="/compare">
+              Compare
+            </Link>
+            <ThemeToggle className="app__wide" />
+            <HeaderMenu />
+          </div>
         </div>
       </header>
+      {route && (
+        <div className="app__context">
+          <div className="app__context-inner">
+            <CladeTrail compact />
+            <CladeTabs />
+          </div>
+        </div>
+      )}
 
-      <main id="main" tabIndex={-1} className={"app__main" + (isTree ? " app__main--full" : "")}>
+      <main
+        id="main"
+        tabIndex={-1}
+        className={"app__main" + (route?.view === "tree" ? " app__main--full" : "")}
+      >
         <Routes>
           <Route path="/" element={<Landing />} />
-          <Route path="/clade/:taxid" element={<Dashboard />} />
-          <Route path="/tree/:taxid" element={<TreePage />} />
-          <Route path="/map/:taxid" element={<BreakdownPage />} />
-          <Route path="/gaps" element={<GapsPage />} />
+          <Route path="/clade/:taxid" element={<CladeLayout />}>
+            <Route index element={<SummaryPage />} />
+            <Route path="map" element={<BreakdownPage />} />
+            <Route path="records" element={<RecordsPage />} />
+            <Route path="tree" element={<TreePage />} />
+            <Route path="gaps" element={<GapsPage />} />
+            <Route path="*" element={<NotFound />} />
+          </Route>
+          <Route path="/map/:taxid" element={<LegacyRedirect view="map" />} />
+          <Route path="/tree/:taxid" element={<LegacyRedirect view="tree" />} />
+          <Route path="/gaps" element={<LegacyRedirect view="gaps" />} />
           <Route path="/compare" element={<ComparePage />} />
           <Route path="/faq" element={<Faq />} />
           <Route path="/privacy" element={<Privacy />} />
@@ -115,6 +113,25 @@ export default function App() {
       </footer>
     </div>
   );
+}
+
+/** The old addresses (`/map/:taxid`, `/tree/:taxid`, `/gaps`) open the same view
+ *  of the same group under `/clade/:taxid`. The old data map kept its drill path
+ *  in `?d=t1-t2` (the group shown is the last), and the old gaps page its group in
+ *  `?root`. */
+function LegacyRedirect({ view }: { view: CladeView }) {
+  const { taxid } = useParams();
+  const [params] = useSearchParams();
+  const target =
+    view === "gaps"
+      ? params.get("root")
+      : (params.get("d")?.split("-").filter(Boolean).at(-1) ?? taxid);
+  const rest = new URLSearchParams(params);
+  rest.delete("d");
+  rest.delete("root");
+  const query = rest.toString();
+  const id = Number(target) > 0 ? Number(target) : EUKARYOTA_TAXID;
+  return <Navigate replace to={cladePath(id, view) + (query ? `?${query}` : "")} />;
 }
 
 /** The app-wide "Data updated {date}" provenance stamp in the footer. Fetched

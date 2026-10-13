@@ -1,12 +1,12 @@
 import { toggleTheme, useTheme } from "../lib/theme";
 
 /** Header button that flips the app between light and dark. */
-export default function ThemeToggle() {
+export default function ThemeToggle({ className }: { className?: string }) {
   const dark = useTheme() === "dark";
   return (
     <button
       type="button"
-      className="app__icon-btn"
+      className={"app__icon-btn" + (className ? ` ${className}` : "")}
       onClick={toggleTheme}
       aria-label={dark ? "Switch to light theme" : "Switch to dark theme"}
       title={dark ? "Light theme" : "Dark theme"}

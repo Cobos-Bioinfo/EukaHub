@@ -45,7 +45,12 @@ uv run pytest             # Python tests (need the dataset loaded, step 3)
 cd web && npm run build   # TypeScript typecheck + production build
 ```
 
-CI runs the same checks plus a secret scan and dependency audits
+To open every page in headless Chrome, as CI does, serve the build (the API running,
+then `VITE_API_URL=http://localhost:8000 node_modules/.bin/vite preview` in `web/`) and
+run `npm run smoke -- http://localhost:4173` in `web/` (`CHROME_PATH` if Chrome is not
+at `/usr/bin/google-chrome`).
+
+CI runs the same checks plus the page check, a secret scan and dependency audits
 (`.github/workflows/ci.yml`). In CI the API tests run against a small, consistent
 slice of the real dataset (`api/tests/seed.sql`) instead of the full one, so tests
 must hold on both: assert relationships (a clade's species count equals the count

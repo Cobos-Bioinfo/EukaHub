@@ -79,8 +79,14 @@ Streamlit app that answered the same questions but was slow to build and to serv
   `<db>_next` while the live one keeps serving, verified, then swapped in by
   renaming; the previous one stays as `<db>_prev` for rollback. Databases rather
   than schemas, because the `ltree` and `pg_trgm` extensions live in `public`.
-- **The first install is the same path as an update.** An empty database simply
-  looks outdated, so bringing the stack up installs the data.
+- **A server installs a Release unless it is the one it serves.** The installer
+  records the Release's tag and dump digest in the database it installs, and the
+  refresher compares those rather than dates: comparing a tag's date with the build
+  time reinstalled a rebuild that ran past midnight every day and never installed a
+  second rebuild on the same day. A rollback records the Release it left, which is
+  then not installed again until another one is published.
+- **The first install is the same path as an update.** An empty database has no
+  Release recorded, so bringing the stack up installs the data.
 - **Failure is safe, not impossible.** Upstream APIs will change eventually, and the
   monthly rebuild will then fail. It fails closed: nothing is published, servers
   keep the previous data, and the scheduled run opens an issue.
@@ -182,12 +188,37 @@ Streamlit app that answered the same questions but was slow to build and to serv
 
 ## Interface
 
+- **The current group is the app's state.** Every view of a group lives under
+  `/clade/:taxid`: its Summary, Data map (`/map`), Records (`/records`), Tree of Life
+  (`/tree`) and Gaps (`/gaps`), shown as tabs, with its lineage in the top bar
+  (the first two ranks, a "…" menu with the ones in between, and the last two).
+  Following the lineage, searching, clicking a tile on the Data map or looking inside
+  a group on Gaps changes the group and keeps the view, so the address always names
+  what is on screen and the browser's back button walks it. A species or a finer
+  taxon has no Data map or Gaps, and a group without records no Records tab. The old
+  addresses (`/map/:taxid`, `/tree/:taxid`, `/gaps?root=`) redirect. On a phone the
+  pinned top bar is one line (brand, search, menu), and Compare and the theme move
+  into the menu. Compare is the only page about several groups.
 - **The Tree of Life is a radial tree in SVG**, using `d3-hierarchy` and `d3-shape`
   for layout only. The radial form is the recognizable "tree of life"; SVG keeps it
   accessible and themeable; lazy expansion keeps the node count manageable.
-- **The breakdown is a click-to-drill treemap (the "data map").** Tile area is the
-  number of species (or assemblies) and colour one chosen measure, so a large, pale
-  tile is a large group with little data. Clicking drills to the next taxonomic
-  rank, so no rank selector is needed.
-- **Colour follows one scheme:** one sequential ramp per measure, light to dark in
-  both themes, and text alternatives (lists, tables, outlines) for every chart.
+- **The breakdown is a click-to-drill treemap (the "Data map"), with a list beside
+  it.** Tile area is the number of species (or assemblies) and colour one share, so a
+  large, pale tile is a large group with little data. Clicking a tile makes it the
+  current group, broken down by the next taxonomic rank; a "Show" menu picks a finer
+  rank. Groups under 1% of the total share one tile (when there are three or more),
+  which opens the list, since their own tiles would be too small to read or hit.
+  The List view is the same breakdown as a table and holds the TSV download. Only
+  shares colour the map (of species with each resource, of assemblies at chromosome
+  level); genome size, gene counts and BUSCO stay in the tooltip and on the Summary.
+  The view, measure, size and rank stay in the address (`?view=`, `?colour=`,
+  `?size=`, `?rank=`).
+- **Shares are coloured by six fixed ranges:** none (hatched grey, never the lightest
+  step), under 1%, 1 to 5%, 5 to 20%, 20 to 50% and 50% or more, on one blue ramp for
+  every measure, light to dark in both themes (the dark theme lifts its dark end so
+  it clears the surface). Most shares are small: of the orders by assemblies, 35% have
+  none, 6% under 1%, 19% 1 to 5%, 26% 5 to 20%, 8% 20 to 50% and 6% 50% or more, so a
+  continuous 0 to 100% ramp left most of the map pale. The Data map uses them; the
+  Tree of Life keeps a continuous ramp per measure until its own redesign. Any other
+  magnitude gets one sequential ramp, and every chart has a text alternative (a list,
+  a table or an outline).

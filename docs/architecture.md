@@ -33,26 +33,34 @@ ENA           ┘   (rebuild.yml)          (public)          ▲
 Browser → nginx (static SPA; `/api/v1/*` proxied, successful GETs other than the TSV
 report cached for up to an hour) → FastAPI → Postgres. Successful API responses carry `Cache-Control`,
 and JSON responses an `ETag`. Nothing in the request path writes to the database or calls an external
-service. The Wikipedia summary on the dashboard is fetched by the browser from
+service. The Wikipedia summary on a group's Summary is fetched by the browser from
 Wikipedia.
 
 ## Data updates
 
 1. On the 1st of each month, `rebuild.yml` builds the dataset from fresh sources
-   into a throwaway Postgres, runs the invariant checks, and publishes the dump as
-   Release `dataset-YYYYMMDD` (asset `eukahub-dataset.dump`, about 50 MB). A build
-   that fails the checks publishes nothing; a failed scheduled build also opens an
-   issue in the repository.
+   into a throwaway Postgres, runs the invariant checks, compares its key counts
+   with the previous Release's, and publishes the dump as Release
+   `dataset-YYYYMMDD` (asset `eukahub-dataset.dump`, about 50 MB, with
+   `dataset-counts.json`). A build that fails the checks publishes nothing; a
+   failed scheduled build also opens an issue in the repository.
 2. The refresher on each server polls the repository's latest Release once a day.
-   When it is newer than the loaded dataset (or nothing is loaded), it downloads the
-   dump, checks it against the size and SHA-256 digest GitHub publishes for the
-   asset, restores it into `<db>_next`, collects planner statistics there (a dump
-   carries none, and without them the first queries after the swap time out),
-   runs the same invariant checks, and swaps databases by renaming: `<db>` becomes
-   `<db>_prev`, `<db>_next` becomes `<db>`. Open database sessions are closed
-   during the swap, which takes about a second.
+   That is the newest `dataset-*` Release that carries a dump, whichever Release
+   GitHub marks as latest. Unless the live database was installed from that same
+   Release (same tag and dump, recorded in its `installed_release` table), it
+   downloads the dump, checks it against the size and SHA-256 digest GitHub
+   publishes for the asset, restores it into `<db>_next`, collects planner
+   statistics there (a dump carries none, and without them the first queries after
+   the swap time out), runs the same invariant checks, records the Release, and
+   swaps databases by renaming: `<db>` becomes `<db>_prev`, `<db>_next` becomes
+   `<db>`. Each database refuses new sessions while it is renamed and its open
+   ones are closed; the swap takes about a second.
 3. If anything fails before the swap, the live database is untouched. A Release
-   that fails three times is skipped until a newer one appears.
+   that fails three times is skipped until it is republished or a newer one
+   appears. A swap interrupted by a crash is completed at the start of the next
+   cycle, from the verified `<db>_next` or else the previous dataset, without
+   downloading anything. A rollback swaps `<db>` and `<db>_prev` and keeps the
+   Release it left from being installed again.
 
 No credentials are involved: the Release is public and the server only makes
 outbound HTTPS requests. See [deployment.md](deployment.md) for operating it.

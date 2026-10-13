@@ -1,10 +1,12 @@
 """Keep the serving database on the latest published dataset Release.
 
-Long-lived sidecar. Each cycle reads the newest ``dataset-YYYYMMDD`` Release of
-``EUKAHUB_REPO``; if nothing is loaded yet, or the Release is newer than the loaded
-dataset, it downloads the snapshot and hands it to ``restore_snapshot.restore``,
-which stages, verifies and swaps it in. The live dataset is never touched by a
-failed cycle, and a Release that keeps failing is skipped until a newer one appears.
+Long-lived sidecar. Each cycle first finishes any interrupted swap, then reads the
+newest ``dataset-YYYYMMDD`` Release of ``EUKAHUB_REPO`` that carries a dump; unless
+the live database was installed from that very Release (same tag and dump), it
+downloads the snapshot and hands it to ``restore_snapshot.restore``, which stages,
+verifies, records and swaps it in. The live dataset is never touched by a failed
+cycle, a Release that keeps failing is skipped until a newer one appears, and a
+Release someone rolled back from is not installed again.
 
     EUKAHUB_REPO=owner/name REFRESH_INTERVAL=86400 python scripts/auto_refresh.py
     python scripts/auto_refresh.py --once    # one cycle, then exit
@@ -26,10 +28,9 @@ from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import NamedTuple
 
-import psycopg
-
 # Sibling module: running "python scripts/auto_refresh.py" puts scripts/ on sys.path.
 import restore_snapshot
+from restore_snapshot import ReleaseId
 
 log = logging.getLogger("auto-refresh")
 
@@ -49,31 +50,42 @@ class Release(NamedTuple):
     size: int | None = None
     sha256: str | None = None
 
+    @property
+    def id(self) -> ReleaseId:
+        return ReleaseId(self.tag, self.sha256)
 
-def _latest_release(repo: str) -> Release:
-    """The newest Release of ``repo``; raises RuntimeError if it is not a dataset Release."""
-    url = f"https://api.github.com/repos/{repo}/releases/latest"
-    request = urllib.request.Request(url, headers={"Accept": "application/vnd.github+json"})
-    with urllib.request.urlopen(request, timeout=60) as response:
-        payload = json.load(response)
 
+def _dataset_release(payload: dict) -> Release | None:
+    """``payload`` as a dataset Release, or None for any other Release (a code
+    release, a draft, a pre-release) or one without the dump."""
     tag = payload.get("tag_name", "")
     match = TAG_PATTERN.match(tag)
-    if not match:
-        raise RuntimeError(f"latest release tag {tag!r} is not dataset-YYYYMMDD")
-    released = date(int(match[1]), int(match[2]), int(match[3]))
-
+    if not match or payload.get("draft") or payload.get("prerelease"):
+        return None
     for asset in payload.get("assets", []):
         if asset.get("name") == ASSET_NAME:
             digest = asset.get("digest") or ""
             return Release(
                 tag,
-                released,
+                date(int(match[1]), int(match[2]), int(match[3])),
                 asset["browser_download_url"],
                 asset.get("size"),
                 digest.removeprefix("sha256:") if digest.startswith("sha256:") else None,
             )
-    raise RuntimeError(f"release {tag} has no {ASSET_NAME} asset")
+    return None
+
+
+def _newest_release(repo: str) -> Release:
+    """The newest dataset Release of ``repo`` that carries the dump, whichever Release
+    GitHub marks as latest."""
+    url = f"https://api.github.com/repos/{repo}/releases?per_page=100"
+    request = urllib.request.Request(url, headers={"Accept": "application/vnd.github+json"})
+    with urllib.request.urlopen(request, timeout=60) as response:
+        payload = json.load(response)
+    releases = [r for r in map(_dataset_release, payload) if r is not None]
+    if not releases:
+        raise RuntimeError(f"{repo} has no dataset-YYYYMMDD Release with {ASSET_NAME}")
+    return max(releases, key=lambda r: r.tag)
 
 
 def _verify_download(path: Path, release: Release) -> None:
@@ -95,35 +107,26 @@ def _verify_download(path: Path, release: Release) -> None:
         raise RuntimeError(f"{release.tag}: checksum does not match the published digest")
 
 
-def _loaded_dataset_date(url: str) -> date | None:
-    """UTC build date of the serving dataset, or None when there is no usable one
-    (server down, empty database, no schema, or an unstamped build)."""
-    try:
-        with psycopg.connect(url, connect_timeout=10) as conn:
-            row = conn.execute("SELECT built_at FROM dataset_meta").fetchone()
-    except psycopg.Error as exc:
-        log.warning("could not read dataset_meta (%s)", type(exc).__name__)
-        return None
-    if not row or row[0] is None:
-        return None
-    built_at = row[0]
-    if isinstance(built_at, datetime):
-        return built_at.astimezone(UTC).date() if built_at.tzinfo else built_at.date()
-    return built_at
+def refresh_once(
+    database_url: str, repo: str, failures: Counter[ReleaseId] | None = None
+) -> bool:
+    """Install the newest dataset Release unless it is the one serving.
 
-
-def refresh_once(database_url: str, repo: str, failures: Counter[str] | None = None) -> bool:
-    """Install the latest Release if it is newer than what is serving.
-
-    ``failures`` counts failed installs per tag across cycles; a tag that reached
-    ``MAX_INSTALL_ATTEMPTS`` is skipped. Returns True when a dataset was promoted.
+    ``failures`` counts failed installs per Release across cycles; one that reached
+    ``MAX_INSTALL_ATTEMPTS`` is skipped until it is republished or a newer one
+    appears. Returns True when a dataset was promoted.
     """
     failures = Counter() if failures is None else failures
-    release = _latest_release(repo)
-    loaded = _loaded_dataset_date(database_url)
+    restore_snapshot.repair(database_url)
+    release = _newest_release(repo)
+    installed = restore_snapshot.installed_release(database_url)
+    current = installed.release if installed else None
 
-    if loaded is not None and release.released <= loaded:
-        age = (datetime.now(UTC).date() - loaded).days
+    if installed and installed.skip and release.id.same_as(installed.skip):
+        log.info("not installing %s: it was rolled back; waiting for a newer Release", release.tag)
+        return False
+    if release.id.same_as(current):
+        age = (datetime.now(UTC).date() - release.released).days
         if age > STALE_AFTER_DAYS:
             log.warning(
                 "dataset is %d days old and no newer release exists; check that the "
@@ -132,25 +135,29 @@ def refresh_once(database_url: str, repo: str, failures: Counter[str] | None = N
                 repo,
             )
         else:
-            log.info("up to date (loaded %s, latest release %s)", loaded, release.released)
+            log.info("up to date (%s)", release.tag)
+        return False
+    if current is not None and current.tag > release.tag:
+        log.info("serving %s, newer than any published Release; not downgrading", current.tag)
         return False
 
-    if failures[release.tag] >= MAX_INSTALL_ATTEMPTS:
+    if failures[release.id] >= MAX_INSTALL_ATTEMPTS:
         log.warning(
             "skipping %s: it failed to install %d times; waiting for a newer release",
             release.tag,
-            failures[release.tag],
+            failures[release.id],
         )
         return False
 
-    log.info("installing %s (loaded: %s)", release.tag, loaded or "nothing")
+    serving = current.tag if current else "nothing recorded"
+    log.info("installing %s (serving: %s)", release.tag, serving)
     with tempfile.TemporaryDirectory() as tmp:
         dump = restore_snapshot.download(release.download_url, Path(tmp) / ASSET_NAME)
         try:
             _verify_download(dump, release)
-            restore_snapshot.restore(database_url, dump)
+            restore_snapshot.restore(database_url, dump, release=release.id)
         except Exception:
-            failures[release.tag] += 1
+            failures[release.id] += 1
             raise
     log.info("now serving %s", release.tag)
     return True
@@ -167,7 +174,7 @@ def main() -> None:
     database_url = os.environ.get("DATABASE_URL", restore_snapshot.DEFAULT_URL)
     repo = os.environ.get("EUKAHUB_REPO", DEFAULT_REPO)
     interval = int(os.environ.get("REFRESH_INTERVAL", DEFAULT_INTERVAL))
-    failures: Counter[str] = Counter()
+    failures: Counter[ReleaseId] = Counter()
 
     while True:
         try:

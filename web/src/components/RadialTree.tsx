@@ -120,7 +120,7 @@ interface HoverState {
  * from `tree` (a `useTree` instance) as a radial dendrogram — curved links,
  * nodes sized by species count and coloured by a chosen resource's coverage,
  * radial labels, pan/zoom (+ buttons), a light hover tooltip, and a click-to-
- * select details panel from which the user opens a node's dashboard.
+ * select details panel from which the user opens a node's summary.
  */
 export default function RadialTree({
   tree,
@@ -485,7 +485,7 @@ function MoreNode({
   );
 }
 
-/** Brief details for the clicked node, with the explicit path to its dashboard. */
+/** Brief details for the clicked node, with the explicit path to its summary. */
 function DetailsPanel({
   node,
   expanded,
@@ -549,7 +549,7 @@ function DetailsPanel({
           </button>
         )}
         <button type="button" className="tree-panel__btn tree-panel__btn--primary" onClick={onOpen}>
-          Open dashboard →
+          Open summary →
         </button>
       </div>
     </aside>

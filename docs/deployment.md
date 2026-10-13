@@ -171,7 +171,7 @@ of it (Traefik, nginx, Caddy, ...). Recommended:
 - Do not expose 8080 to the internet directly: attach `web` to the proxy's Docker
   network and remove its `ports:` mapping, or bind it to `127.0.0.1:8080:80`.
 - Route all paths (`/` and `/api/v1/`) to `web`; it proxies the API itself.
-- Add at the proxy: HSTS, and a Content-Security-Policy. The dashboard fetches its
+- Add at the proxy: HSTS, and a Content-Security-Policy. The Summary fetches its
   Wikipedia summary in the browser and shows Wikipedia thumbnails, so `connect-src`
   must allow the `WIKIPEDIA_SUMMARY_URL` host and `img-src`
   `https://thumb.wikimedia.org` (and `https://upload.wikimedia.org`). A starting point:
@@ -189,17 +189,21 @@ The app itself already sends `X-Content-Type-Options`, `X-Frame-Options` and
 
 ## Data updates
 
-The refresher checks once a day for a newer `dataset-YYYYMMDD` Release of
-`EUKAHUB_REPO` and installs it (details in [architecture.md](architecture.md#data-updates)).
-It logs every decision:
+The refresher checks once a day for the newest `dataset-YYYYMMDD` Release of
+`EUKAHUB_REPO` and installs it unless it is the one serving (details in
+[architecture.md](architecture.md#data-updates)). It logs every decision:
 
-- `up to date (loaded ..., latest release ...)`: nothing to do.
+- `up to date (dataset-...)`: nothing to do.
 - `installing dataset-...` then `now serving dataset-...`: an update went live.
 - `refresh cycle failed`: the live data is unchanged; it retries in an hour.
 - `skipping dataset-...: it failed to install 3 times`: that Release is bad; the
   site keeps the previous data until a newer Release is published.
+- `not installing dataset-...: it was rolled back`: someone rolled back from that
+  Release; the site stays on the previous data until a newer one is published.
 - `dataset is N days old and no newer release exists`: the monthly rebuild has
   stopped producing Releases; check the Actions tab of `EUKAHUB_REPO`.
+- `finishing an interrupted install` or `... rollback`: the server stopped in the
+  middle of a swap; the refresher completed it before anything else.
 
 `GET /api/v1/config` returns the build date of the data being served under `dataset`
 (also shown in the site footer).
@@ -216,9 +220,10 @@ $C exec refresher uv run --no-sync --package eukahub-pipeline python scripts/aut
 $C exec refresher uv run --no-sync --package eukahub-pipeline python scripts/restore_snapshot.py --rollback
 ```
 
-After a rollback the refresher will install the newer Release again on its next
-cycle. To stay on the previous data, stop it (`$C stop refresher`) until a fixed
-Release is published.
+A rollback checks the previous dataset first, then swaps it with the live one, so
+running it again undoes it. The refresher does not install the Release you rolled
+back from again; it installs the next Release published, including the same Release
+rebuilt (a new dump under the same tag).
 
 ## Running from a fork
 
@@ -266,6 +271,16 @@ nothing is published.
 The same variables, set in the environment, apply to a local
 `python -m eukahub_pipeline.build`. The defaults live in
 `pipeline/src/eukahub_pipeline/sources.py`.
+
+### When a rebuild stops on a count drop
+
+Each rebuild compares its key counts with those of the previous Release
+(`dataset-counts.json`) and stops when one fell by more than 10%, since a partial
+download from a source looks consistent otherwise. A failed scheduled rebuild opens
+an issue; the served data stays as it is. Usually the next run fetches a complete
+copy. If the drop is real (a source withdrew records), run "Dataset rebuild" by hand
+from the Actions tab with "Publish even if counts fell sharply" ticked; later
+rebuilds compare with that Release.
 
 ## Updating the application
 
