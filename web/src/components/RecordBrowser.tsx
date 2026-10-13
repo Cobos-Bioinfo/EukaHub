@@ -1,152 +1,401 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Link } from "react-router";
+import { useState } from "react";
+import { Link, useLocation, useSearchParams } from "react-router";
 
-import { getAnnotations, getAssemblies } from "../api/queries";
+import {
+  annotationsReportUrl,
+  assembliesReportUrl,
+  getAnnotations,
+  getAssemblies,
+  getAssemblyChecks,
+  type AssemblyFilters,
+} from "../api/queries";
 import type {
   AnnotationRecord,
   AnnotationSort,
+  AssemblyLevel,
   AssemblyRecord,
   AssemblySort,
+  Taxon,
 } from "../api/types";
-import { fmt, fmtBp, fmtPct } from "../lib/format";
+import { useAsync, type AsyncState } from "../hooks/useAsync";
+import { cladePath, isUnit } from "../lib/clade";
+import { fmt, fmtBp, fmtBpRound, fmtPct } from "../lib/format";
 
-const PAGE = 20;
-type Tab = "assemblies" | "annotations";
-type Record = AssemblyRecord | AnnotationRecord;
+const PAGE = 25;
 
+const LEVELS: { key: AssemblyLevel; label: string }[] = [
+  { key: "complete", label: "Complete genome" },
+  { key: "chromosome", label: "Chromosome" },
+  { key: "scaffold", label: "Scaffold" },
+  { key: "contig", label: "Contig" },
+];
+const MIN_CONTIG_N50 = [100_000, 1_000_000, 10_000_000];
 const ASSEMBLY_SORTS: { value: AssemblySort; label: string }[] = [
-  { value: "release_date", label: "Newest" },
+  { value: "recommended", label: "Recommended" },
   { value: "contig_n50", label: "Contig N50" },
+  { value: "scaffold_n50", label: "Scaffold N50" },
   { value: "total_sequence_length", label: "Genome size" },
+  { value: "release_date", label: "Newest" },
 ];
 const ANNOTATION_SORTS: { value: AnnotationSort; label: string }[] = [
   { value: "busco_complete", label: "BUSCO" },
   { value: "protein_coding_count", label: "Gene count" },
   { value: "release_date", label: "Newest" },
 ];
+const ORDER =
+  "reference genomes first, then those of a plausible size, then the most complete level, " +
+  "then the longest contig N50";
 
-type RecordPage = { items: Record[]; total: number; next: string | null };
-
-/** Accumulating pager: fetches the first page whenever `resetKey` changes (tab /
- *  sort / taxon) and appends the next page on `loadMore`. Responses for an
- *  outdated key are dropped. */
-function usePagedRecords(fetchPage: (cursor?: string) => Promise<RecordPage>, resetKey: string) {
-  const [items, setItems] = useState<Record[]>([]);
-  const [total, setTotal] = useState(0);
-  const [next, setNext] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [error, setError] = useState<string>();
-  const [curKey, setCurKey] = useState(resetKey);
-  const keyRef = useRef(resetKey);
-
-  // When the key changes (tab / sort / taxon) drop the stale rows *synchronously*
-  // in render, before the refetch lands — otherwise the render right after a tab
-  // flip would hand assembly rows to the annotation table (or vice-versa) and
-  // crash on the missing fields. Idiomatic "reset state on prop change".
-  if (curKey !== resetKey) {
-    setCurKey(resetKey);
-    setItems([]);
-    setTotal(0);
-    setNext(null);
-    setLoading(true);
-    setLoadingMore(false);
-    setError(undefined);
-  }
-
-  useEffect(() => {
-    keyRef.current = resetKey;
-    let active = true;
-    setLoading(true);
-    setError(undefined);
-    fetchPage().then(
-      (r) => active && (setItems(r.items), setTotal(r.total), setNext(r.next), setLoading(false)),
-      (e) => active && (setError(e instanceof Error ? e.message : String(e)), setLoading(false)),
-    );
-    return () => {
-      active = false;
-    };
-    // fetchPage is recreated per render; resetKey is the intended trigger.
-  }, [resetKey]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const loadMore = useCallback(() => {
-    if (!next) return;
-    const key = resetKey;
-    setLoadingMore(true);
-    fetchPage(next).then(
-      (r) => {
-        if (keyRef.current !== key) return;
-        setItems((cur) => [...cur, ...r.items]);
-        setTotal(r.total);
-        setNext(r.next);
-        setLoadingMore(false);
-      },
-      (e) => {
-        if (keyRef.current !== key) return;
-        setError(e instanceof Error ? e.message : String(e));
-        setLoadingMore(false);
-      },
-    );
-  }, [fetchPage, next, resetKey]);
-
-  return { items, total, next, loading, loadingMore, error, loadMore };
+interface Page<T> {
+  total: number;
+  next?: string | null;
+  previous?: string | null;
+  results: T[];
 }
 
-/** The individual genome assemblies and functional annotations anywhere under a
- *  taxon, with direct download links (FASTA / GFF). Tabbed, sortable, and paged
- *  with "load more". Mount with `key={taxid}` so a new root resets the
- *  tab/sort/pages. */
-export default function RecordBrowser({ taxid }: { taxid: number }) {
-  const [tab, setTab] = useState<Tab>("assemblies");
-  const [asmSort, setAsmSort] = useState<AssemblySort>("release_date");
-  const [annSort, setAnnSort] = useState<AnnotationSort>("busco_complete");
+/** One page of a list at a time, following its cursors. Back to the first page
+ *  whenever `key` (the list's taxon, filters and sort) changes. */
+function usePages<T>(fetchPage: (cursor?: string) => Promise<Page<T>>, key: string) {
+  const [at, setAt] = useState<{ key: string; cursor?: string; offset: number }>({ key, offset: 0 });
+  const current = at.key === key ? at : { key, offset: 0 };
+  const page = useAsync(() => fetchPage(current.cursor), [key, current.cursor]);
+  const go = (cursor: string | null | undefined, offset: number) => {
+    if (cursor) setAt({ key, cursor, offset });
+  };
+  return {
+    page,
+    offset: current.offset,
+    next: () => go(page.data?.next, current.offset + (page.data?.results.length ?? 0)),
+    previous: () => go(page.data?.previous, Math.max(0, current.offset - PAGE)),
+  };
+}
 
-  const fetchPage = useCallback(
-    (cursor?: string): Promise<RecordPage> =>
-      (tab === "assemblies"
-        ? getAssemblies(taxid, { sort_by: asmSort, limit: PAGE, cursor })
-        : getAnnotations(taxid, { sort_by: annSort, limit: PAGE, cursor })
-      ).then((r) => ({ items: r.results, total: r.total, next: r.next })),
-    [taxid, tab, asmSort, annSort],
+/** The search-parameter helpers both lists use: a value that equals its default
+ *  is left out of the address. */
+function useParam() {
+  const [params, setParams] = useSearchParams();
+  const set = (changes: Record<string, string | null>) =>
+    setParams(
+      (p) => {
+        const q = new URLSearchParams(p);
+        for (const [key, value] of Object.entries(changes)) {
+          if (value === null) q.delete(key);
+          else q.set(key, value);
+        }
+        return q;
+      },
+      { replace: true },
+    );
+  return { params, set };
+}
+
+/** The genome assemblies on a group or below it: filters on the left, one
+ *  recommended assembly per species by default. Filters and sort are kept in
+ *  the address, so a view can be linked to. */
+export function AssemblyRecords({ clade }: { clade: Taxon }) {
+  const unit = isUnit(clade);
+  const { params, set } = useParam();
+  const chosenLevels = (params.get("level")?.split(",") ?? []).filter((l) =>
+    LEVELS.some((x) => x.key === l),
+  ) as AssemblyLevel[];
+  const levels = chosenLevels.length > 0 ? chosenLevels : LEVELS.map((l) => l.key);
+  const minN50 = Number(params.get("n50"));
+  const filters: AssemblyFilters = {
+    one_per_species: !unit && params.get("one") !== "0",
+    ebp_standard: params.get("ebp") === "1",
+    reference: params.get("ref") === "1",
+    assembly_level: levels.length < LEVELS.length ? levels : undefined,
+    min_contig_n50: MIN_CONTIG_N50.includes(minN50) ? minN50 : undefined,
+  };
+  const sort = ASSEMBLY_SORTS.find((s) => s.value === params.get("sort"))?.value ?? "recommended";
+  const filtered = Boolean(
+    filters.ebp_standard || filters.reference || filters.assembly_level || filters.min_contig_n50,
   );
+  const clear = () => set({ ebp: null, ref: null, level: null, n50: null });
 
-  const resetKey = `${taxid}:${tab}:${tab === "assemblies" ? asmSort : annSort}`;
-  const { items, total, next, loading, loadingMore, error, loadMore } = usePagedRecords(
-    fetchPage,
-    resetKey,
+  const key = JSON.stringify([clade.taxid, filters, sort]);
+  const { page, offset, next, previous } = usePages(
+    (cursor) => getAssemblies(clade.taxid, { ...filters, sort_by: sort, limit: PAGE, cursor }),
+    key,
   );
-
-  const sorts = tab === "assemblies" ? ASSEMBLY_SORTS : ANNOTATION_SORTS;
-  const sortValue = tab === "assemblies" ? asmSort : annSort;
-  const setSort = (v: string) =>
-    tab === "assemblies" ? setAsmSort(v as AssemblySort) : setAnnSort(v as AnnotationSort);
+  const total = page.data?.total;
+  const what = filters.one_per_species
+    ? `species, one recommended assembly each`
+    : total === 1
+      ? "assembly"
+      : "assemblies";
 
   return (
-    <section className="rec" aria-label="Records">
-      <div className="rec__controls">
-        <div className="rec__tabgroup">
-          <span className="control__label">Show</span>
-          <div className="rec__tabs" role="tablist" aria-label="Record type">
-            {(["assemblies", "annotations"] as Tab[]).map((t) => (
-              <button
-                key={t}
-                type="button"
-                role="tab"
-                aria-selected={tab === t}
-                className={`seg-btn${tab === t ? " seg-btn--on" : ""}`}
-                onClick={() => setTab(t)}
-              >
-                {t === "assemblies" ? "Assemblies" : "Annotations"}
+    <div className="records">
+      <AssemblyFilterPanel
+        clade={clade}
+        unit={unit}
+        filters={filters}
+        levels={levels}
+        filtered={filtered}
+        set={set}
+        clear={clear}
+      />
+      <section className="records__results" aria-label="Assemblies">
+        <ResultsBar
+          count={total === undefined ? undefined : `${fmt(total)} ${what}`}
+          note={
+            sort === "recommended"
+              ? `Recommended: ${ORDER}.`
+              : filters.one_per_species
+                ? `Each species shows its recommended assembly: ${ORDER}.`
+                : undefined
+          }
+          sorts={ASSEMBLY_SORTS}
+          sort={sort}
+          onSort={(value) => set({ sort: value === "recommended" ? null : value })}
+          download={
+            total ? assembliesReportUrl(clade.taxid, { ...filters, sort_by: sort }) : undefined
+          }
+          total={total}
+        />
+        <Results
+          page={page}
+          empty={
+            <p className="notice">
+              No assemblies match these filters.{" "}
+              <button type="button" className="link-btn" onClick={clear}>
+                Clear the filters
               </button>
+            </p>
+          }
+        >
+          {(items) => (
+            <>
+              <AssemblyTable
+                items={items}
+                unit={unit}
+                perSpecies={Boolean(filters.one_per_species)}
+              />
+              {items.some((a) => a.undersized) && (
+                <p className="records__foot-note">
+                  Undersized: under half the median length of the species' assemblies, so it may
+                  cover only part of the genome, such as one chromosome.
+                </p>
+              )}
+              <Pager
+                offset={offset}
+                shown={items.length}
+                total={page.data?.total ?? 0}
+                unit={filters.one_per_species ? "species" : "assemblies"}
+                hasPrevious={Boolean(page.data?.previous)}
+                hasNext={Boolean(page.data?.next)}
+                onPrevious={previous}
+                onNext={next}
+              />
+            </>
+          )}
+        </Results>
+      </section>
+    </div>
+  );
+}
+
+function AssemblyFilterPanel({
+  clade,
+  unit,
+  filters,
+  levels,
+  filtered,
+  set,
+  clear,
+}: {
+  clade: Taxon;
+  unit: boolean;
+  filters: AssemblyFilters;
+  levels: AssemblyLevel[];
+  filtered: boolean;
+  set: (changes: Record<string, string | null>) => void;
+  clear: () => void;
+}) {
+  // Open beside the list on a wide screen; folded above it on a phone.
+  const [open, setOpen] = useState(() => !window.matchMedia("(max-width: 640px)").matches);
+  const checks = useAsync(() => getAssemblyChecks(), []);
+  const ebp = useAsync(
+    () => getAssemblies(clade.taxid, { ebp_standard: true, limit: 1 }).then((p) => p.total),
+    [clade.taxid],
+  );
+  const toggleLevel = (level: AssemblyLevel, on: boolean) => {
+    const next = LEVELS.map((l) => l.key).filter((l) => (l === level ? on : levels.includes(l)));
+    set({ level: next.length === LEVELS.length ? null : next.join(",") });
+  };
+
+  return (
+    <details
+      className="rec-filters"
+      open={open}
+      onToggle={(e) => setOpen(e.currentTarget.open)}
+    >
+      <summary className="rec-filters__title">Filters</summary>
+      <div className="rec-filters__body">
+        {!unit && (
+          <fieldset className="rec-filters__group">
+            <legend>Species</legend>
+            <label className="rec-check">
+              <input
+                type="checkbox"
+                checked={Boolean(filters.one_per_species)}
+                onChange={(e) => set({ one: e.target.checked ? null : "0" })}
+              />
+              <span>One assembly per species</span>
+            </label>
+            <p className="rec-filters__note">Subspecies and strains count with their species.</p>
+          </fieldset>
+        )}
+        <fieldset className="rec-filters__group">
+          <legend>Quality</legend>
+          <label className="rec-check">
+            <input
+              type="checkbox"
+              checked={Boolean(filters.ebp_standard)}
+              onChange={(e) => set({ ebp: e.target.checked ? "1" : null })}
+            />
+            <span>Meets the EBP standard</span>
+            {ebp.data !== undefined && <span className="rec-check__count">{fmt(ebp.data)}</span>}
+          </label>
+          <label className="rec-check">
+            <input
+              type="checkbox"
+              checked={Boolean(filters.reference)}
+              onChange={(e) => set({ ref: e.target.checked ? "1" : null })}
+            />
+            <span>Reference genomes only</span>
+            <span className="rec-check__count">{fmt(clade.composition.reference)}</span>
+          </label>
+          {checks.data && (
+            <p className="rec-filters__note">
+              EBP standard: contig N50 of {fmtBpRound(checks.data.ebp_min_contig_n50)} or more
+              and scaffold N50 of {fmtBpRound(checks.data.ebp_min_scaffold_n50)} or more.
+            </p>
+          )}
+        </fieldset>
+        <fieldset className="rec-filters__group">
+          <legend>Assembly level</legend>
+          {LEVELS.map((l) => {
+            const on = levels.includes(l.key);
+            return (
+              <label key={l.key} className="rec-check">
+                <input
+                  type="checkbox"
+                  checked={on}
+                  // The last level left stays on: no level at all would list nothing.
+                  disabled={on && levels.length === 1}
+                  onChange={(e) => toggleLevel(l.key, e.target.checked)}
+                />
+                <span>{l.label}</span>
+                <span className="rec-check__count">{fmt(clade.composition[l.key])}</span>
+              </label>
+            );
+          })}
+        </fieldset>
+        <fieldset className="rec-filters__group">
+          <legend>
+            <label htmlFor="rec-min-n50">Minimum contig N50</label>
+          </legend>
+          <select
+            id="rec-min-n50"
+            className="control__select"
+            value={filters.min_contig_n50 ?? ""}
+            onChange={(e) => set({ n50: e.target.value || null })}
+          >
+            <option value="">Any</option>
+            {MIN_CONTIG_N50.map((v) => (
+              <option key={v} value={v}>
+                {fmtBpRound(v)}
+              </option>
             ))}
-          </div>
-        </div>
-        <label className="control control--inline">
+          </select>
+        </fieldset>
+        {filtered && (
+          <button type="button" className="link-btn rec-filters__clear" onClick={clear}>
+            Clear the filters
+          </button>
+        )}
+      </div>
+    </details>
+  );
+}
+
+/** The annotations on a group or below it, best BUSCO first by default. */
+export function AnnotationRecords({ clade }: { clade: Taxon }) {
+  const { params, set } = useParam();
+  const sort =
+    ANNOTATION_SORTS.find((s) => s.value === params.get("sort"))?.value ?? "busco_complete";
+  const key = JSON.stringify([clade.taxid, sort]);
+  const { page, offset, next, previous } = usePages(
+    (cursor) => getAnnotations(clade.taxid, { sort_by: sort, limit: PAGE, cursor }),
+    key,
+  );
+  const total = page.data?.total;
+
+  return (
+    <section className="records__results" aria-label="Annotations">
+      <ResultsBar
+        count={total === undefined ? undefined : `${fmt(total)} ${total === 1 ? "annotation" : "annotations"}`}
+        sorts={ANNOTATION_SORTS}
+        sort={sort}
+        onSort={(value) => set({ sort: value === "busco_complete" ? null : value })}
+        download={total ? annotationsReportUrl(clade.taxid, sort) : undefined}
+        total={total}
+      />
+      <Results page={page} empty={<p className="notice">No annotations under this group yet.</p>}>
+        {(items) => (
+          <>
+            <AnnotationTable items={items} />
+            <Pager
+              offset={offset}
+              shown={items.length}
+              total={page.data?.total ?? 0}
+              unit="annotations"
+              hasPrevious={Boolean(page.data?.previous)}
+              hasNext={Boolean(page.data?.next)}
+              onPrevious={previous}
+              onNext={next}
+            />
+          </>
+        )}
+      </Results>
+    </section>
+  );
+}
+
+function ResultsBar<S extends string>({
+  count,
+  note,
+  sorts,
+  sort,
+  onSort,
+  download,
+  total,
+}: {
+  count?: string;
+  note?: string;
+  sorts: { value: S; label: string }[];
+  sort: S;
+  onSort: (value: S) => void;
+  download?: string;
+  total?: number;
+}) {
+  return (
+    <div className="records__bar">
+      <div className="records__summary">
+        <p className="records__count" aria-live="polite">
+          {count ?? "Counting…"}
+        </p>
+        {note && <p className="records__note">{note}</p>}
+      </div>
+      <div className="records__actions">
+        <label className="control">
           <span className="control__label">Sort by</span>
           <select
             className="control__select"
-            value={sortValue}
-            onChange={(e) => setSort(e.target.value)}
+            value={sort}
+            onChange={(e) => onSort(e.target.value as S)}
           >
             {sorts.map((o) => (
               <option key={o.value} value={o.value}>
@@ -155,169 +404,265 @@ export default function RecordBrowser({ taxid }: { taxid: number }) {
             ))}
           </select>
         </label>
+        {download && total !== undefined && (
+          <a className="dl dl--primary" href={download} download>
+            Download {fmt(total)} {total === 1 ? "row" : "rows"} (TSV)
+          </a>
+        )}
       </div>
+    </div>
+  );
+}
 
-      {error ? (
-        <p className="notice notice--error">{error}</p>
-      ) : loading ? (
-        <p className="notice">Loading records…</p>
-      ) : items.length === 0 ? (
-        <p className="notice">
-          No {tab} recorded under this group yet.
-          {tab === "annotations" && " Annotations cover a reference-quality subset of genomes."}
-        </p>
-      ) : (
-        <>
-          <div className="bd__table-wrap">
-            {tab === "assemblies" ? (
-              <AssemblyTable items={items as AssemblyRecord[]} />
-            ) : (
-              <AnnotationTable items={items as AnnotationRecord[]} />
-            )}
-          </div>
-          <div className="rec__foot">
-            <span>
-              Showing <strong>{fmt(items.length)}</strong> of <strong>{fmt(total)}</strong> {tab}
-            </span>
-            {next && (
-              <button type="button" className="dl" onClick={loadMore} disabled={loadingMore}>
-                {loadingMore ? "Loading…" : `Load ${Math.min(PAGE, total - items.length)} more`}
-              </button>
-            )}
-          </div>
-        </>
+function Results<T>({
+  page,
+  empty,
+  children,
+}: {
+  page: AsyncState<Page<T>>;
+  empty: React.ReactNode;
+  children: (items: T[]) => React.ReactNode;
+}) {
+  if (page.error) {
+    return (
+      <p className="notice notice--error" role="alert">
+        Could not load the records: {page.error}{" "}
+        <button type="button" className="link-btn" onClick={page.reload}>
+          Try again
+        </button>
+      </p>
+    );
+  }
+  if (!page.data) return <p className="notice">Loading records…</p>;
+  if (page.data.results.length === 0) return <>{empty}</>;
+  return <>{children(page.data.results)}</>;
+}
+
+function Pager({
+  offset,
+  shown,
+  total,
+  unit,
+  hasPrevious,
+  hasNext,
+  onPrevious,
+  onNext,
+}: {
+  offset: number;
+  shown: number;
+  total: number;
+  unit: string;
+  hasPrevious: boolean;
+  hasNext: boolean;
+  onPrevious: () => void;
+  onNext: () => void;
+}) {
+  return (
+    <nav className="rec__foot" aria-label="Pages">
+      <span>
+        Showing {fmt(offset + 1)} to {fmt(offset + shown)} of {fmt(total)} {unit}
+      </span>
+      {(hasPrevious || hasNext) && (
+        <span className="rec__pages">
+          <button type="button" className="dl" onClick={onPrevious} disabled={!hasPrevious}>
+            Previous
+          </button>
+          <button type="button" className="dl" onClick={onNext} disabled={!hasNext}>
+            Next
+          </button>
+        </span>
       )}
-    </section>
+    </nav>
   );
 }
 
-/** Scientific name linking to the record's own dashboard (its taxid may be a
- *  strain below species). */
-function Organism({ taxid, name }: { taxid: number; name: string }) {
+/** On a species' own page, the first column names each record's organism (the
+ *  species or one of its subspecies and strains) rather than the species. */
+function AssemblyTable({
+  items,
+  unit,
+  perSpecies,
+}: {
+  items: AssemblyRecord[];
+  unit: boolean;
+  perSpecies: boolean;
+}) {
+  const { search } = useLocation();
   return (
-    <Link className="rec-org" to={`/clade/${taxid}`}>
-      {name}
-    </Link>
-  );
-}
-
-function AssemblyTable({ items }: { items: AssemblyRecord[] }) {
-  return (
-    <table className="bd-table rec-table">
-      <thead>
-        <tr>
-          <th scope="col">Organism</th>
-          <th scope="col">Assembly</th>
-          <th scope="col">Level</th>
-          <th scope="col" className="bd-num">
-            Genome size
-          </th>
-          <th scope="col" className="bd-num">
-            Contig N50
-          </th>
-          <th scope="col">Released</th>
-          <th scope="col">Download</th>
-        </tr>
-      </thead>
-      <tbody>
-        {items.map((a) => (
-          <tr key={a.assembly_accession}>
-            <td className="bd-name">
-              <Organism taxid={a.taxid} name={a.organism_name} />
-            </td>
-            <td data-label="Assembly">
-              <span className="rec-acc">{a.assembly_accession}</span>
-              {a.source_database && <span className="rec-tag">{a.source_database}</span>}
-            </td>
-            <td data-label="Level">
-              {a.assembly_level ? <LevelBadge level={a.assembly_level} /> : <Dash />}
-            </td>
-            <td className="bd-num" data-label="Genome size">{a.total_sequence_length ? fmtBp(a.total_sequence_length) : <Dash />}</td>
-            <td className="bd-num" data-label="Contig N50">{a.contig_n50 ? fmtBp(a.contig_n50) : <Dash />}</td>
-            <td className="rec-date" data-label="Released">{a.release_date ?? <Dash />}</td>
-            <td data-label="Download">
-              {a.download_url ? (
-                <a className="rec-dl" href={a.download_url} target="_blank" rel="noreferrer">
-                  NCBI ↗
-                </a>
-              ) : (
-                <Dash />
-              )}
-            </td>
+    <div className="bd__table-wrap">
+      <table className="bd-table rec-table">
+        <thead>
+          <tr>
+            <th scope="col">{unit ? "Organism" : "Species"}</th>
+            <th scope="col">Assembly</th>
+            <th scope="col">Level</th>
+            <th scope="col" className="bd-num">
+              Contig N50
+            </th>
+            <th scope="col" className="bd-num">
+              Scaffold N50
+            </th>
+            <th scope="col" className="bd-num">
+              Size
+            </th>
+            <th scope="col">
+              <abbr title="Annotations of this assembly, and the best BUSCO completeness among them">
+                Annotations
+              </abbr>
+            </th>
           </tr>
-        ))}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {items.map((a) => {
+            const more = (a.species_assemblies ?? 1) - 1;
+            return (
+              <tr key={a.assembly_accession}>
+                <td className="bd-name">
+                  {unit ? (
+                    <Link className="rec-org" to={cladePath(a.taxid)}>
+                      {a.organism_name}
+                    </Link>
+                  ) : (
+                    <>
+                      <Link className="rec-org" to={cladePath(a.species_taxid)}>
+                        {a.species_name}
+                      </Link>
+                      {a.taxid !== a.species_taxid && (
+                        <span className="rec-sub">{a.organism_name}</span>
+                      )}
+                    </>
+                  )}
+                  {perSpecies && more > 0 && (
+                    <Link className="rec-sub" to={`${cladePath(a.species_taxid, "records")}${search}`}>
+                      {fmt(more)} more {more === 1 ? "assembly" : "assemblies"}
+                    </Link>
+                  )}
+                </td>
+                <td data-label="Assembly">
+                  <span className="rec-acc">{a.assembly_accession}</span>
+                  {a.download_url && (
+                    <a className="rec-dl" href={a.download_url} target="_blank" rel="noreferrer">
+                      NCBI ↗
+                    </a>
+                  )}
+                  <AssemblyBadges a={a} />
+                  {a.release_date && <span className="rec-sub">Released {a.release_date}</span>}
+                </td>
+                <td data-label="Level">
+                  {a.assembly_level ? <LevelBadge level={a.assembly_level} /> : <Dash />}
+                </td>
+                <td className="bd-num" data-label="Contig N50">
+                  {a.contig_n50 ? fmtBp(a.contig_n50) : <Dash />}
+                </td>
+                <td className="bd-num" data-label="Scaffold N50">
+                  {a.scaffold_n50 ? fmtBp(a.scaffold_n50) : <Dash />}
+                </td>
+                <td className="bd-num" data-label="Size">
+                  {a.total_sequence_length ? fmtBp(a.total_sequence_length) : <Dash />}
+                </td>
+                <td data-label="Annotations">{annotationsText(a)}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+/** "None", "1, not scored" or "4, BUSCO 96.9%" (the best of them). */
+export function annotationsText(a: Pick<AssemblyRecord, "annotations" | "best_busco">): string {
+  if (a.annotations === 0) return "None";
+  return a.best_busco === null
+    ? `${fmt(a.annotations)}, not scored`
+    : `${fmt(a.annotations)}, BUSCO ${fmtPct(a.best_busco)}%`;
+}
+
+export function AssemblyBadges({ a }: { a: AssemblyRecord }) {
+  const reference = a.refseq_category === "reference genome";
+  if (!reference && !a.ebp_standard && !a.undersized) return null;
+  return (
+    <span className="rec-badges">
+      {reference && <span className="rec-badge rec-badge--ref">Reference</span>}
+      {a.ebp_standard && <span className="rec-badge rec-badge--ebp">EBP standard</span>}
+      {a.undersized && <span className="rec-badge rec-badge--warn">Undersized</span>}
+    </span>
   );
 }
 
 function AnnotationTable({ items }: { items: AnnotationRecord[] }) {
   return (
-    <table className="bd-table rec-table">
-      <thead>
-        <tr>
-          <th scope="col">Organism</th>
-          <th scope="col">Source</th>
-          <th scope="col" className="bd-num">
-            BUSCO
-          </th>
-          <th scope="col" className="bd-num">
-            Genes
-          </th>
-          <th scope="col">Assembly</th>
-          <th scope="col">Released</th>
-          <th scope="col">Download</th>
-        </tr>
-      </thead>
-      <tbody>
-        {items.map((a) => (
-          <tr key={a.annotation_id}>
-            <td className="bd-name">
-              <Organism taxid={a.taxid} name={a.organism_name} />
-            </td>
-            <td data-label="Source">
-              <span className="rec-src" title={a.provider ?? undefined}>
-                {a.source_database ?? "—"}
-              </span>
-            </td>
-            <td className="bd-num" data-label="BUSCO">
-              {a.busco_complete !== null ? (
-                <span title={a.busco_lineage ?? undefined}>{fmtPct(a.busco_complete)}%</span>
-              ) : (
-                <Dash />
-              )}
-            </td>
-            <td className="bd-num" data-label="Genes">
-              {a.protein_coding_count !== null ? fmt(a.protein_coding_count) : <Dash />}
-            </td>
-            <td data-label="Assembly">
-              <span className="rec-acc">{a.assembly_accession ?? "—"}</span>
-            </td>
-            <td className="rec-date" data-label="Released">{a.release_date ?? <Dash />}</td>
-            <td data-label="Download">
-              {a.gff_url ? (
-                <a className="rec-dl" href={a.gff_url} target="_blank" rel="noreferrer">
-                  GFF ↗
-                </a>
-              ) : (
-                <Dash />
-              )}
-            </td>
+    <div className="bd__table-wrap">
+      <table className="bd-table rec-table">
+        <thead>
+          <tr>
+            <th scope="col">Organism</th>
+            <th scope="col">Source</th>
+            <th scope="col" className="bd-num">
+              BUSCO
+            </th>
+            <th scope="col" className="bd-num">
+              Genes
+            </th>
+            <th scope="col">Assembly</th>
+            <th scope="col">Released</th>
+            <th scope="col">Download</th>
           </tr>
-        ))}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {items.map((a) => (
+            <tr key={a.annotation_id}>
+              <td className="bd-name">
+                <Link className="rec-org" to={cladePath(a.taxid)}>
+                  {a.organism_name}
+                </Link>
+              </td>
+              <td data-label="Source">
+                <span className="rec-src" title={a.provider ?? undefined}>
+                  {a.source_database ?? "—"}
+                </span>
+              </td>
+              <td className="bd-num" data-label="BUSCO">
+                {a.busco_complete !== null ? (
+                  <span title={a.busco_lineage ?? undefined}>{fmtPct(a.busco_complete)}%</span>
+                ) : (
+                  <Dash />
+                )}
+              </td>
+              <td className="bd-num" data-label="Genes">
+                {a.protein_coding_count !== null ? fmt(a.protein_coding_count) : <Dash />}
+              </td>
+              <td data-label="Assembly">
+                <span className="rec-acc">{a.assembly_accession ?? "—"}</span>
+              </td>
+              <td className="rec-date" data-label="Released">
+                {a.release_date ?? <Dash />}
+              </td>
+              <td data-label="Download">
+                {a.gff_url ? (
+                  <a className="rec-dl" href={a.gff_url} target="_blank" rel="noreferrer">
+                    GFF ↗
+                  </a>
+                ) : (
+                  <Dash />
+                )}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
 /** Assembly level as a small chip carrying its ordinal-ramp colour dot. */
-function LevelBadge({ level }: { level: string }) {
+export function LevelBadge({ level }: { level: string }) {
   const key = level.replace("Complete Genome", "complete").split(" ")[0].toLowerCase();
-  const known = ["complete", "chromosome", "scaffold", "contig"].includes(key);
+  const known = LEVELS.some((l) => l.key === key);
   return (
     <span className="rec-level">
       {known && <span className={`comp__dot comp__seg--${key}`} aria-hidden="true" />}
-      {level}
+      {level === "Complete Genome" ? "Complete" : level}
     </span>
   );
 }
