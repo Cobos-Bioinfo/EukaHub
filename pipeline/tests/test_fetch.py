@@ -25,6 +25,8 @@ from eukahub_pipeline.fetch_annotations import (
 )
 from eukahub_pipeline.fetch_assemblies import (
     ASSEMBLY_COLUMNS,
+    DatasetsCLIError,
+    DatasetsCLIFailed,
     drop_duplicate_assemblies,
     fetch_assemblies,
     parse_assembly_record,
@@ -83,6 +85,17 @@ def test_stopping_the_assembly_fetch_early_stops_the_cli(tmp_path):
     rows.close()
     with pytest.raises(ProcessLookupError):
         os.kill(int((tmp_path / "pid").read_text()), 0)
+
+
+def test_a_failed_datasets_run_can_be_retried_but_a_missing_cli_cannot(tmp_path):
+    fake = tmp_path / "datasets"
+    fake.write_text("#!/bin/sh\necho 'NCBI is unreachable' >&2\nexit 1\n")
+    fake.chmod(0o755)
+    with pytest.raises(DatasetsCLIFailed, match="unreachable"):
+        list(fetch_assemblies(datasets_bin=str(fake)))
+    with pytest.raises(DatasetsCLIError, match="not found") as missing:
+        list(fetch_assemblies(datasets_bin=str(tmp_path / "absent")))
+    assert not isinstance(missing.value, DatasetsCLIFailed)
 
 
 def test_parse_assembly_record_full():
