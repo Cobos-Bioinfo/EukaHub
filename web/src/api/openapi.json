@@ -537,6 +537,18 @@
             ],
             "title": "Assembly Level"
           },
+          "best_busco": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The best BUSCO completeness (%) among those annotations; null when none is scored.",
+            "title": "Best Busco"
+          },
           "bioprojects": {
             "items": {
               "type": "string"
@@ -704,6 +716,7 @@
           "ebp_standard",
           "undersized",
           "annotations",
+          "best_busco",
           "species_assemblies"
         ],
         "title": "AssemblyRecord",

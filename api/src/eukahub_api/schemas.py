@@ -307,6 +307,10 @@ class AssemblyRecord(BaseModel):
         description="Annotations of this assembly, of any version of its GenBank or RefSeq "
         "accession."
     )
+    best_busco: float | None = Field(
+        description="The best BUSCO completeness (%) among those annotations; null when "
+        "none is scored."
+    )
     species_assemblies: int | None = Field(
         description="With `one_per_species`: how many assemblies of its species the list "
         "would hold without it. Otherwise null."

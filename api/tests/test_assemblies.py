@@ -201,15 +201,19 @@ def test_cursor_walks_every_assembly_once(client, params):
 
 def test_annotations_of_an_assembly(client):
     """``annotations`` counts the annotations of any version of the assembly's
-    GenBank or RefSeq accession."""
+    GenBank or RefSeq accession, and ``best_busco`` is their best score."""
     rows = [r for r in _walk(client, "/assemblies", within=MAMMALIA) if r["annotations"] > 0]
     assert rows, "some mammal assemblies are annotated"
     for r in rows[:5]:
         number = r["assembly_accession"][4:].split(".")[0]
-        annotations = _walk(client, "/annotations", within=r["species_taxid"])
-        assert r["annotations"] == sum(
-            (a["assembly_accession"] or "")[4:].split(".")[0] == number for a in annotations
-        )
+        annotations = [
+            a
+            for a in _walk(client, "/annotations", within=r["species_taxid"])
+            if (a["assembly_accession"] or "")[4:].split(".")[0] == number
+        ]
+        assert r["annotations"] == len(annotations)
+        scored = [a["busco_complete"] for a in annotations if a["busco_complete"] is not None]
+        assert r["best_busco"] == (max(scored) if scored else None)
 
 
 def test_bad_filters_are_a_422(client):

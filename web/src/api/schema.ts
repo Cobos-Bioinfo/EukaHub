@@ -508,6 +508,11 @@ export interface components {
             assembly_accession: string;
             /** Assembly Level */
             assembly_level: string | null;
+            /**
+             * Best Busco
+             * @description The best BUSCO completeness (%) among those annotations; null when none is scored.
+             */
+            best_busco: number | null;
             /** Bioprojects */
             bioprojects: string[];
             /** Contig N50 */
