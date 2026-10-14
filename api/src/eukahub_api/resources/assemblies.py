@@ -44,11 +44,12 @@ def assembly_filter(
     min_contig_n50: Annotated[
         int | None, Query(ge=0, le=10**12, description="Only assemblies with at least this contig N50 (bp).")
     ] = None,
-    one_per_species: Annotated[
+    best_per_species: Annotated[
         bool,
         Query(
-            description="Only the recommended assembly of each species (subspecies and strains "
-            "count with their species), among those the other filters keep."
+            description="Only the best assembly of each species, the first in the recommended "
+            "order among those the other filters keep. Subspecies and strains count with "
+            "their species (`species_taxid`)."
         ),
     ] = False,
 ) -> AssemblyFilter:
@@ -60,7 +61,7 @@ def assembly_filter(
         reference=reference,
         ebp_standard=ebp_standard,
         min_contig_n50=min_contig_n50,
-        one_per_species=one_per_species,
+        best_per_species=best_per_species,
     )
 
 
@@ -68,9 +69,8 @@ _AssemblyFilter = Annotated[AssemblyFilter, Depends(assembly_filter)]
 _SortBy = Annotated[
     AssemblySort,
     Query(
-        description="`recommended`: reference genomes first, then those of a plausible size "
-        "(not `undersized`), then the most complete level, then the longest contig N50. "
-        "Or a field of the record; records missing it come last."
+        description="`recommended`: reference genomes first, then the most complete level, "
+        "then the longest contig N50. Or a field of the record; records missing it come last."
     ),
 ]
 
@@ -85,7 +85,7 @@ def assemblies(
     cursor: Cursor = None,
 ) -> AssemblyPage:
     """Genome assemblies, recommended first by default. ``total`` counts species
-    with ``one_per_species``. The quality stats of a taxon's assemblies are in
+    with ``best_per_species``. The quality stats of a taxon's assemblies are in
     ``/taxons/{taxid}/stats``."""
     total, result = list_assemblies(
         conn, f, sort=sort_by.value, descending=sort_order is SortOrder.desc, limit=limit,

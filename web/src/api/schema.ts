@@ -56,7 +56,7 @@ export interface paths {
         /**
          * Assemblies
          * @description Genome assemblies, recommended first by default. ``total`` counts species
-         *     with ``one_per_species``. The quality stats of a taxon's assemblies are in
+         *     with ``best_per_species``. The quality stats of a taxon's assemblies are in
          *     ``/taxons/{taxid}/stats``.
          */
         get: operations["assemblies_assemblies_get"];
@@ -441,18 +441,13 @@ export interface components {
         };
         /**
          * AssemblyChecks
-         * @description The thresholds behind an assembly's ``ebp_standard`` and ``undersized``.
+         * @description The thresholds behind an assembly's ``ebp_standard``.
          */
         AssemblyChecks: {
             /** Ebp Min Contig N50 */
             ebp_min_contig_n50: number;
             /** Ebp Min Scaffold N50 */
             ebp_min_scaffold_n50: number;
-            /**
-             * Undersized Share
-             * @description An assembly is undersized under this share of the median length of its species' assemblies.
-             */
-            undersized_share: number;
         };
         /**
          * AssemblyComposition
@@ -538,14 +533,12 @@ export interface components {
             source_database: string | null;
             /**
              * Species Assemblies
-             * @description With `one_per_species`: how many assemblies of its species the list would hold without it. Otherwise null.
+             * @description With `best_per_species`: how many assemblies of its species the list would hold without it. Otherwise null.
              */
             species_assemblies: number | null;
-            /** Species Name */
-            species_name: string;
             /**
              * Species Taxid
-             * @description The species the assembly counts under: its own taxon, or the species above a subspecies or strain.
+             * @description The species the assembly belongs to, as in NCBI's assembly summaries: `taxid` itself when the organism is a species, else the species above it (a subspecies, strain or isolate). An organism without a formal species (a hybrid, an unnamed `sp.`) is a species of its own, so this is never null.
              */
             species_taxid: number;
             /** Submitter */
@@ -554,11 +547,6 @@ export interface components {
             taxid: number;
             /** Total Sequence Length */
             total_sequence_length: number | null;
-            /**
-             * Undersized
-             * @description Under half the median length of its species' assemblies, so it may cover only part of the genome (one chromosome, an organelle).
-             */
-            undersized: boolean;
         };
         /**
          * AssemblySort
@@ -961,7 +949,7 @@ export interface operations {
     assemblies_assemblies_get: {
         parameters: {
             query?: {
-                /** @description `recommended`: reference genomes first, then those of a plausible size (not `undersized`), then the most complete level, then the longest contig N50. Or a field of the record; records missing it come last. */
+                /** @description `recommended`: reference genomes first, then the most complete level, then the longest contig N50. Or a field of the record; records missing it come last. */
                 sort_by?: components["schemas"]["AssemblySort"];
                 sort_order?: components["schemas"]["SortOrder"];
                 limit?: number;
@@ -977,8 +965,8 @@ export interface operations {
                 ebp_standard?: boolean;
                 /** @description Only assemblies with at least this contig N50 (bp). */
                 min_contig_n50?: number | null;
-                /** @description Only the recommended assembly of each species (subspecies and strains count with their species), among those the other filters keep. */
-                one_per_species?: boolean;
+                /** @description Only the best assembly of each species, the first in the recommended order among those the other filters keep. Subspecies and strains count with their species (`species_taxid`). */
+                best_per_species?: boolean;
             };
             header?: never;
             path?: never;
@@ -1009,7 +997,7 @@ export interface operations {
     assemblies_report_assemblies_report_get: {
         parameters: {
             query?: {
-                /** @description `recommended`: reference genomes first, then those of a plausible size (not `undersized`), then the most complete level, then the longest contig N50. Or a field of the record; records missing it come last. */
+                /** @description `recommended`: reference genomes first, then the most complete level, then the longest contig N50. Or a field of the record; records missing it come last. */
                 sort_by?: components["schemas"]["AssemblySort"];
                 sort_order?: components["schemas"]["SortOrder"];
                 /** @description Only rows on this taxon or below it (e.g. 40674 for mammals). */
@@ -1022,8 +1010,8 @@ export interface operations {
                 ebp_standard?: boolean;
                 /** @description Only assemblies with at least this contig N50 (bp). */
                 min_contig_n50?: number | null;
-                /** @description Only the recommended assembly of each species (subspecies and strains count with their species), among those the other filters keep. */
-                one_per_species?: boolean;
+                /** @description Only the best assembly of each species, the first in the recommended order among those the other filters keep. Subspecies and strains count with their species (`species_taxid`). */
+                best_per_species?: boolean;
             };
             header?: never;
             path?: never;

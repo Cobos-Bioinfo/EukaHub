@@ -154,17 +154,21 @@ Streamlit app that answered the same questions but was slow to build and to serv
   database's short column names (`n_rows`, `c_ass`, `s_ass`) never reach a client.
 - **The recommended assembly is a fixed order, not a score.** "Which genome
   should I use?" is answered by `sort_by=recommended`: NCBI reference genomes first,
-  then assemblies of a plausible size, then the most complete level (complete
-  genome, chromosome, scaffold, contig), then the longest contig N50. Each rule is
-  one a user can check against the record, which a weighted score would hide.
-  "Plausible size" catches a "Complete Genome" that is one chromosome or an
-  organelle (Ovis canadensis GCA_042859625.1: 145 Mb, against 2.7 Gb for the
-  species): an assembly under half the median length of its species' assemblies is
-  `undersized` and goes after the others. A species with one assembly is its own
-  median, so it is never flagged. `one_per_species` keeps the first assembly of each
-  species in this order among those the filters keep; subspecies and strains count
-  with their species, and informal species (hybrids, unnamed `sp.`) as species of
-  their own, so the list can hold a few more species than a taxon's `covered`.
+  then the most complete level (complete genome, chromosome, scaffold, contig), then
+  the longest contig N50. Each rule is one a user can check against the record,
+  which a weighted score would hide. Size is not one of them: a species' median
+  length can be inflated by contaminated assemblies, and a rule putting assemblies
+  under half that median last changed the pick of only 8 of 28,485 species, all
+  unnamed `sp.` taxa whose median mixes several organisms. A client compares
+  `total_sequence_length` with the species' median genome size (`/taxons/stats`)
+  instead, to flag a "Complete Genome" that is one chromosome (Ovis canadensis
+  GCA_042859625.1: 145 Mb, against 2.7 Gb for the species). `best_per_species`
+  keeps the first assembly of each species in this order among those the filters
+  keep, so it is chosen per request: a flag stored at build time would be wrong as
+  soon as a filter drops the species' best assembly. `species_taxid` is NCBI's:
+  subspecies and strains count with their species, and informal species (hybrids,
+  unnamed `sp.`) as species of their own, so the list can hold a few more species
+  than a taxon's `covered`.
   `ebp_standard` is the contiguity part of the Earth BioGenome Project's reference
   standard (contig N50 of 1 Mb or more, scaffold N50 of 10 Mb or more); the dataset
   has nothing to check its other criteria with. An assembly's `annotations` match
