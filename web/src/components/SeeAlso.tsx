@@ -45,8 +45,8 @@ export default function SeeAlso({ clade }: { clade: TaxonWithLineage }) {
           const runs = rnaSeqRuns.get(a.species_taxid) ?? 0;
           return (
             <li key={a.assembly_accession} className="see-also__card">
-              <Link className="rec-org see-also__name" to={cladePath(a.species_taxid)}>
-                {a.species_name}
+              <Link className="rec-org see-also__name" to={cladePath(a.taxid)}>
+                {a.organism_name}
               </Link>
               <AssemblyBadges a={a} />
               <dl className="see-also__facts">
@@ -91,7 +91,7 @@ async function findRelatives(clade: TaxonWithLineage): Promise<Relatives | null>
   for (const rank of WALK) {
     const group = clade.lineage.find((t) => t.rank === rank && t.taxid !== clade.taxid);
     if (!group || group.resources.assemblies.total === 0) continue;
-    const page = await getAssemblies(group.taxid, { one_per_species: true, limit: SHOWN });
+    const page = await getAssemblies(group.taxid, { best_per_species: true, limit: SHOWN });
     if (page.results.length === 0) continue;
     const taxa = await getTaxa({
       taxids: page.results.map((a) => a.species_taxid),

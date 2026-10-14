@@ -231,10 +231,15 @@ Streamlit app that answered the same questions but was slow to build and to serv
   or order when the genus has none, labelled by what they share ("same genus"):
   taxonomy is not a phylogeny, so they are never called the closest.
 - **Records answer "which genome should I use, and where do I get it".** On a
-  group, the list starts as one recommended assembly per species (see the API's
+  group, the list starts as the best assembly of each species (see the API's
   recommended order); filters (EBP standard, reference genomes, level, minimum
   contig N50) sit beside it, folded above it on a phone, and the download is the
-  list as shown. Filters and sort stay in the address (`?one=0`, `?ebp=1`, `?ref=1`,
+  list as shown. A size under half or over twice the median of its species'
+  assemblies is marked with both sizes (one request to `/taxons/stats` per page):
+  the assembly may be one chromosome, or hold contamination or both haplotypes. It
+  is a mark the reader judges, not a rule that reorders the list. Reference genomes
+  are never marked: a median can come from a few partial assemblies (Myrmecobius
+  fasciatus: two of 2 Mb beside its 3.4 Gb reference genome). Filters and sort stay in the address (`?one=0`, `?ebp=1`, `?ref=1`,
   `?level=`, `?n50=`, `?sort=`, `?show=annotations`), so a filtered list can be
   linked to.
 - **The Tree of Life is a radial tree in SVG**, using `d3-hierarchy` and `d3-shape`

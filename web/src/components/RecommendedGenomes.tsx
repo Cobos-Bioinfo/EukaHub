@@ -12,7 +12,7 @@ import { AssemblyBadges, LevelBadge } from "./RecordBrowser";
 export default function RecommendedGenomes({ clade }: { clade: Taxon }) {
   const unit = isUnit(clade);
   const page = useAsync(
-    () => getAssemblies(clade.taxid, { one_per_species: !unit, limit: unit ? 3 : 5 }),
+    () => getAssemblies(clade.taxid, { best_per_species: !unit, limit: unit ? 3 : 5 }),
     [clade.taxid],
   );
   const total = page.data?.total;
@@ -48,7 +48,7 @@ export default function RecommendedGenomes({ clade }: { clade: Taxon }) {
         <table className="bd-table sum-table">
           <thead>
             <tr>
-              <th scope="col">{unit ? "Organism" : "Species"}</th>
+              <th scope="col">Organism</th>
               <th scope="col">Assembly</th>
               <th scope="col">Level</th>
               <th scope="col" className="bd-num">
@@ -61,8 +61,8 @@ export default function RecommendedGenomes({ clade }: { clade: Taxon }) {
             {page.data.results.map((a) => (
               <tr key={a.assembly_accession}>
                 <td className="bd-name">
-                  <Link className="rec-org" to={cladePath(unit ? a.taxid : a.species_taxid)}>
-                    {unit ? a.organism_name : a.species_name}
+                  <Link className="rec-org" to={cladePath(a.taxid)}>
+                    {a.organism_name}
                   </Link>
                 </td>
                 <td data-label="Assembly">

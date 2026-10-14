@@ -7,6 +7,7 @@ import {
   getAnnotations,
   getAssemblies,
   getAssemblyChecks,
+  getTaxaStats,
   type AssemblyFilters,
 } from "../api/queries";
 import type {
@@ -42,9 +43,9 @@ const ANNOTATION_SORTS: { value: AnnotationSort; label: string }[] = [
   { value: "protein_coding_count", label: "Gene count" },
   { value: "release_date", label: "Newest" },
 ];
-const ORDER =
-  "reference genomes first, then those of a plausible size, then the most complete level, " +
-  "then the longest contig N50";
+const ORDER = "reference genomes first, then the most complete level, then the longest contig N50";
+// A size this many times under or over the median of the species' assemblies is marked.
+const SIZE_OUTLIER = 2;
 
 interface Page<T> {
   total: number;
@@ -101,7 +102,7 @@ export function AssemblyRecords({ clade }: { clade: Taxon }) {
   const levels = chosenLevels.length > 0 ? chosenLevels : LEVELS.map((l) => l.key);
   const minN50 = Number(params.get("n50"));
   const filters: AssemblyFilters = {
-    one_per_species: !unit && params.get("one") !== "0",
+    best_per_species: !unit && params.get("one") !== "0",
     ebp_standard: params.get("ebp") === "1",
     reference: params.get("ref") === "1",
     assembly_level: levels.length < LEVELS.length ? levels : undefined,
@@ -119,8 +120,8 @@ export function AssemblyRecords({ clade }: { clade: Taxon }) {
     key,
   );
   const total = page.data?.total;
-  const what = filters.one_per_species
-    ? `species, one recommended assembly each`
+  const what = filters.best_per_species
+    ? `species, the best assembly of each`
     : total === 1
       ? "assembly"
       : "assemblies";
@@ -142,8 +143,8 @@ export function AssemblyRecords({ clade }: { clade: Taxon }) {
           note={
             sort === "recommended"
               ? `Recommended: ${ORDER}.`
-              : filters.one_per_species
-                ? `Each species shows its recommended assembly: ${ORDER}.`
+              : filters.best_per_species
+                ? `Each species shows its best assembly: ${ORDER}.`
                 : undefined
           }
           sorts={ASSEMBLY_SORTS}
@@ -167,22 +168,12 @@ export function AssemblyRecords({ clade }: { clade: Taxon }) {
         >
           {(items) => (
             <>
-              <AssemblyTable
-                items={items}
-                unit={unit}
-                perSpecies={Boolean(filters.one_per_species)}
-              />
-              {items.some((a) => a.undersized) && (
-                <p className="records__foot-note">
-                  Undersized: under half the median length of the species' assemblies, so it may
-                  cover only part of the genome, such as one chromosome.
-                </p>
-              )}
+              <AssemblyTable items={items} perSpecies={Boolean(filters.best_per_species)} />
               <Pager
                 offset={offset}
                 shown={items.length}
                 total={page.data?.total ?? 0}
-                unit={filters.one_per_species ? "species" : "assemblies"}
+                unit={filters.best_per_species ? "species" : "assemblies"}
                 hasPrevious={Boolean(page.data?.previous)}
                 hasNext={Boolean(page.data?.next)}
                 onPrevious={previous}
@@ -239,10 +230,10 @@ function AssemblyFilterPanel({
             <label className="rec-check">
               <input
                 type="checkbox"
-                checked={Boolean(filters.one_per_species)}
+                checked={Boolean(filters.best_per_species)}
                 onChange={(e) => set({ one: e.target.checked ? null : "0" })}
               />
-              <span>One assembly per species</span>
+              <span>Best assembly per species</span>
             </label>
             <p className="rec-filters__note">Subspecies and strains count with their species.</p>
           </fieldset>
@@ -476,97 +467,119 @@ function Pager({
   );
 }
 
-/** On a species' own page, the first column names each record's organism (the
- *  species or one of its subspecies and strains) rather than the species. */
-function AssemblyTable({
-  items,
-  unit,
-  perSpecies,
-}: {
-  items: AssemblyRecord[];
-  unit: boolean;
-  perSpecies: boolean;
-}) {
+/** The median genome size of each species of `items`, from their quality stats;
+ *  empty while it loads or if it fails, which leaves every size unmarked. */
+function useSpeciesMedians(items: AssemblyRecord[]): Map<number, number> {
+  const ids = [...new Set(items.map((a) => a.species_taxid))].sort((x, y) => x - y);
+  const stats = useAsync(
+    () => (ids.length > 0 ? getTaxaStats({ taxids: ids, limit: ids.length }) : Promise.resolve(null)),
+    [ids.join(",")],
+  );
+  const medians = new Map<number, number>();
+  for (const t of stats.data?.results ?? []) {
+    const size = t.stats.genome_size;
+    if (size) medians.set(t.taxid, size);
+  }
+  return medians;
+}
+
+/** How far an assembly's size is from its species' median, when it is an outlier:
+ *  "5.4% of the species median (2.70 Gb)"; else null. A reference genome is never
+ *  one: it is the species' yardstick, and a median of a few partial assemblies
+ *  can be far below it. */
+function sizeFlag(a: AssemblyRecord, median: number | undefined): string | null {
+  const size = a.total_sequence_length;
+  if (!size || !median || a.refseq_category === "reference genome") return null;
+  const ratio = size / median;
+  if (ratio >= 1 / SIZE_OUTLIER && ratio <= SIZE_OUTLIER) return null;
+  const share = ratio < 1 ? `${fmtPct(ratio * 100)}% of` : `${ratio.toFixed(1)} times`;
+  return `${share} the species median (${fmtBp(median)})`;
+}
+
+/** The first column names each record's organism: the species, or one of its
+ *  subspecies and strains. */
+function AssemblyTable({ items, perSpecies }: { items: AssemblyRecord[]; perSpecies: boolean }) {
   const { search } = useLocation();
+  const medians = useSpeciesMedians(items);
+  const flags = items.map((a) => sizeFlag(a, medians.get(a.species_taxid)));
   return (
-    <div className="bd__table-wrap">
-      <table className="bd-table rec-table">
-        <thead>
-          <tr>
-            <th scope="col">{unit ? "Organism" : "Species"}</th>
-            <th scope="col">Assembly</th>
-            <th scope="col">Level</th>
-            <th scope="col" className="bd-num">
-              Contig N50
-            </th>
-            <th scope="col" className="bd-num">
-              Scaffold N50
-            </th>
-            <th scope="col" className="bd-num">
-              Size
-            </th>
-            <th scope="col">
-              <abbr title="Annotations of this assembly, and the best BUSCO completeness among them">
-                Annotations
-              </abbr>
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {items.map((a) => {
-            const more = (a.species_assemblies ?? 1) - 1;
-            return (
-              <tr key={a.assembly_accession}>
-                <td className="bd-name">
-                  {unit ? (
+    <>
+      <div className="bd__table-wrap">
+        <table className="bd-table rec-table">
+          <thead>
+            <tr>
+              <th scope="col">Organism</th>
+              <th scope="col">Assembly</th>
+              <th scope="col">Level</th>
+              <th scope="col" className="bd-num">
+                Contig N50
+              </th>
+              <th scope="col" className="bd-num">
+                Scaffold N50
+              </th>
+              <th scope="col" className="bd-num">
+                Size
+              </th>
+              <th scope="col">
+                <abbr title="Annotations of this assembly, and the best BUSCO completeness among them">
+                  Annotations
+                </abbr>
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {items.map((a, i) => {
+              const more = (a.species_assemblies ?? 1) - 1;
+              return (
+                <tr key={a.assembly_accession}>
+                  <td className="bd-name">
                     <Link className="rec-org" to={cladePath(a.taxid)}>
                       {a.organism_name}
                     </Link>
-                  ) : (
-                    <>
-                      <Link className="rec-org" to={cladePath(a.species_taxid)}>
-                        {a.species_name}
+                    {perSpecies && more > 0 && (
+                      <Link className="rec-sub" to={`${cladePath(a.species_taxid, "records")}${search}`}>
+                        {fmt(more)} more {more === 1 ? "assembly" : "assemblies"}
                       </Link>
-                      {a.taxid !== a.species_taxid && (
-                        <span className="rec-sub">{a.organism_name}</span>
-                      )}
-                    </>
-                  )}
-                  {perSpecies && more > 0 && (
-                    <Link className="rec-sub" to={`${cladePath(a.species_taxid, "records")}${search}`}>
-                      {fmt(more)} more {more === 1 ? "assembly" : "assemblies"}
-                    </Link>
-                  )}
-                </td>
-                <td data-label="Assembly">
-                  <span className="rec-acc">{a.assembly_accession}</span>
-                  {a.download_url && (
-                    <a className="rec-dl" href={a.download_url} target="_blank" rel="noreferrer">
-                      NCBI ↗
-                    </a>
-                  )}
-                  <AssemblyBadges a={a} />
-                  {a.release_date && <span className="rec-sub">Released {a.release_date}</span>}
-                </td>
-                <td data-label="Level">
-                  {a.assembly_level ? <LevelBadge level={a.assembly_level} /> : <Dash />}
-                </td>
-                <td className="bd-num" data-label="Contig N50">
-                  {a.contig_n50 ? fmtBp(a.contig_n50) : <Dash />}
-                </td>
-                <td className="bd-num" data-label="Scaffold N50">
-                  {a.scaffold_n50 ? fmtBp(a.scaffold_n50) : <Dash />}
-                </td>
-                <td className="bd-num" data-label="Size">
-                  {a.total_sequence_length ? fmtBp(a.total_sequence_length) : <Dash />}
-                </td>
-                <td data-label="Annotations">{annotationsText(a)}</td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
+                    )}
+                  </td>
+                  <td data-label="Assembly">
+                    <span className="rec-acc">{a.assembly_accession}</span>
+                    {a.download_url && (
+                      <a className="rec-dl" href={a.download_url} target="_blank" rel="noreferrer">
+                        NCBI ↗
+                      </a>
+                    )}
+                    <AssemblyBadges a={a} />
+                    {a.release_date && <span className="rec-sub">Released {a.release_date}</span>}
+                  </td>
+                  <td data-label="Level">
+                    {a.assembly_level ? <LevelBadge level={a.assembly_level} /> : <Dash />}
+                  </td>
+                  <td className="bd-num" data-label="Contig N50">
+                    {a.contig_n50 ? fmtBp(a.contig_n50) : <Dash />}
+                  </td>
+                  <td className="bd-num" data-label="Scaffold N50">
+                    {a.scaffold_n50 ? fmtBp(a.scaffold_n50) : <Dash />}
+                  </td>
+                  <td className="bd-num" data-label="Size">
+                    {a.total_sequence_length ? fmtBp(a.total_sequence_length) : <Dash />}
+                    {flags[i] && <span className="rec-size-flag">{flags[i]}</span>}
+                  </td>
+                  <td data-label="Annotations">{annotationsText(a)}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      {flags.some(Boolean) && (
+        <p className="records__foot-note">
+          A size under half or over twice the median of its species' assemblies is marked,
+          except on reference genomes: the assembly may hold only part of the genome, such as
+          one chromosome, or extra sequence, such as contamination or both haplotypes.
+        </p>
+      )}
+    </>
   );
 }
 
@@ -580,12 +593,11 @@ export function annotationsText(a: Pick<AssemblyRecord, "annotations" | "best_bu
 
 export function AssemblyBadges({ a }: { a: AssemblyRecord }) {
   const reference = a.refseq_category === "reference genome";
-  if (!reference && !a.ebp_standard && !a.undersized) return null;
+  if (!reference && !a.ebp_standard) return null;
   return (
     <span className="rec-badges">
       {reference && <span className="rec-badge rec-badge--ref">Reference</span>}
       {a.ebp_standard && <span className="rec-badge rec-badge--ebp">EBP standard</span>}
-      {a.undersized && <span className="rec-badge rec-badge--warn">Undersized</span>}
     </span>
   );
 }

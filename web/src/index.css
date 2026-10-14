@@ -1263,6 +1263,11 @@ a.rec-sub {
   color: var(--badge-warn-ink);
   background: var(--badge-warn);
 }
+.rec-size-flag {
+  display: block;
+  font-size: 0.78rem;
+  color: var(--badge-warn-ink);
+}
 
 /* ---- Breakdown (Q2) -------------------------------------------------- */
 .bd {

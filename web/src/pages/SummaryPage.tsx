@@ -170,7 +170,7 @@ function Headline({ clade }: { clade: Taxon }) {
   const ebp = useAsync(
     () =>
       covered > 0
-        ? getAssemblies(clade.taxid, { ebp_standard: true, one_per_species: true, limit: 1 }).then(
+        ? getAssemblies(clade.taxid, { ebp_standard: true, best_per_species: true, limit: 1 }).then(
             (p) => p.total,
           )
         : Promise.resolve(0),

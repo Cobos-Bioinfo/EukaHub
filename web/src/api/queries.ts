@@ -353,7 +353,7 @@ export interface AssemblyFilters {
   reference?: boolean;
   ebp_standard?: boolean;
   min_contig_n50?: number;
-  one_per_species?: boolean;
+  best_per_species?: boolean;
 }
 
 export const getAssemblies = async (
@@ -373,7 +373,7 @@ export function assembliesReportUrl(
   if (params.reference) q.set("reference", "true");
   if (params.ebp_standard) q.set("ebp_standard", "true");
   if (params.min_contig_n50 !== undefined) q.set("min_contig_n50", String(params.min_contig_n50));
-  if (params.one_per_species) q.set("one_per_species", "true");
+  if (params.best_per_species) q.set("best_per_species", "true");
   if (params.sort_by) q.set("sort_by", params.sort_by);
   return `${API_BASE}/assemblies/report?${q.toString()}`;
 }
