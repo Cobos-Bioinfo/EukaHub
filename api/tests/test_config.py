@@ -25,7 +25,6 @@ def test_config_shape(client):
     }
     checks = body["assembly_checks"]
     assert checks["ebp_min_scaffold_n50"] > checks["ebp_min_contig_n50"] > 0
-    assert 0 < checks["undersized_share"] < 1
     assert body["feedback_url"].startswith("https://")
     assert body["source_code_url"].startswith("https://")
     assert "{title}" in body["wikipedia_summary_url"]

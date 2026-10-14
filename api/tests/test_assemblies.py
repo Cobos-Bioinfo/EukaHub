@@ -1,5 +1,5 @@
-"""Tests for the assembly filters, the recommended order, one assembly per species,
-and the record downloads (``/assemblies/report``, ``/annotations/report``).
+"""Tests for the assembly filters, the recommended order, the best assembly per
+species, and the record downloads (``/assemblies/report``, ``/annotations/report``).
 
 They assert relationships between responses, so they hold on the full dataset and
 on the CI slice alike.
@@ -39,7 +39,6 @@ def _recommended_key(r: dict) -> tuple:
     level = LEVEL_ORDER.index(r["assembly_level"]) if r["assembly_level"] in LEVEL_ORDER else 4
     return (
         r["refseq_category"] != "reference genome",
-        r["undersized"],
         level,
         r["contig_n50"] is None,
         -(r["contig_n50"] or 0),
@@ -110,39 +109,21 @@ def test_ebp_flag_follows_the_thresholds(client, checks):
         assert r["ebp_standard"] == meets
 
 
-def test_undersized_against_the_species_median(client, checks):
-    """An assembly is undersized when it is under the share of its species' median
-    length, the genome size in the species' quality stats."""
-    rows = _walk(client, "/assemblies", within=MAMMALIA, sort_by="total_sequence_length", sort_order="asc")
-    species = sorted({r["species_taxid"] for r in rows})
-    median = {}
-    for i in range(0, len(species), 100):
-        ids = ",".join(map(str, species[i : i + 100]))
-        for t in _get(client, "/taxons/stats", taxids=ids, limit=100)["results"]:
-            median[t["taxid"]] = t["stats"]["genome_size"]
-    for r in rows:
-        m = median.get(r["species_taxid"])
-        expected = m is not None and r["total_sequence_length"] is not None and (
-            r["total_sequence_length"] < checks["undersized_share"] * m
-        )
-        assert r["undersized"] == expected, r["assembly_accession"]
-
-
 def test_species_of_a_subspecies_record(client):
     """A record counts under its species: the species is the record's own taxon or
-    one of its ancestors."""
+    the nearest species among its ancestors."""
     for r in _walk(client, "/assemblies", within=MAMMALIA)[:300]:
         if r["species_taxid"] != r["taxid"]:
             lineage = _get(client, f"/taxons/{r['taxid']}/ancestors")
-            assert r["species_taxid"] in [t["taxid"] for t in lineage]
-            assert r["species_name"] == next(t["name"] for t in lineage if t["taxid"] == r["species_taxid"])
+            species = [t["taxid"] for t in lineage if t["rank"] in ("species", "informal species")]
+            assert r["species_taxid"] == species[-1]
             return
     pytest.skip("no record below a species in the first rows")
 
 
-def test_one_per_species(client, mammalia):
-    rows = _walk(client, "/assemblies", within=MAMMALIA, one_per_species="true")
-    total = _get(client, "/assemblies", within=MAMMALIA, one_per_species="true", limit=1)["total"]
+def test_best_per_species(client, mammalia):
+    rows = _walk(client, "/assemblies", within=MAMMALIA, best_per_species="true")
+    total = _get(client, "/assemblies", within=MAMMALIA, best_per_species="true", limit=1)["total"]
     assert len(rows) == total
     assert len({r["species_taxid"] for r in rows}) == total
     # Every assembly is counted once, under its species; hybrids and other informal
@@ -154,23 +135,23 @@ def test_one_per_species(client, mammalia):
     assert keys == sorted(keys)
 
 
-def test_one_per_species_picks_the_recommended_one(client):
-    rows = _get(client, "/assemblies", within=MAMMALIA, one_per_species="true", limit=5)["results"]
+def test_best_per_species_picks_the_recommended_one(client):
+    rows = _get(client, "/assemblies", within=MAMMALIA, best_per_species="true", limit=5)["results"]
     for r in rows:
         best = _get(client, "/assemblies", within=r["species_taxid"], limit=1)["results"][0]
         assert best["assembly_accession"] == r["assembly_accession"]
         assert r["species_assemblies"] == _get(client, "/assemblies", within=r["species_taxid"], limit=1)["total"]
 
 
-def test_one_per_species_applies_the_filters_first(client):
-    rows = _walk(client, "/assemblies", within=MAMMALIA, one_per_species="true", assembly_level="scaffold")
+def test_best_per_species_applies_the_filters_first(client):
+    rows = _walk(client, "/assemblies", within=MAMMALIA, best_per_species="true", assembly_level="scaffold")
     assert all(r["assembly_level"] == "Scaffold" for r in rows)
     assert sum(r["species_assemblies"] for r in rows) == _get(
         client, "/assemblies", within=MAMMALIA, assembly_level="scaffold", limit=1
     )["total"]
 
 
-def test_species_assemblies_is_null_without_one_per_species(client):
+def test_species_assemblies_is_null_without_best_per_species(client):
     assert all(r["species_assemblies"] is None for r in _get(client, "/assemblies", within=MAMMALIA)["results"])
 
 
@@ -180,8 +161,8 @@ def test_species_assemblies_is_null_without_one_per_species(client):
         {"sort_by": "recommended"},
         {"sort_by": "recommended", "sort_order": "asc"},
         {"sort_by": "scaffold_n50"},
-        {"sort_by": "release_date", "one_per_species": "true"},
-        {"sort_by": "recommended", "one_per_species": "true"},
+        {"sort_by": "release_date", "best_per_species": "true"},
+        {"sort_by": "recommended", "best_per_species": "true"},
     ],
 )
 def test_cursor_walks_every_assembly_once(client, params):
@@ -219,7 +200,7 @@ def test_annotations_of_an_assembly(client):
 def test_bad_filters_are_a_422(client):
     assert client.get("/assemblies", params={"assembly_level": "whole"}).status_code == 422
     assert client.get("/assemblies", params={"min_contig_n50": -1}).status_code == 422
-    assert client.get("/assemblies", params={"one_per_species": "maybe"}).status_code == 422
+    assert client.get("/assemblies", params={"best_per_species": "maybe"}).status_code == 422
 
 
 def _tsv(resp) -> list[dict]:
@@ -230,7 +211,7 @@ def _tsv(resp) -> list[dict]:
 
 
 @pytest.mark.parametrize(
-    "params", [{}, {"one_per_species": "true"}, {"reference": "true", "sort_by": "contig_n50"}]
+    "params", [{}, {"best_per_species": "true"}, {"reference": "true", "sort_by": "contig_n50"}]
 )
 def test_assemblies_report_is_the_list(client, params):
     listed = _walk(client, "/assemblies", within=MAMMALIA, **params)

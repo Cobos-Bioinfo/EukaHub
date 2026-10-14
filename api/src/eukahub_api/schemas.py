@@ -291,17 +291,14 @@ class AssemblyRecord(BaseModel):
     bioprojects: list[str]
     download_url: str | None
     species_taxid: int = Field(
-        description="The species the assembly counts under: its own taxon, or the species "
-        "above a subspecies or strain."
+        description="The species the assembly belongs to, as in NCBI's assembly summaries: "
+        "`taxid` itself when the organism is a species, else the species above it (a "
+        "subspecies, strain or isolate). An organism without a formal species (a hybrid, an "
+        "unnamed `sp.`) is a species of its own, so this is never null."
     )
-    species_name: str
     ebp_standard: bool = Field(
         description="Meets the contiguity of the Earth BioGenome Project's reference standard "
         "(thresholds in /config)."
-    )
-    undersized: bool = Field(
-        description="Under half the median length of its species' assemblies, so it may "
-        "cover only part of the genome (one chromosome, an organelle)."
     )
     annotations: int = Field(
         description="Annotations of this assembly, of any version of its GenBank or RefSeq "
@@ -312,7 +309,7 @@ class AssemblyRecord(BaseModel):
         "none is scored."
     )
     species_assemblies: int | None = Field(
-        description="With `one_per_species`: how many assemblies of its species the list "
+        description="With `best_per_species`: how many assemblies of its species the list "
         "would hold without it. Otherwise null."
     )
 
@@ -421,14 +418,10 @@ class CustomGroupItem(BaseModel):
 
 
 class AssemblyChecks(BaseModel):
-    """The thresholds behind an assembly's ``ebp_standard`` and ``undersized``."""
+    """The thresholds behind an assembly's ``ebp_standard``."""
 
     ebp_min_contig_n50: int
     ebp_min_scaffold_n50: int
-    undersized_share: float = Field(
-        description="An assembly is undersized under this share of the median length of "
-        "its species' assemblies."
-    )
 
 
 class AppConfig(BaseModel):

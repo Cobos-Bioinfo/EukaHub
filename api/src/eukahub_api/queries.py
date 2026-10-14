@@ -609,8 +609,8 @@ def _fetch_page(
 @dataclass(frozen=True, slots=True)
 class AssemblyFilter:
     """The assemblies a list holds: those on or below ``within_path`` (every one when
-    None) that meet each condition given. With ``one_per_species``, only the
-    recommended one of each species among them."""
+    None) that meet each condition given. With ``best_per_species``, only the
+    first of each species among them in the recommended order."""
 
     within: int | None = None
     within_path: str | None = None
@@ -618,7 +618,7 @@ class AssemblyFilter:
     reference: bool = False
     ebp_standard: bool = False
     min_contig_n50: int | None = None
-    one_per_species: bool = False
+    best_per_species: bool = False
 
 
 # The species a record counts under: its own taxon if that is a species (formal or
@@ -630,10 +630,6 @@ _SPECIES_OF_SQL = (
     "WHERE u.taxid = ANY(string_to_array(ltree2text(subpath(t.path, 0, -1)), '.')::int[]) "
     f"AND u.rank IN ({_UNIT_RANKS_SQL}) ORDER BY nlevel(u.path) DESC LIMIT 1), t.taxid) END"
 )
-# An assembly under this share of the median length of its species' assemblies likely
-# covers only part of the genome (one chromosome, an organelle). A species with a
-# single assembly is its own median, so it is never flagged.
-UNDERSIZED_SHARE = 0.5
 # Annotations name an assembly by any version of its GenBank or RefSeq accession,
 # so they are matched to it by the number in between (GCA_000001405.29 ->
 # 000001405).
@@ -649,10 +645,6 @@ def _meets_ebp(a: str) -> str:
         f"COALESCE({a}.contig_n50 >= {EBP_MIN_CONTIG_N50} "
         f"AND {a}.scaffold_n50 >= {EBP_MIN_SCAFFOLD_N50}, false)"
     )
-
-
-def _undersized(a: str, stats: str) -> str:
-    return f"COALESCE({a}.total_sequence_length < {UNDERSIZED_SHARE} * {stats}.genome_size, false)"
 
 
 def _level_rank(a: str) -> str:
@@ -682,13 +674,12 @@ def _assembly_where(f: AssemblyFilter) -> tuple[str, list[object]]:
 
 def _assembly_keys(sort: str, descending: bool) -> list[Key]:
     """The keys of an assembly sort, over the columns of ``_assembly_candidates``.
-    ``recommended``: reference genomes first, then those of a plausible size, then
-    the most complete level, then the longest contig N50."""
+    ``recommended``: reference genomes first, then the most complete level, then
+    the longest contig N50."""
     sort = _identifier(sort, [s.value for s in AssemblySort])
     if sort == "recommended":
         return [
             Key("is_reference", "boolean", descending),
-            Key("undersized", "boolean", not descending),
             Key("level_rank", "integer", not descending),
             Key("(contig_n50 IS NULL)", "boolean"),
             Key("contig_n50", "bigint", descending),
@@ -701,35 +692,28 @@ def _assembly_keys(sort: str, descending: bool) -> list[Key]:
     ]
 
 
-def _assembly_candidates(f: AssemblyFilter, sort: str) -> tuple[str, list[object]]:
+def _assembly_candidates(f: AssemblyFilter) -> tuple[str, list[object]]:
     """CTEs ending in ``c``: one row per assembly the list holds (per species with
-    ``one_per_species``) with the columns its keys read. Each assembly's species,
-    size check and level rank are only worked out when the sort or
-    ``one_per_species`` needs them: over a large group they cost more than the rest."""
+    ``best_per_species``) with the columns its keys read. Each assembly's species is
+    only looked up for ``best_per_species``: over a large group it costs more than
+    the rest."""
     where, params = _assembly_where(f)
     cols = (
         "r.assembly_accession AS id, r.contig_n50, r.scaffold_n50, "
-        "r.total_sequence_length, r.release_date"
+        "r.total_sequence_length, r.release_date, "
+        f"{_is_reference('r')} AS is_reference, {_level_rank('r')} AS level_rank"
     )
     source = f"FROM assembly r JOIN taxon t USING (taxid) {where}"
-    if sort != "recommended" and not f.one_per_species:
+    if not f.best_per_species:
         return f"c AS (SELECT {cols} {source})", params
-    # MATERIALIZED, so each row's species is looked up once, not once per use.
-    ranked = (
-        f"m AS MATERIALIZED (SELECT {cols}, {_SPECIES_OF_SQL} AS species, "
-        f"{_is_reference('r')} AS is_reference, {_level_rank('r')} AS level_rank {source}), "
-        f"k AS (SELECT m.*, {_undersized('m', 's')} AS undersized "
-        "FROM m LEFT JOIN clade_stats s ON s.taxid = m.species)"
-    )
-    if not f.one_per_species:
-        return f"{ranked}, c AS (SELECT * FROM k)", params
     best = ", ".join(
         f"{k.sql} {'DESC' if k.descending else 'ASC'}" for k in _assembly_keys("recommended", True)
     )
     per_species = (
-        f"{ranked}, c AS (SELECT DISTINCT ON (species) k.*, "
+        f"m AS (SELECT {cols}, {_SPECIES_OF_SQL} AS species {source}), "
+        "c AS (SELECT DISTINCT ON (species) m.*, "
         "count(*) OVER (PARTITION BY species) AS species_assemblies "
-        f"FROM k ORDER BY species, {best})"
+        f"FROM m ORDER BY species, {best})"
     )
     return per_species, params
 
@@ -741,10 +725,10 @@ def _assemblies_sql(
     their key values k0, k1, ...: the page after (or before) ``after`` when ``limit``
     is set, else every one."""
     keys = _assembly_keys(sort, descending)
-    candidates, params = _assembly_candidates(f, sort)
+    candidates, params = _assembly_candidates(f)
     beyond_sql, beyond_params = beyond(keys, after) if after else ("TRUE", [])
     backward = after is not None and after.backward
-    per_species = "species_assemblies, " if f.one_per_species else ""
+    per_species = "species_assemblies, " if f.best_per_species else ""
     number = _ASSEMBLY_NUMBER
     sql = (
         f"WITH {candidates}, "
@@ -755,14 +739,11 @@ def _assemblies_sql(
         "max(n.busco_complete) AS best_busco "
         f"FROM annotation n WHERE {number.format('n.assembly_accession')} IN "
         f"(SELECT {number.format('id')} FROM p) GROUP BY 1) "
-        f"SELECT {_ASSEMBLY_RECORD_SELECT}, sp.taxid AS species_taxid, sp.name AS species_name, "
-        f"{_meets_ebp('a')} AS ebp_standard, {_undersized('a', 'st')} AS undersized, "
-        "COALESCE(ann.n, 0) AS annotations, ann.best_busco, "
-        f"{'p.species_assemblies' if f.one_per_species else 'NULL::bigint AS species_assemblies'}, "
+        f"SELECT {_ASSEMBLY_RECORD_SELECT}, {_SPECIES_OF_SQL} AS species_taxid, "
+        f"{_meets_ebp('a')} AS ebp_standard, COALESCE(ann.n, 0) AS annotations, ann.best_busco, "
+        f"{'p.species_assemblies' if f.best_per_species else 'NULL::bigint AS species_assemblies'}, "
         f"{', '.join(f'p.k{i}' for i in range(len(keys)))} "
         "FROM p JOIN assembly a ON a.assembly_accession = p.id JOIN taxon t ON t.taxid = a.taxid "
-        f"CROSS JOIN LATERAL (SELECT {_SPECIES_OF_SQL} AS taxid) u "
-        "JOIN taxon sp ON sp.taxid = u.taxid LEFT JOIN clade_stats st ON st.taxid = u.taxid "
         f"LEFT JOIN ann ON ann.num = {number.format('a.assembly_accession')} "
         f"ORDER BY {order_by(keys, backward=backward, table='p')}"
     )
@@ -780,12 +761,12 @@ def list_assemblies(
 ) -> tuple[int, Page[dict]]:
     """One page of the assemblies of ``f``, as dicts keyed by the response-model
     fields, with the number of rows the list holds (species, with
-    ``one_per_species``). Raises ``InvalidCursor`` for a cursor of another ordering."""
+    ``best_per_species``). Raises ``InvalidCursor`` for a cursor of another ordering."""
     keys = _assembly_keys(sort, descending)
     ordering = f"assembly:{sort}:{'desc' if descending else 'asc'}"
     after = decode_cursor(cursor, ordering=ordering, keys=keys) if cursor else None
     where, params = _assembly_where(f)
-    unit = f"DISTINCT {_SPECIES_OF_SQL}" if f.one_per_species else "r.assembly_accession"
+    unit = f"DISTINCT {_SPECIES_OF_SQL}" if f.best_per_species else "r.assembly_accession"
     total = counts.count(
         conn, f"SELECT {unit} FROM assembly r JOIN taxon t USING (taxid) {where}", params
     )

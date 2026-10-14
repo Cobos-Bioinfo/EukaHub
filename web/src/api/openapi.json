@@ -395,7 +395,7 @@
         "type": "object"
       },
       "AssemblyChecks": {
-        "description": "The thresholds behind an assembly's ``ebp_standard`` and ``undersized``.",
+        "description": "The thresholds behind an assembly's ``ebp_standard``.",
         "properties": {
           "ebp_min_contig_n50": {
             "title": "Ebp Min Contig N50",
@@ -404,17 +404,11 @@
           "ebp_min_scaffold_n50": {
             "title": "Ebp Min Scaffold N50",
             "type": "integer"
-          },
-          "undersized_share": {
-            "description": "An assembly is undersized under this share of the median length of its species' assemblies.",
-            "title": "Undersized Share",
-            "type": "number"
           }
         },
         "required": [
           "ebp_min_contig_n50",
-          "ebp_min_scaffold_n50",
-          "undersized_share"
+          "ebp_min_scaffold_n50"
         ],
         "title": "AssemblyChecks",
         "type": "object"
@@ -652,15 +646,11 @@
                 "type": "null"
               }
             ],
-            "description": "With `one_per_species`: how many assemblies of its species the list would hold without it. Otherwise null.",
+            "description": "With `best_per_species`: how many assemblies of its species the list would hold without it. Otherwise null.",
             "title": "Species Assemblies"
           },
-          "species_name": {
-            "title": "Species Name",
-            "type": "string"
-          },
           "species_taxid": {
-            "description": "The species the assembly counts under: its own taxon, or the species above a subspecies or strain.",
+            "description": "The species the assembly belongs to, as in NCBI's assembly summaries: `taxid` itself when the organism is a species, else the species above it (a subspecies, strain or isolate). An organism without a formal species (a hybrid, an unnamed `sp.`) is a species of its own, so this is never null.",
             "title": "Species Taxid",
             "type": "integer"
           },
@@ -689,11 +679,6 @@
               }
             ],
             "title": "Total Sequence Length"
-          },
-          "undersized": {
-            "description": "Under half the median length of its species' assemblies, so it may cover only part of the genome (one chromosome, an organelle).",
-            "title": "Undersized",
-            "type": "boolean"
           }
         },
         "required": [
@@ -712,9 +697,7 @@
           "bioprojects",
           "download_url",
           "species_taxid",
-          "species_name",
           "ebp_standard",
-          "undersized",
           "annotations",
           "best_busco",
           "species_assemblies"
@@ -1593,18 +1576,18 @@
     },
     "/assemblies": {
       "get": {
-        "description": "Genome assemblies, recommended first by default. ``total`` counts species\nwith ``one_per_species``. The quality stats of a taxon's assemblies are in\n``/taxons/{taxid}/stats``.",
+        "description": "Genome assemblies, recommended first by default. ``total`` counts species\nwith ``best_per_species``. The quality stats of a taxon's assemblies are in\n``/taxons/{taxid}/stats``.",
         "operationId": "assemblies_assemblies_get",
         "parameters": [
           {
-            "description": "`recommended`: reference genomes first, then those of a plausible size (not `undersized`), then the most complete level, then the longest contig N50. Or a field of the record; records missing it come last.",
+            "description": "`recommended`: reference genomes first, then the most complete level, then the longest contig N50. Or a field of the record; records missing it come last.",
             "in": "query",
             "name": "sort_by",
             "required": false,
             "schema": {
               "$ref": "#/components/schemas/AssemblySort",
               "default": "recommended",
-              "description": "`recommended`: reference genomes first, then those of a plausible size (not `undersized`), then the most complete level, then the longest contig N50. Or a field of the record; records missing it come last."
+              "description": "`recommended`: reference genomes first, then the most complete level, then the longest contig N50. Or a field of the record; records missing it come last."
             }
           },
           {
@@ -1731,14 +1714,14 @@
             }
           },
           {
-            "description": "Only the recommended assembly of each species (subspecies and strains count with their species), among those the other filters keep.",
+            "description": "Only the best assembly of each species, the first in the recommended order among those the other filters keep. Subspecies and strains count with their species (`species_taxid`).",
             "in": "query",
-            "name": "one_per_species",
+            "name": "best_per_species",
             "required": false,
             "schema": {
               "default": false,
-              "description": "Only the recommended assembly of each species (subspecies and strains count with their species), among those the other filters keep.",
-              "title": "One Per Species",
+              "description": "Only the best assembly of each species, the first in the recommended order among those the other filters keep. Subspecies and strains count with their species (`species_taxid`).",
+              "title": "Best Per Species",
               "type": "boolean"
             }
           }
@@ -1777,14 +1760,14 @@
         "operationId": "assemblies_report_assemblies_report_get",
         "parameters": [
           {
-            "description": "`recommended`: reference genomes first, then those of a plausible size (not `undersized`), then the most complete level, then the longest contig N50. Or a field of the record; records missing it come last.",
+            "description": "`recommended`: reference genomes first, then the most complete level, then the longest contig N50. Or a field of the record; records missing it come last.",
             "in": "query",
             "name": "sort_by",
             "required": false,
             "schema": {
               "$ref": "#/components/schemas/AssemblySort",
               "default": "recommended",
-              "description": "`recommended`: reference genomes first, then those of a plausible size (not `undersized`), then the most complete level, then the longest contig N50. Or a field of the record; records missing it come last."
+              "description": "`recommended`: reference genomes first, then the most complete level, then the longest contig N50. Or a field of the record; records missing it come last."
             }
           },
           {
@@ -1880,14 +1863,14 @@
             }
           },
           {
-            "description": "Only the recommended assembly of each species (subspecies and strains count with their species), among those the other filters keep.",
+            "description": "Only the best assembly of each species, the first in the recommended order among those the other filters keep. Subspecies and strains count with their species (`species_taxid`).",
             "in": "query",
-            "name": "one_per_species",
+            "name": "best_per_species",
             "required": false,
             "schema": {
               "default": false,
-              "description": "Only the recommended assembly of each species (subspecies and strains count with their species), among those the other filters keep.",
-              "title": "One Per Species",
+              "description": "Only the best assembly of each species, the first in the recommended order among those the other filters keep. Subspecies and strains count with their species (`species_taxid`).",
+              "title": "Best Per Species",
               "type": "boolean"
             }
           }
