@@ -35,5 +35,7 @@ export type FilterLogic = components["schemas"]["FilterLogic"];
 
 // Per-record drill-down sort enums (assemblies / annotations lists).
 export type AssemblySort = components["schemas"]["AssemblySort"];
+export type AssemblyLevel = components["schemas"]["AssemblyLevel"];
+export type AssemblyChecks = components["schemas"]["AssemblyChecks"];
 export type AnnotationSort = components["schemas"]["AnnotationSort"];
 export type SortOrder = components["schemas"]["SortOrder"];

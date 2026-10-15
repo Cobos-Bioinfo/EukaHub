@@ -7,6 +7,8 @@ import type {
   AnnotationPage,
   AnnotationSort,
   AppConfig,
+  AssemblyChecks,
+  AssemblyLevel,
   AssemblyPage,
   AssemblySort,
   DatasetMeta,
@@ -70,6 +72,9 @@ export const getMetricsConfig = async (): Promise<MetricConfig[]> => (await getC
 
 export const getQualityConfig = async (): Promise<QualityStatConfig[]> =>
   (await getConfig()).quality_stats;
+
+export const getAssemblyChecks = async (): Promise<AssemblyChecks> =>
+  (await getConfig()).assembly_checks;
 
 // Dataset provenance for the app-wide "Data updated" footer stamp. built_at is
 // null before the first build has stamped the DB.
@@ -342,11 +347,42 @@ export interface RecordParams<Sort> {
   cursor?: string;
 }
 
+/** Which assemblies a list holds (see /assemblies); the defaults keep them all. */
+export interface AssemblyFilters {
+  assembly_level?: AssemblyLevel[];
+  reference?: boolean;
+  ebp_standard?: boolean;
+  min_contig_n50?: number;
+  best_per_species?: boolean;
+}
+
 export const getAssemblies = async (
   within: number,
-  params: RecordParams<AssemblySort> = {},
+  params: RecordParams<AssemblySort> & AssemblyFilters = {},
 ): Promise<AssemblyPage> =>
   unwrap(await api.GET("/assemblies", { params: { query: { within, ...params } } }));
+
+// Direct URLs for a record list as TSV (browser downloads, not fetches): every
+// record the list pages through, in its order.
+export function assembliesReportUrl(
+  within: number,
+  params: AssemblyFilters & { sort_by?: AssemblySort },
+): string {
+  const q = new URLSearchParams({ within: String(within) });
+  for (const level of params.assembly_level ?? []) q.append("assembly_level", level);
+  if (params.reference) q.set("reference", "true");
+  if (params.ebp_standard) q.set("ebp_standard", "true");
+  if (params.min_contig_n50 !== undefined) q.set("min_contig_n50", String(params.min_contig_n50));
+  if (params.best_per_species) q.set("best_per_species", "true");
+  if (params.sort_by) q.set("sort_by", params.sort_by);
+  return `${API_BASE}/assemblies/report?${q.toString()}`;
+}
+
+export function annotationsReportUrl(within: number, sort_by?: AnnotationSort): string {
+  const q = new URLSearchParams({ within: String(within) });
+  if (sort_by) q.set("sort_by", sort_by);
+  return `${API_BASE}/annotations/report?${q.toString()}`;
+}
 
 export const getAnnotations = async (
   within: number,

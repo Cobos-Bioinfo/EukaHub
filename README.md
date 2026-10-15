@@ -37,7 +37,13 @@ production-grade stack (PostgreSQL + FastAPI + a React/TypeScript SPA).
 ## Features
 
 - **Genomic Resource Summary**: assemblies, annotations, and short/long-read
-  RNA-Seq for any clade, with coverage meters over the full species count.
+  RNA-Seq for any clade, with coverage meters over the full species count, its
+  recommended genomes and where its biggest gaps are. A species with no data points
+  to the best-sequenced species of its genus (or family, or order).
+- **Records**: the genome assemblies and annotations of any clade, the best
+  assembly of each species or all of them, filtered by EBP standard, reference genome,
+  assembly level and contig N50, with a link to each record and a TSV of the list. A
+  size far from the median of its species' assemblies is marked.
 - **Quality dimension**: best BUSCO completeness and median contig N50, genome
   size and protein-coding gene counts for every clade, computed at build time from
   per-record tables.

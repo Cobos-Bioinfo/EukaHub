@@ -65,6 +65,13 @@
   --range-4-ink: #ffffff;
   --range-5: #183d78;
   --range-5-ink: #ffffff;
+  /* Record badges: a tint and the ink that reads on it (7:1 or more). */
+  --badge-ref: #dcf2e3;
+  --badge-ref-ink: #14532d;
+  --badge-ebp: #e3eefc;
+  --badge-ebp-ink: #1b3d73;
+  --badge-warn: #fdecd6;
+  --badge-warn-ink: #7a3a08;
   --radius: 12px;
   --shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 1px 3px rgba(16, 24, 40, 0.06);
   --maxw: 1360px; /* content cap — wide enough for the dashboard two-column body */
@@ -137,6 +144,12 @@
   --range-4-ink: #ffffff;
   --range-5: #2a56a0;
   --range-5-ink: #ffffff;
+  --badge-ref: #1b3a26;
+  --badge-ref-ink: #a7e3b9;
+  --badge-ebp: #1c2e4a;
+  --badge-ebp-ink: #b9d3f7;
+  --badge-warn: #3d2912;
+  --badge-warn-ink: #f3c991;
 }
 
 * {
@@ -374,8 +387,197 @@ a:hover {
 }
 
 /* ---- Summary --------------------------------------------------------- */
-.dashboard__head {
-  margin-bottom: 1.5rem;
+/* One column: the header, the coverage cards, then rows of panels that sit side
+   by side when there is room. */
+.summary {
+  display: flex;
+  flex-direction: column;
+  gap: 1.75rem;
+}
+.summary__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem 1.5rem;
+}
+.summary__id {
+  min-width: 0;
+}
+.summary__headline {
+  max-width: var(--measure);
+  margin: 0.6rem 0 0;
+  font-size: 1.05rem;
+  color: var(--ink-2);
+}
+.summary__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 1.25rem;
+}
+.summary__wide {
+  flex: 2 1 560px;
+  min-width: 0;
+}
+.summary__narrow {
+  flex: 1 1 320px;
+  min-width: 0;
+}
+.summary__row:empty {
+  display: none;
+}
+.summary .about-card,
+.summary .quality {
+  margin: 0;
+}
+.summary__wide > .about-card,
+.summary__narrow > .species-links {
+  height: 100%;
+}
+@media (min-width: 1040px) {
+  .summary .card-grid,
+  .summary .quality__tiles {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  padding: 1.1rem 1.25rem 1.2rem;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+.panel__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.25rem 1rem;
+}
+.panel__title {
+  margin: 0;
+  font-size: 1.15rem;
+  letter-spacing: -0.01em;
+}
+.panel__sub {
+  margin: 0;
+  font-size: 0.86rem;
+  color: var(--ink-2);
+}
+.sum-table {
+  min-width: 0;
+}
+.sum-table th,
+.sum-table td {
+  padding-inline: 0.5rem;
+}
+.sum-table th:first-child,
+.sum-table td:first-child {
+  padding-left: 0;
+}
+.sum-table td.bd-name {
+  white-space: normal;
+}
+.sum-gaps {
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+  margin: 0.2rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+.sum-gaps__line {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.25rem 0.75rem;
+  font-size: 0.92rem;
+}
+.sum-gaps__count {
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+.sum-gaps__bar {
+  display: block;
+  height: 8px;
+  margin-top: 0.35rem;
+  background: var(--track);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.sum-gaps__bar > span {
+  display: block;
+  height: 100%;
+  background: var(--range-3);
+}
+.sum-class {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin: 0;
+}
+.sum-class__row {
+  display: flex;
+  gap: 0.75rem;
+  font-size: 0.92rem;
+}
+.sum-class dt {
+  flex: 0 0 7.5rem;
+  color: var(--ink-2);
+}
+.sum-class dd {
+  margin: 0;
+  min-width: 0;
+}
+.sum-ranks summary {
+  font-size: 0.88rem;
+  color: var(--link);
+  cursor: pointer;
+}
+.sum-ranks .sum-class {
+  margin-top: 0.6rem;
+}
+.see-also__list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.9rem;
+  margin: 0.2rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+.see-also__card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  padding: 0.85rem 0.95rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.see-also__name {
+  font-size: 1rem;
+}
+.see-also__facts {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin: 0;
+  font-size: 0.86rem;
+}
+.see-also__facts > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+.see-also__facts dt {
+  color: var(--ink-2);
+}
+.see-also__facts dd {
+  margin: 0;
+  text-align: right;
 }
 .dashboard__title {
   display: flex;
@@ -399,35 +601,22 @@ a:hover {
   padding: 0.15rem 0.55rem;
   border-radius: 999px;
 }
-.dashboard__species {
-  margin: 0.5rem 0 0;
-  color: var(--ink-2);
-}
-.dashboard__species strong {
-  color: var(--ink);
-}
 .dashboard__compare {
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
-  margin-top: 0.75rem;
+  margin-top: 0.5rem;
   font-size: 0.88rem;
   font-weight: 600;
-}
-/* Where to go next: the records and the breakdown, one line each. */
-.dashboard__next {
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-  margin: 1.25rem 0 0;
-  padding: 0;
-  list-style: none;
-  max-width: var(--measure);
-  color: var(--ink-2);
 }
 
 /* ---- Records page ------------------------------------------------------ */
 .records-page__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 0.75rem 1.5rem;
   margin-bottom: 1.25rem;
 }
 .records-page__title {
@@ -457,50 +646,6 @@ a:hover {
   white-space: nowrap;
   color: var(--link-strong);
   text-decoration: underline;
-}
-
-/* Two-column body: a context rail (About + tree CTA) beside the metrics +
-   breakdown. Collapses to a single stack below 960px. */
-.dashboard__body {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 1.5rem;
-}
-.dashboard__side {
-  display: flex;
-  flex-direction: column;
-  gap: 1.25rem;
-  min-width: 0;
-}
-.dashboard__content {
-  min-width: 0; /* let wide tables/charts scroll instead of stretching the grid */
-}
-@media (min-width: 960px) {
-  .dashboard__body {
-    grid-template-columns: 320px minmax(0, 1fr);
-    gap: 2rem;
-    align-items: start;
-  }
-  .dashboard__side {
-    position: sticky;
-    top: 68px; /* clear the sticky app bar */
-  }
-}
-/* The identity header (name, rank, species count) lives at the top of the rail
-   so it stays pinned with the About card while the content scrolls. The flex
-   gap handles spacing, so drop its own margin. */
-.dashboard__side .dashboard__head {
-  margin-bottom: 0;
-}
-/* About card, when it lives in the rail: stack vertically, banner thumbnail,
-   no trailing margin (the flex gap handles spacing). */
-.dashboard__side .about-card {
-  flex-direction: column;
-  margin-bottom: 0;
-}
-.dashboard__side .about-card__thumb {
-  width: 100%;
-  height: 160px;
 }
 
 /* ---- About card (Wikipedia) ----------------------------------------- */
@@ -887,6 +1032,17 @@ a:hover {
 .rec-table {
   min-width: 760px;
 }
+.rec-table th,
+.rec-table td {
+  padding-inline: 0.6rem;
+}
+.rec-table td.bd-name {
+  min-width: 9rem;
+  white-space: normal;
+}
+.rec-table abbr {
+  text-decoration: none;
+}
 .rec-org {
   font-style: italic;
   font-weight: 500;
@@ -941,6 +1097,176 @@ a:hover {
 .dl:disabled {
   opacity: 0.6;
   cursor: default;
+}
+
+/* Filters beside the list on a wide screen, folded above it on a phone. */
+.records {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 1.5rem;
+}
+.records__results {
+  flex: 999 1 640px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+.rec-filters {
+  flex: 1 1 220px;
+  max-width: 280px;
+  padding: 1rem 1.1rem 1.15rem;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.rec-filters__title {
+  font-size: 0.95rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.rec-filters__body {
+  display: flex;
+  flex-direction: column;
+  gap: 1.1rem;
+  margin-top: 0.85rem;
+}
+.rec-filters__group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-inline-size: 0;
+}
+.rec-filters__group legend {
+  padding: 0;
+  margin-bottom: 0.35rem;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+.rec-filters__note {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--ink-2);
+}
+.rec-filters__clear {
+  align-self: flex-start;
+  font-size: 0.88rem;
+}
+.rec-check {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+.rec-check input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--link);
+}
+.rec-check > span:first-of-type {
+  flex: 1;
+}
+.rec-check__count {
+  font-size: 0.82rem;
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+@media (max-width: 640px) {
+  .rec-filters {
+    flex-basis: 100%;
+    max-width: none;
+  }
+}
+.records__bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 0.75rem 1.25rem;
+}
+.records__count {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 700;
+}
+.records__note {
+  max-width: var(--measure);
+  margin: 0.15rem 0 0;
+  font-size: 0.82rem;
+  color: var(--ink-2);
+}
+.records__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.75rem;
+}
+.records__foot-note {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--ink-2);
+}
+.dl.dl--primary {
+  padding: 0.5rem 0.9rem;
+  font-size: 0.85rem;
+  color: #fff;
+  background: var(--cta);
+  border-color: var(--cta);
+}
+.dl.dl--primary:hover {
+  color: #fff;
+  background: var(--cta);
+  border-color: var(--cta);
+  filter: brightness(1.1);
+}
+.rec__pages {
+  display: flex;
+  gap: 0.5rem;
+}
+.rec-sub {
+  display: block;
+  font-size: 0.78rem;
+  color: var(--ink-2);
+}
+a.rec-sub {
+  color: var(--link);
+}
+.rec-acc + .rec-dl {
+  margin-left: 0.5rem;
+}
+.rec-badges {
+  display: flex;
+  gap: 0.3rem;
+  margin-top: 0.3rem;
+}
+.rec-badge {
+  padding: 0.05rem 0.4rem;
+  font-size: 0.7rem;
+  font-weight: 700;
+  border-radius: 4px;
+}
+.rec-badge--ref {
+  color: var(--badge-ref-ink);
+  background: var(--badge-ref);
+}
+.rec-badge--ebp {
+  color: var(--badge-ebp-ink);
+  background: var(--badge-ebp);
+}
+.rec-badge--warn {
+  color: var(--badge-warn-ink);
+  background: var(--badge-warn);
+}
+.rec-size-flag {
+  display: block;
+  font-size: 0.78rem;
+  color: var(--badge-warn-ink);
 }
 
 /* ---- Breakdown (Q2) -------------------------------------------------- */
@@ -3535,7 +3861,6 @@ button.menu__item {
 .faq__a a,
 .legal a,
 .nodata__text a,
-.dashboard__next a,
 .records-page__sub a,
 .errpage__text a {
   text-decoration: underline;

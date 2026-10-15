@@ -20,9 +20,12 @@ const PAGES = [
   { path: "/clade/40674/map?view=list", tab: "Data map" },
   { path: "/clade/40674/map?colour=chrom&rank=family&size=assemblies", tab: "Data map" },
   { path: "/clade/40674/records", tab: "Records" },
+  { path: "/clade/40674/records?ebp=1&one=0&level=chromosome&sort=contig_n50", tab: "Records" },
+  { path: "/clade/40674/records?show=annotations&sort=release_date", tab: "Records" },
   { path: "/clade/40674/tree", tab: "Tree of Life" },
   { path: "/clade/40674/gaps", tab: "Gaps" },
   { path: "/clade/9606", tab: "Summary" },
+  { path: "/clade/1425170", tab: "Summary" }, // no data: the relatives in its genus
   { path: "/clade/9606/map" },
   { path: "/map/40674?d=9443", lands: "/clade/9443/map", tab: "Data map" },
   { path: "/tree/40674", lands: "/clade/40674/tree", tab: "Tree of Life" },

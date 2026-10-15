@@ -1,21 +1,34 @@
 import { Link } from "react-router";
 
-import { getAbout, getMetricsConfig, getQualityConfig, getTaxonStats } from "../api/queries";
+import {
+  getAbout,
+  getAssemblies,
+  getMetricsConfig,
+  getQualityConfig,
+  getTaxonStats,
+} from "../api/queries";
+import type { Taxon } from "../api/types";
 import AboutCard from "../components/AboutCard";
+import Classification from "../components/Classification";
 import { TaxonError } from "../components/ErrorPage";
+import GapsPointer from "../components/GapsPointer";
 import MetricCard from "../components/MetricCard";
 import NoDataNotice from "../components/NoDataNotice";
 import QualitySection from "../components/QualitySection";
+import RecommendedGenomes from "../components/RecommendedGenomes";
+import SeeAlso from "../components/SeeAlso";
 import SpeciesLinks from "../components/SpeciesLinks";
 import SubspeciesSection from "../components/SubspeciesSection";
 import { CompareIcon } from "../components/icons";
 import { useAsync } from "../hooks/useAsync";
-import { cladePath, hasRecords, isUnit } from "../lib/clade";
-import { fmt } from "../lib/format";
+import { isUnit } from "../lib/clade";
+import { fmt, fmtPct } from "../lib/format";
 import { INFORMAL_SPECIES_RANK } from "../lib/taxonomy";
 import { useClade } from "./CladeLayout";
 
-/** The Summary view of one group: how much data it has and of what quality. The
+/** The Summary view of one group: a sentence on how much of it has data, the
+ *  coverage of each source, its recommended genomes, where the gaps are, the
+ *  quality of its records, then its classification and Wikipedia's summary. The
  *  breakdown is on the Data map and the records on Records. */
 export default function SummaryPage() {
   const s = useClade();
@@ -42,89 +55,77 @@ export default function SummaryPage() {
   const belowLabel = isInfra ? "from finer subdivisions" : "from subspecies and strains";
 
   return (
-    <section className="dashboard">
-      <div className="dashboard__body">
-        <aside className="dashboard__side">
-          <header className="dashboard__head">
-            <div className="dashboard__title">
-              <h1 className="dashboard__name">{s.name}</h1>
-              <span className="rank-badge">{s.rank}</span>
-            </div>
-            {isInfra ? (
-              <p className="dashboard__note">
-                This {rankWord} is not counted as a separate species. Its data counts toward its
-                species and every group above it. <Link to="/faq#subspecies">See FAQs</Link>
-              </p>
-            ) : isInformal ? (
-              <p className="dashboard__note">
-                NCBI records this taxon without a formal species name, so it is not counted as a
-                species. Its data counts toward every group above it.{" "}
-                <Link to="/faq#informal-species">See FAQs</Link>
-              </p>
-            ) : (
-              !unit && (
-                <p className="dashboard__species">
-                  <strong>{fmt(s.species)}</strong> species in this clade
-                </p>
-              )
-            )}
-            <Link className="dashboard__compare" to={`/compare?taxids=${taxid}`}>
-              <CompareIcon size={15} />
-              Add to compare
-            </Link>
-          </header>
-          {about.data && <AboutCard about={about.data} />}
-          {unit && !noData && <SpeciesLinks metrics={metrics.data} taxid={taxid} />}
-        </aside>
-
-        <div className="dashboard__content">
-          {noData ? (
-            <NoDataNotice
-              taxid={taxid}
-              name={s.name}
-              rank={s.rank}
-              isUnit={unit}
-              species={s.species}
-              ncbiUrlTemplate={metrics.data.find((m) => m.key === "assemblies")?.external_url_template}
-            />
+    <section className="summary">
+      <header className="summary__head">
+        <div className="summary__id">
+          <div className="dashboard__title">
+            <h1 className="dashboard__name">{s.name}</h1>
+            <span className="rank-badge">{s.rank}</span>
+          </div>
+          {isInfra ? (
+            <p className="dashboard__note">
+              This {rankWord} is not counted as a separate species. Its data counts toward its
+              species and every group above it. <Link to="/faq#subspecies">See FAQs</Link>
+            </p>
+          ) : isInformal ? (
+            <p className="dashboard__note">
+              NCBI records this taxon without a formal species name, so it is not counted as a
+              species. Its data counts toward every group above it.{" "}
+              <Link to="/faq#informal-species">See FAQs</Link>
+            </p>
           ) : (
-            <div className="card-grid">
-              {metrics.data.map((m) => {
-                const value = s.resources[m.key];
-                return value ? (
-                  <MetricCard
-                    key={m.key}
-                    config={m}
-                    value={value}
-                    taxid={taxid}
-                    mode={unit ? "count" : "coverage"}
-                    direct={s.direct?.[m.key]}
-                    belowLabel={belowLabel}
-                  />
-                ) : null;
-              })}
-            </div>
+            !unit && !noData && <Headline clade={s} />
           )}
+        </div>
+        <Link className="dashboard__compare" to={`/compare?taxids=${taxid}`}>
+          <CompareIcon size={15} />
+          Add to compare
+        </Link>
+      </header>
 
-          {!noData && (hasRecords(s) || !unit) && (
-            <ul className="dashboard__next">
-              {hasRecords(s) && (
-                <li>
-                  {recordCounts(s.resources.assemblies.total, s.resources.annotations.total)} listed on{" "}
-                  <Link to={cladePath(taxid, "records")}>Records</Link>, with links to download
-                  them.
-                </li>
-              )}
-              {!unit && (
-                <li>
-                  See how this data is spread across the groups inside {s.name} on the{" "}
-                  <Link to={cladePath(taxid, "map")}>Data map</Link>.
-                </li>
-              )}
-            </ul>
-          )}
+      {noData ? (
+        <>
+          <NoDataNotice
+            taxid={taxid}
+            name={s.name}
+            rank={s.rank}
+            isUnit={unit}
+            species={s.species}
+            ncbiUrlTemplate={metrics.data.find((m) => m.key === "assemblies")?.external_url_template}
+          />
+          {unit && <SeeAlso clade={s} />}
+        </>
+      ) : (
+        <>
+          <div className="card-grid">
+            {metrics.data.map((m) => {
+              const value = s.resources[m.key];
+              return value ? (
+                <MetricCard
+                  key={m.key}
+                  config={m}
+                  value={value}
+                  taxid={taxid}
+                  mode={unit ? "count" : "coverage"}
+                  direct={s.direct?.[m.key]}
+                  belowLabel={belowLabel}
+                />
+              ) : null;
+            })}
+          </div>
 
-          {quality.data && !noData && (
+          <div className="summary__row">
+            {s.resources.assemblies.total > 0 && <RecommendedGenomes clade={s} />}
+            {unit ? (
+              <div className="summary__narrow">
+                <SpeciesLinks metrics={metrics.data} taxid={taxid} />
+              </div>
+            ) : (
+              <GapsPointer clade={s} />
+            )}
+          </div>
+
+          {quality.data && (
             <QualitySection
               quality={quality.data}
               stats={stats.data?.stats}
@@ -147,17 +148,45 @@ export default function SummaryPage() {
               metrics={metrics.data}
             />
           )}
-        </div>
+        </>
+      )}
+
+      <div className="summary__row">
+        <Classification lineage={s.lineage} />
+        {about.data && (
+          <div className="summary__wide">
+            <AboutCard about={about.data} />
+          </div>
+        )}
       </div>
     </section>
   );
 }
 
-/** "5,665 assemblies and 2,343 annotations are", leaving out a count of zero. */
-function recordCounts(assemblies: number, annotations: number): string {
-  const parts = [
-    assemblies > 0 && `${fmt(assemblies)} ${assemblies === 1 ? "assembly" : "assemblies"}`,
-    annotations > 0 && `${fmt(annotations)} ${annotations === 1 ? "annotation" : "annotations"}`,
-  ].filter(Boolean);
-  return `${parts.join(" and ")} ${assemblies + annotations === 1 ? "is" : "are"}`;
+/** "5,888 species. 1,130 of them (19.2%) have a genome assembly, and 579 have
+ *  one that meets the EBP standard." */
+function Headline({ clade }: { clade: Taxon }) {
+  const { covered, percent } = clade.resources.assemblies;
+  const ebp = useAsync(
+    () =>
+      covered > 0
+        ? getAssemblies(clade.taxid, { ebp_standard: true, best_per_species: true, limit: 1 }).then(
+            (p) => p.total,
+          )
+        : Promise.resolve(0),
+    [clade.taxid],
+  );
+  const species = `${fmt(clade.species)} species`;
+  if (covered === 0) {
+    return <p className="summary__headline">{species}, none of them with a genome assembly yet.</p>;
+  }
+  const have = covered === 1 ? "has" : "have";
+  return (
+    <p className="summary__headline">
+      {species}. {fmt(covered)} of them ({fmtPct(percent)}%) {have} a genome assembly
+      {ebp.data
+        ? `, and ${fmt(ebp.data)} ${ebp.data === 1 ? "has" : "have"} one that meets the EBP standard.`
+        : "."}
+    </p>
+  );
 }
