@@ -30,7 +30,7 @@ uv run --package eukahub-pipeline python -m eukahub_pipeline.build --refresh-sou
 # 4. API on http://localhost:8000 (OpenAPI UI at /docs)
 uv run --package eukahub-api uvicorn eukahub_api.main:app --reload
 
-# 5. Web app on http://localhost:5173 (proxies /api to the API)
+# 5. Web app on http://localhost:5173 (proxies /api/v1 to the API)
 cd web && npm install && npm run dev
 ```
 

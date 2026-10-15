@@ -50,7 +50,7 @@ function OutlineNode({ id, tree }: { id: number; tree: Tree }) {
         )}
         <span className="tree-outline__rank">{node.rank}</span>
         <span className="tree-outline__meta">
-          {fmt(node.n_rows)} sp · {fmtPct(node.resources.ass.percent)}% assemblies
+          {fmt(node.species)} sp · {fmtPct(node.resources.assemblies.percent)}% assemblies
         </span>
         {tn.error && (
           <span className="tree-outline__error" role="alert">

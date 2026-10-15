@@ -44,7 +44,7 @@ function buildRamp(hex: string, dark: boolean): RGB[] {
 }
 
 function coverageColor(node: TaxonNode, key: string, ramp: RGB[], noData: string): string {
-  if (node.n_rows <= 0) return noData;
+  if (node.species <= 0) return noData;
   const pct = node.resources[key]?.percent ?? 0;
   if (pct <= 0) return rgbStr(ramp[0]);
   const t = Math.min(1, Math.pow(pct / 100, 0.35)); // gamma-spread the low end
@@ -142,7 +142,7 @@ export default function RadialTree({
   // A short-lived pulse ring drawn over a just-located node (keyed by nonce so
   // each search replays it); the node also stays `selected` after it fades.
   const [focusMark, setFocusMark] = useState<{ x: number; y: number; r: number; nonce: number } | null>(null);
-  const [colorKey, setColorKey] = useState(metrics[0]?.key ?? "ass");
+  const [colorKey, setColorKey] = useState(metrics[0]?.key ?? "assemblies");
   const activeMetric = metrics.find((m) => m.key === colorKey);
   const dark = useTheme() === "dark";
   const noData = dark ? NO_DATA_DARK : NO_DATA_LIGHT;
@@ -189,7 +189,7 @@ export default function RadialTree({
       .separation((a, b) => (a.parent === b.parent ? 1 : 2) / Math.max(1, a.depth))(hier);
     let maxN = 1;
     root.each((d) => {
-      if (d.data.kind === "node") maxN = Math.max(maxN, d.data.tn.node.n_rows);
+      if (d.data.kind === "node") maxN = Math.max(maxN, d.data.tn.node.species);
     });
     return { root, maxN };
   }, [nodes, rootId, size.w, size.h]);
@@ -208,7 +208,7 @@ export default function RadialTree({
     if (!d || d.data.kind !== "node") return;
     handledFocus.current = focus.nonce;
     setSelected(focus.taxid);
-    const nr = nodeRadius(d.data.tn.node.n_rows, laid.maxN);
+    const nr = nodeRadius(d.data.tn.node.species, laid.maxN);
     if (d.depth === 0) {
       setView({ k: 1, tx: 0, ty: 0 });
       setFocusMark({ x: 0, y: 0, r: nr + 7, nonce: focus.nonce });
@@ -314,7 +314,7 @@ export default function RadialTree({
                   radius={d.y}
                   isRoot={d.depth === 0}
                   selected={data.taxid === selected}
-                  r={nodeRadius(data.tn.node.n_rows, maxN)}
+                  r={nodeRadius(data.tn.node.species, maxN)}
                   treeNode={data.tn}
                   colorKey={colorKey}
                   ramp={ramp}
@@ -379,7 +379,7 @@ export default function RadialTree({
           <div className="chart-tip" style={{ left: hover.x + 14, top: hover.y + 14 }} role="tooltip">
             <div className="chart-tip__name">{hover.node.name}</div>
             <div className="chart-tip__sub">
-              {hover.node.rank} · {fmt(hover.node.n_rows)} species
+              {hover.node.rank} · {fmt(hover.node.species)} species
             </div>
           </div>
         )}
@@ -512,7 +512,7 @@ function DetailsPanel({
       </button>
       <h3 className="tree-panel__name">{node.name}</h3>
       <p className="tree-panel__sub">
-        <span className="rank-badge">{node.rank}</span> {fmt(node.n_rows)} species
+        <span className="rank-badge">{node.rank}</span> {fmt(node.species)} species
       </p>
       <div className="tree-panel__metrics">
         {metrics.map((m) => {

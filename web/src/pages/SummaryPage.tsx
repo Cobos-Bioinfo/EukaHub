@@ -64,7 +64,7 @@ export default function SummaryPage() {
             ) : (
               !unit && (
                 <p className="dashboard__species">
-                  <strong>{fmt(s.n_rows)}</strong> species in this clade
+                  <strong>{fmt(s.species)}</strong> species in this clade
                 </p>
               )
             )}
@@ -84,8 +84,8 @@ export default function SummaryPage() {
               name={s.name}
               rank={s.rank}
               isUnit={unit}
-              species={s.n_rows}
-              ncbiUrlTemplate={metrics.data.find((m) => m.key === "ass")?.external_url_template}
+              species={s.species}
+              ncbiUrlTemplate={metrics.data.find((m) => m.key === "assemblies")?.external_url_template}
             />
           ) : (
             <div className="card-grid">
@@ -110,7 +110,7 @@ export default function SummaryPage() {
             <ul className="dashboard__next">
               {hasRecords(s) && (
                 <li>
-                  {recordCounts(s.resources.ass.total, s.resources.ann.total)} listed on{" "}
+                  {recordCounts(s.resources.assemblies.total, s.resources.annotations.total)} listed on{" "}
                   <Link to={cladePath(taxid, "records")}>Records</Link>, with links to download
                   them.
                 </li>
@@ -131,8 +131,8 @@ export default function SummaryPage() {
               loading={stats.loading}
               error={stats.error}
               retry={stats.reload}
-              assemblies={s.resources.ass.total}
-              annotations={s.resources.ann.total}
+              assemblies={s.resources.assemblies.total}
+              annotations={s.resources.annotations.total}
               composition={s.composition}
             />
           )}

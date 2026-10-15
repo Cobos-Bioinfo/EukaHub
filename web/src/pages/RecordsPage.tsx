@@ -9,7 +9,7 @@ import { useClade } from "./CladeLayout";
  *  it, with links to download each one. */
 export default function RecordsPage() {
   const clade = useClade();
-  const { ass, ann } = clade.resources;
+  const { assemblies, annotations } = clade.resources;
 
   return (
     <section className="records-page">
@@ -17,8 +17,8 @@ export default function RecordsPage() {
         <h1 className="records-page__title">Records in {clade.name}</h1>
         {hasRecords(clade) ? (
           <p className="records-page__sub">
-            {fmt(ass.total)} genome {ass.total === 1 ? "assembly" : "assemblies"} and{" "}
-            {fmt(ann.total)} {ann.total === 1 ? "annotation" : "annotations"}, with links to
+            {fmt(assemblies.total)} genome {assemblies.total === 1 ? "assembly" : "assemblies"} and{" "}
+            {fmt(annotations.total)} {annotations.total === 1 ? "annotation" : "annotations"}, with links to
             download each one.
           </p>
         ) : (

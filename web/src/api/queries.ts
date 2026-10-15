@@ -1,7 +1,7 @@
 // Typed query functions over the generated client. Each unwraps openapi-fetch's
 // { data, error, response } into the response value, throwing a readable Error
 // on failure so the useAsync hook can surface it.
-import { api } from "./client";
+import { API_BASE, api } from "./client";
 import { EUKARYOTA_TAXID } from "../lib/taxonomy";
 import type {
   AnnotationPage,
@@ -14,7 +14,7 @@ import type {
   MetricConfig,
   MetricFilter,
   QualityStatConfig,
-  QualityStatValue,
+  QualityStats,
   SortOrder,
   TargetRank,
   Taxon,
@@ -24,16 +24,11 @@ import type {
   TaxonStatsPage,
 } from "./types";
 
+// Every API error is problem details (RFC 9457), whose `detail` says what went wrong.
 function extractDetail(error: unknown): string | undefined {
   if (error && typeof error === "object" && "detail" in error) {
     const d = (error as { detail: unknown }).detail;
     if (typeof d === "string") return d;
-    if (Array.isArray(d)) {
-      return d
-        .map((e) => (e as { msg?: string }).msg)
-        .filter(Boolean)
-        .join("; ");
-    }
   }
   return undefined;
 }
@@ -95,8 +90,8 @@ export function getTaxon(taxid: number): Promise<TaxonWithLineage> {
   const fetched = api
     .GET("/taxons/{taxid}/ancestors", { params: { path: { taxid } } })
     .then((res) => {
-      const { results } = unwrap(res);
-      return { ...results[results.length - 1], lineage: results };
+      const lineage = unwrap(res);
+      return { ...lineage[lineage.length - 1], lineage };
     })
     .catch((err: unknown) => {
       taxa.delete(taxid);
@@ -202,11 +197,11 @@ export async function getOverview(): Promise<Overview> {
   if (!root) throw new Error("Eukaryota is missing from the dataset");
   return {
     totals: {
-      species: root.n_rows,
-      assemblies: root.resources.ass.total,
-      annotations: root.resources.ann.total,
-      rna_seq: root.resources.rna.total,
-      long_read: root.resources.lng.total,
+      species: root.species,
+      assemblies: root.resources.assemblies.total,
+      annotations: root.resources.annotations.total,
+      rna_seq: root.resources.rna_seq.total,
+      long_read: root.resources.long_read_rna_seq.total,
       reference_genomes: root.composition.reference,
     },
     featured: featured.flatMap((taxid) => {
@@ -216,10 +211,10 @@ export async function getOverview(): Promise<Overview> {
             {
               taxid,
               name: t.name,
-              species: t.n_rows,
-              assemblies: t.resources.ass.total,
-              assembly_percent: t.resources.ass.percent,
-              annotation_percent: t.resources.ann.percent,
+              species: t.species,
+              assemblies: t.resources.assemblies.total,
+              assembly_percent: t.resources.assemblies.percent,
+              annotation_percent: t.resources.annotations.percent,
             },
           ]
         : [];
@@ -228,7 +223,7 @@ export async function getOverview(): Promise<Overview> {
 }
 
 /** One group in the compare view: its counts and quality stats. */
-export type CompareGroup = Taxon & { quality: QualityStatValue[] };
+export type CompareGroup = Taxon & { quality: QualityStats };
 
 // Several groups side by side, in the order given; unknown taxids are dropped.
 export async function getCompare(taxids: number[]): Promise<{ groups: CompareGroup[] }> {
@@ -240,7 +235,7 @@ export async function getCompare(taxids: number[]): Promise<{ groups: CompareGro
   return {
     groups: taxids.flatMap((id) => {
       const t = byId.get(id);
-      return t ? [{ ...t, quality: quality.get(id) ?? [] }] : [];
+      return t ? [{ ...t, quality: quality.get(id) ?? {} }] : [];
     }),
   };
 }
@@ -250,11 +245,11 @@ export interface GapItem {
   taxid: number;
   name: string;
   rank: string;
-  n_rows: number;
+  species: number;
   covered: number; // species with the resource
-  percent: number; // covered / n_rows * 100
-  gap: number; // n_rows - covered
-  stats: QualityStatValue[];
+  percent: number; // covered / species * 100
+  gap: number; // species - covered
+  stats: QualityStats;
 }
 
 // The biggest under-sequenced groups ("Where are the gaps?"): the taxa of `rank`
@@ -270,17 +265,17 @@ export interface GapsParams {
 export async function getGaps({
   root = EUKARYOTA_TAXID,
   rank = "order",
-  resource = "ass",
+  resource = "assemblies",
   limit = 25,
   include_quality = true,
 }: GapsParams = {}): Promise<{ root: Taxon; total_matches: number; items: GapItem[] }> {
-  const params = { within: root, rank, sort_by: `gap_${resource}` as TaxonSort, limit };
+  const params = { within: root, rank, sort_by: `${resource}_missing` as TaxonSort, limit };
   const [roots, page, stats] = await Promise.all([
     getTaxa({ taxids: [root], limit: 1 }),
     getTaxa(params),
     include_quality ? getTaxaStats(params) : null,
   ]);
-  const quality = stats ? statsById(stats) : new Map<number, QualityStatValue[]>();
+  const quality = stats ? statsById(stats) : new Map<number, QualityStats>();
   const items = page.results
     .map((t) => {
       const r = t.resources[resource];
@@ -288,11 +283,11 @@ export async function getGaps({
         taxid: t.taxid,
         name: t.name,
         rank: t.rank,
-        n_rows: t.n_rows,
+        species: t.species,
         covered: r.covered,
         percent: r.percent,
-        gap: t.n_rows - r.covered,
-        stats: quality.get(t.taxid) ?? [],
+        gap: r.missing,
+        stats: quality.get(t.taxid) ?? {},
       };
     })
     .filter((it) => it.gap > 0);
@@ -393,7 +388,7 @@ export async function getBreakdown(taxid: number, params: BreakdownParams): Prom
 
 export interface BucketQuality {
   taxid: number;
-  stats: QualityStatValue[];
+  stats: QualityStats;
 }
 
 // Per-tile quality stats (BUSCO / median genes / genome size / N50) for the taxa
@@ -405,7 +400,7 @@ export async function getBreakdownQuality(
 ): Promise<BucketQuality[]> {
   const page = await getTaxaStats(breakdownQuery(taxid, params));
   return page.results
-    .filter((t) => t.stats.some((s) => s.value !== null))
+    .filter((t) => Object.values(t.stats).some((v) => v !== null))
     .map((t) => ({ taxid: t.taxid, stats: t.stats }));
 }
 
@@ -418,5 +413,5 @@ export function exportTsvUrl(taxid: number, params: BreakdownParams): string {
   for (const f of params.filter ?? []) q.append("filter", f);
   if (params.logic) q.set("logic", params.logic);
   if (params.exclude_empty !== undefined) q.set("exclude_empty", String(params.exclude_empty));
-  return `/api/taxons/report?${q.toString()}`;
+  return `${API_BASE}/taxons/report?${q.toString()}`;
 }

@@ -20,7 +20,8 @@ export type TaxonNode = Taxon;
 // Assembly-composition + quality dimension (data-model enrichment, Stage C/D).
 export type AssemblyComposition = components["schemas"]["AssemblyComposition"];
 export type QualityStatConfig = components["schemas"]["QualityStatConfig"];
-export type QualityStatValue = components["schemas"]["QualityStatValue"];
+// A taxon's quality stats, keyed like `quality_stats` in /config.
+export type QualityStats = TaxonStats["stats"];
 export type AssemblyPage = components["schemas"]["AssemblyPage"];
 export type AnnotationPage = components["schemas"]["AnnotationPage"];
 export type AssemblyRecord = components["schemas"]["AssemblyRecord"];

@@ -14,14 +14,17 @@
 - ``GET /assemblies``                 genome assemblies, optionally under a taxon.
 - ``GET /annotations``                gene annotations, optionally under a taxon.
 
-Lists page with an opaque cursor (see ``pagination``).
+Lists page with an opaque cursor (see ``pagination``). An unknown query parameter
+is a 422, and every error is problem details (see ``errors``).
 """
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
+from eukahub_api import errors
+from eukahub_api.params import only_known_parameters
 from eukahub_api.resources import annotations, assemblies, config, health, taxons
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(only_known_parameters)], responses=errors.RESPONSES)
 
 router.include_router(health.router, tags=["health"])
 router.include_router(config.router, tags=["config"])

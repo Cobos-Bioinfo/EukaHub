@@ -38,13 +38,13 @@ const PHONE = ["/", "/clade/40674", "/clade/40674/map", "/clade/40674/map?view=l
 async function waitForApi() {
   for (let i = 0; i < 60; i++) {
     try {
-      if ((await fetch(`${base}/api/health`)).ok) return;
+      if ((await fetch(`${base}/api/v1/health`)).ok) return;
     } catch {
       // not up yet
     }
     await new Promise((r) => setTimeout(r, 1000));
   }
-  throw new Error(`${base}/api/health did not answer within a minute`);
+  throw new Error(`${base}/api/v1/health did not answer within a minute`);
 }
 
 async function check(browser, { path, lands = path, tab, failing = false }, width) {

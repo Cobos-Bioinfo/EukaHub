@@ -99,7 +99,8 @@ Streamlit app that answered the same questions but was slow to build and to serv
 - **React + TypeScript SPA built with Vite**, no server-side rendering: every page
   is a view over API data.
 - **No user accounts.** The API serves public, read-only data derived from public
-  sources. Abuse is handled with rate limiting at the reverse proxy, not logins.
+  sources, to any client: CORS allows every origin. Abuse is handled with rate
+  limiting per client at the reverse proxy, not with logins or an origin list.
 - **Sized for one CPU core and about 1 GB of RAM.** A 15 s per-query limit, a
   four-connection pool, no parallel query workers, and an nginx response cache keep
   one expensive request from taking the server down. The TSV report streams in
@@ -110,7 +111,7 @@ Streamlit app that answered the same questions but was slow to build and to serv
 - **Deployment settings are configuration, not code.** Links, the privacy contact,
   the Wikipedia summary endpoint and the curated groups are read by the API at
   startup (from `infra/.env` and an optional `infra/config/groups.json`), and the web
-  app gets them from `/api/config`, so changing one needs a restart, not a new image.
+  app gets them from `/api/v1/config`, so changing one needs a restart, not a new image.
   Only the API container reads the groups file, which also feeds the landing-page
   numbers. Every setting has a default, and an invalid one is logged and replaced by
   its default, because a typo should not take an unattended site down. The pipeline's
@@ -127,9 +128,10 @@ Streamlit app that answered the same questions but was slow to build and to serv
   overlap, so that they and the parent's "rest" group always add up to the parent.
 - **The API has one main resource, taxons, named like Annotrieve's.** A taxon is
   one object everywhere: `/taxons/{taxid}` returns it, `/taxons` lists it, and
-  `/taxons/{taxid}/ancestors` gives the lineage as the same objects, root first.
+  `/taxons/{taxid}/ancestors` gives the whole lineage as a plain list of the same
+  objects, root first (a few dozen taxa at most, so it is not paged).
   `/taxons` lists taxa by name, parent, rank under a taxon or taxid, sorted by any
-  count or by the species still missing a resource (`gap_<key>`). Search, the tree's
+  count or by the species still missing a resource. Search, the tree's
   children, the data map, the gaps list, compare and the landing numbers are that
   one list with different filters, so each page's request is cached on its own and
   nothing is computed twice. Quality stats are a resource of their own,
@@ -140,6 +142,30 @@ Streamlit app that answered the same questions but was slow to build and to serv
   `/taxons/report` is the whole list as TSV. Names follow Annotrieve's API
   (`/taxons`, `/ancestors`, `sort_by`, `sort_order`, `results`, `/report`), which the
   same people maintain and use.
+- **A count is named after its place in a taxon.** `sort_by` takes the name of a
+  number in the response: `species`, `assemblies_covered` for
+  `resources.assemblies.covered` (also `_missing` and `_total`), `chromosome` for
+  `composition.chromosome`. A taxon has few numbers, so flat names are simpler to
+  write than Annotrieve's field paths, which suit its large nested records. Each
+  resource has one name (`assemblies`, `annotations`, `rna_seq`,
+  `long_read_rna_seq`) in `resources`, `filter`, `sort_by`, `/config` and the TSV
+  report's columns. Quality stats are an object keyed by stat, like `resources`. The
+  database's short column names (`n_rows`, `c_ass`, `s_ass`) never reach a client.
+- **The API is served under `/api/v1`.** Clients of a public API can't be asked to
+  change their URLs, so the version is in the path from the first deployment, as
+  Annotrieve serves `/api/v0`. It is a mount point: the proxy (nginx, or Vite in
+  development) strips it, and the routes in the code carry no version. A breaking
+  change would be served as `/api/v2` next to it.
+- **Every error is problem details (RFC 9457).** One shape for every error, whoever
+  raises it (a resource, FastAPI's parameter checks, Starlette's routing, nginx's rate
+  limit): `type`, `title` (the HTTP status phrase), `status` and a `detail` sentence
+  saying what to change, sent as `application/problem+json`. A 422 also lists each
+  parameter at fault in `errors`. The OpenAPI document gives every operation this
+  `Problem` as its default response.
+- **An unknown query parameter is a 422.** A typo such as `rnak=species` would
+  otherwise return an unfiltered list that looks like an answer. The error names the
+  parameter and lists those the endpoint takes. Enumerated values are lower case
+  (`sort_order=asc`, `logic=or`).
 - **Lists page with a cursor, not an offset.** Each list sorts on keys that end in
   a unique one (the taxid or the record's accession), and a page's `next` and
   `previous` cursors hold the key values of its last and first rows. The next query
@@ -153,7 +179,7 @@ Streamlit app that answered the same questions but was slow to build and to serv
 - **The root taxids stay in code**, in one constant per side
   (`eukahub_core.taxonomy` and `web/src/lib/taxonomy.ts`). The dataset is built and
   validated for Eukaryota, so another root needs a rebuild and new checks anyway.
-- **The browser fetches Wikipedia summaries itself**, from the endpoint `/api/config`
+- **The browser fetches Wikipedia summaries itself**, from the endpoint `/api/v1/config`
   names. Wikipedia allows cross-origin requests and asks browsers to identify the tool
   with an `Api-User-Agent` header. Proxying them through the API held a database
   connection while Wikipedia answered and put an external service in the request

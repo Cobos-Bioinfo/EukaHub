@@ -30,7 +30,7 @@ def test_search_puts_the_exact_name_first(client):
 
 def test_search_hits_name_their_nearest_major_rank(client):
     for hit in _search(client, "Homo", limit=5):
-        lineage = client.get(f"/taxons/{hit['taxid']}/ancestors").json()["results"]
+        lineage = client.get(f"/taxons/{hit['taxid']}/ancestors").json()
         above = [a for a in lineage[:-1] if a["rank"] in ("class", "phylum", "kingdom")]
         assert hit["context"] == (above[-1]["name"] if above else None)
 
@@ -39,7 +39,7 @@ def test_search_hits_carry_the_taxon_counts(client):
     for hit in _search(client, "Homo", limit=5):
         taxon = client.get(f"/taxons/{hit['taxid']}").json()
         assert hit["resources"] == taxon["resources"]
-        assert hit["n_rows"] == taxon["n_rows"]
+        assert hit["species"] == taxon["species"]
         assert hit == taxon
         assert "stats" not in hit  # in /taxons/stats
 

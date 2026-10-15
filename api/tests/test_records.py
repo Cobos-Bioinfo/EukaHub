@@ -30,7 +30,7 @@ def test_assemblies_human(client):
     assert it["assembly_accession"].startswith(("GCA_", "GCF_"))
     assert it["download_url"].endswith("/")  # deep link to the NCBI genome page
     assert isinstance(it["bioprojects"], list)
-    assert it["organism"]  # scientific name at the record's taxid
+    assert it["organism_name"]  # scientific name at the record's taxid
 
 
 def test_annotations_human_busco_sorted(client):
@@ -49,7 +49,7 @@ def test_without_within_lists_every_record(client):
     assert everything >= client.get("/assemblies", params={"within": 40674, "limit": 1}).json()[
         "total"
     ]
-    assert everything == client.get("/taxons/2759").json()["resources"]["ass"]["total"]
+    assert everything == client.get("/taxons/2759").json()["resources"]["assemblies"]["total"]
 
 
 @pytest.mark.parametrize(

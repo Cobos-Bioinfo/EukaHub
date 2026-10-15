@@ -1,4 +1,4 @@
-import type { AssemblyComposition, QualityStatConfig, QualityStatValue } from "../api/types";
+import type { AssemblyComposition, QualityStatConfig, QualityStats } from "../api/types";
 import { fmt, fmtPct, fmtQuality } from "../lib/format";
 
 // The four assembly levels, best-to-worst by contiguity. Colour comes from an
@@ -27,7 +27,7 @@ export default function QualitySection({
   composition,
 }: {
   quality: QualityStatConfig[];
-  stats: QualityStatValue[] | undefined;
+  stats: QualityStats | undefined;
   loading: boolean;
   error?: string;
   retry: () => void;
@@ -38,7 +38,6 @@ export default function QualitySection({
   // Nothing to show for a clade with no assemblies and no annotations.
   if (assemblies === 0 && annotations === 0) return null;
 
-  const values = new Map((stats ?? []).map((s) => [s.key, s.value]));
   return (
     <section className="quality" aria-labelledby="quality-title">
       <header className="quality__head">
@@ -64,7 +63,7 @@ export default function QualitySection({
           <QualityTile
             key={q.key}
             config={q}
-            value={values.get(q.key) ?? null}
+            value={stats?.[q.key] ?? null}
             total={q.source === "annotation" ? annotations : assemblies}
             state={loading ? "loading" : error ? "failed" : "ready"}
           />

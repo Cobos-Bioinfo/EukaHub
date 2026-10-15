@@ -120,8 +120,8 @@ install with `docker compose -f infra/docker-compose.prod.yml logs -f refresher`
 and tear everything down with `docker compose -f infra/docker-compose.prod.yml down -v`.
 
 Only the web port is published; Postgres and the API stay on the internal
-network. The API docs are at http://localhost:8080/api/docs and the OpenAPI
-schema at http://localhost:8080/api/openapi.json.
+network. The API docs are at http://localhost:8080/api/v1/docs and the OpenAPI
+schema at http://localhost:8080/api/v1/openapi.json.
 
 **Footprint.** The stack is sized for a small shared host: it has been tested
 with **1 GB of RAM in total and a single CPU core** shared by all containers,

@@ -153,7 +153,7 @@ def test_endpoints_follow_the_settings(client, monkeypatch, tmp_path):
 
     config = client.get("/config").json()
     links = {m["key"]: m["external_url_template"] for m in config["metrics"]}
-    assert links["ass"] == "https://assemblies.example.org/?taxon={taxid}"
+    assert links["assemblies"] == "https://assemblies.example.org/?taxon={taxid}"
     assert config["feedback_url"] == "https://example.org/feedback"
     assert config["wikipedia_summary_url"].startswith("https://es.wikipedia.org/")
     assert config["groups"] == [{"taxid": 40674, "label": "Mammals", "featured": True}]

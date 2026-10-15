@@ -22,7 +22,7 @@ from eukahub_api.db import database_url
 from eukahub_api.resources import config as config_resource
 from eukahub_api.schemas import MAX_CLADES_PER_GROUP, CustomGroup
 from eukahub_api.settings import MAX_CUSTOM_GROUPS, load_settings
-from eukahub_core.metrics import METRIC_KEYS, QUALITY_STATS, CladeMetadata
+from eukahub_core.metrics import METRIC_NAMES, QUALITY_STATS, CladeMetadata
 
 CURATED = [{"taxid": 40674, "label": "Mammals"}]
 
@@ -235,14 +235,14 @@ ENDPOINT_GROUPS = [
 
 def _counts(body: dict) -> list[int]:
     return (
-        [body["n_rows"]]
-        + [body["resources"][k][f] for k in METRIC_KEYS for f in ("covered", "total")]
+        [body["species"]]
+        + [body["resources"][k][f] for k in METRIC_NAMES for f in ("covered", "missing", "total")]
         + list(body["composition"].values())
     )
 
 
 def _stats(body: dict) -> dict[str, float | None]:
-    return {s["key"]: s["value"] for s in body["stats"]}
+    return body["stats"]
 
 
 def _aggregate(client, include: list[int], exclude: list[int] = ()) -> dict:

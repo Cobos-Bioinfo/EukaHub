@@ -86,13 +86,13 @@ const resource = (key: string, label: string, what: string, word: string, part: 
   whole: "Species",
   part,
   share: (n) => ((n.resources[key]?.covered ?? 0) > 0 ? n.resources[key].percent : 0),
-  count: (n) => ({ part: n.resources[key]?.covered ?? 0, whole: n.n_rows }),
+  count: (n) => ({ part: n.resources[key]?.covered ?? 0, whole: n.species }),
 });
 const MEASURES: Measure[] = [
-  resource("ass", "Assemblies", "a genome assembly", "assembled", "With an assembly"),
-  resource("ann", "Annotations", "an annotation", "annotated", "With an annotation"),
-  resource("rna", "RNA-Seq (any)", "RNA-Seq runs", "with RNA-Seq", "With RNA-Seq"),
-  resource("lng", "Long-read RNA-Seq", "long-read RNA-Seq runs", "with long reads", "With long reads"),
+  resource("assemblies", "Assemblies", "a genome assembly", "assembled", "With an assembly"),
+  resource("annotations", "Annotations", "an annotation", "annotated", "With an annotation"),
+  resource("rna_seq", "RNA-Seq (any)", "RNA-Seq runs", "with RNA-Seq", "With RNA-Seq"),
+  resource("long_read_rna_seq", "Long-read RNA-Seq", "long-read RNA-Seq runs", "with long reads", "With long reads"),
   {
     key: "chrom",
     label: "Chromosome-level assemblies",
@@ -110,7 +110,7 @@ const MEASURES: Measure[] = [
 
 type SizeBy = "species" | "assemblies";
 const sizeValue = (n: CladeSummary, by: SizeBy): number =>
-  Math.max(0, by === "species" ? n.n_rows : n.resources.ass.total);
+  Math.max(0, by === "species" ? n.species : n.resources.assemblies.total);
 
 // Groups under 1% of the total size share one tile, when there are at least three:
 // their own tiles would be too small to label or to hit.
@@ -120,12 +120,12 @@ const MIN_GROUPED = 3;
 /** One tile standing for several small groups: their counts added up. */
 function combine(members: CladeSummary[], name: string): CladeSummary {
   const sum = (f: (m: CladeSummary) => number) => members.reduce((a, m) => a + f(m), 0);
-  const n_rows = sum((m) => m.n_rows);
+  const species = sum((m) => m.species);
   const resources = Object.fromEntries(
     Object.keys(members[0].resources).map((k) => {
       const covered = sum((m) => m.resources[k]?.covered ?? 0);
       const total = sum((m) => m.resources[k]?.total ?? 0);
-      return [k, { covered, total, percent: n_rows > 0 ? (covered / n_rows) * 100 : 0 }];
+      return [k, { covered, missing: species - covered, total, percent: species > 0 ? (covered / species) * 100 : 0 }];
     }),
   );
   const composition = {
@@ -135,7 +135,7 @@ function combine(members: CladeSummary[], name: string): CladeSummary {
     contig: sum((m) => m.composition.contig),
     reference: sum((m) => m.composition.reference),
   };
-  return { taxid: -1, name, rank: "", n_rows, resources, composition, is_infraspecific: false };
+  return { taxid: -1, name, rank: "", species, resources, composition, is_infraspecific: false };
 }
 
 interface Tile {
@@ -191,7 +191,7 @@ export default function BreakdownMap({
   const asked = params.get("rank") as TargetRank | null;
   const targetRank = asked && rankOptions.includes(asked) ? asked : firstRank;
 
-  const query = targetRank && { rank: targetRank, sort: "n_rows" as const, exclude_empty: false, limit: 250 };
+  const query = targetRank && { rank: targetRank, sort: "species" as const, exclude_empty: false, limit: 250 };
   const bd = useAsync(
     () => (query ? getBreakdown(focus.taxid, query) : Promise.resolve(null)),
     [focus.taxid, targetRank],
@@ -200,15 +200,10 @@ export default function BreakdownMap({
     () => (query ? getBreakdownQuality(focus.taxid, query) : Promise.resolve(null)),
     [focus.taxid, targetRank],
   );
-  const qmap = useMemo(() => {
-    const m = new Map<number, BucketStats>();
-    for (const b of quality.data ?? []) {
-      const o: BucketStats = {};
-      for (const s of b.stats) o[s.key] = s.value;
-      m.set(b.taxid, o);
-    }
-    return m;
-  }, [quality.data]);
+  const qmap = useMemo(
+    () => new Map<number, BucketStats>((quality.data ?? []).map((b) => [b.taxid, b.stats])),
+    [quality.data],
+  );
 
   const boxRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ w: 960, h: 480 });
@@ -307,7 +302,7 @@ export default function BreakdownMap({
             <select
               className="control__select"
               value={measure.key}
-              onChange={(e) => choose("colour", e.target.value, "ass")}
+              onChange={(e) => choose("colour", e.target.value, "assemblies")}
             >
               {MEASURES.map((m) => (
                 <option key={m.key} value={m.key}>
@@ -398,7 +393,7 @@ export default function BreakdownMap({
                   onClick={() => (t.grouped ? choose("view", "list", "map") : navigate(target(n)))}
                   onMouseMove={(e) => setHover({ node: n, q: qmap.get(n.taxid), x: e.clientX, y: e.clientY })}
                   onMouseLeave={() => setHover(null)}
-                  aria-label={`${n.name}, ${fmt(n.n_rows)} species, ${shareText(n)}. ${action}`}
+                  aria-label={`${n.name}, ${fmt(n.species)} species, ${shareText(n)}. ${action}`}
                 >
                   {labelled && (
                     <span className="bmap-tile__body">
@@ -407,8 +402,8 @@ export default function BreakdownMap({
                         <>
                           <span className="bmap-tile__stat">
                             {sizeBy === "species"
-                              ? `${fmt(n.n_rows)} species`
-                              : `${fmt(n.resources.ass.total)} assemblies`}
+                              ? `${fmt(n.species)} species`
+                              : `${fmt(n.resources.assemblies.total)} assemblies`}
                           </span>
                           <span className="bmap-tile__share">{shareText(n)}</span>
                         </>
@@ -468,7 +463,7 @@ function TileTable({
 }) {
   if (loading) return <p className="notice">Loading…</p>;
   if (error) return <p className="notice notice--error">{error}</p>;
-  const rows = [...items].sort((a, b) => b.n_rows - a.n_rows);
+  const rows = [...items].sort((a, b) => b.species - a.species);
   return (
     <div className="bd__table-wrap">
       <table className="bd-table bmap-table">
@@ -524,13 +519,13 @@ function TileTooltip({ hover }: { hover: Hover }) {
     <div className="chart-tip bmap-tip" style={{ left: hover.x + 14, top: hover.y + 14 }} role="tooltip">
       <div className="chart-tip__name">{node.name}</div>
       <div className="chart-tip__sub">
-        {node.rank} · {fmt(node.n_rows)} species
+        {node.rank} · {fmt(node.species)} species
       </div>
       <div className="bmap-tip__group">Coverage</div>
-      <CovRow label="Assemblies" r={node.resources.ass} />
-      <CovRow label="Annotations" r={node.resources.ann} />
-      <CovRow label="RNA-Seq" r={node.resources.rna} />
-      <CovRow label="Long-read RNA" r={node.resources.lng} />
+      <CovRow label="Assemblies" r={node.resources.assemblies} />
+      <CovRow label="Annotations" r={node.resources.annotations} />
+      <CovRow label="RNA-Seq" r={node.resources.rna_seq} />
+      <CovRow label="Long-read RNA" r={node.resources.long_read_rna_seq} />
       <div className="bmap-tip__group">Quality</div>
       <ValRow label="Chromosome-level+" value={contig != null ? `${fmtPct(contig)}%` : "—"} />
       <ValRow label="Best BUSCO" value={q?.busco != null ? `${fmtPct(q.busco)}%` : "—"} />

@@ -21,7 +21,7 @@ changes. Put personal or machine-specific notes in a gitignored `CLAUDE.local.md
 |---|---|
 | `core/src/eukahub_core/metrics.py` | `METRICS`, `QUALITY_STATS`, `CladeMetadata`, shared by pipeline and API and exported to the web app via OpenAPI. The schema SQL, `rollup._subtree_totals` and `validate._COLS` are kept in sync by hand; `clade_stats` has one column per `QUALITY_STATS` key. |
 | `pipeline/src/eukahub_pipeline/build.py` | taxdump → Eukaryota trim → fetch (parquet cache in `data/sources/`) → `drop_duplicate_assemblies` → `prune_placeholders` → rollup (Polars) → load → `check_invariants` → `dataset_meta` last |
-| `api/src/eukahub_api/` | `main.py` the app (CORS, middleware, error handlers); `router.py` maps `resources/` (one module per resource, routes only); `params.py` query parameters shared by resources; `errors.py` error responses; `middleware.py` headers, ETags, request log; `queries.py` all SQL (a clade's quality stats are a `clade_stats` lookup; `fetch_set_quality` computes a set's); `pagination.py` keyset cursors for every list; `totals.py` list totals cached per dataset build; `schemas.py`; `db.py` connection pool; `settings.py` deployment settings (env + `infra/config/groups.json`, served by `/config`); `clade_sets.py` sets of clades (include minus exclude) and the custom groups built from them |
+| `api/src/eukahub_api/` | `main.py` the app (CORS, middleware, error handlers); `router.py` maps `resources/` (one module per resource, routes only); `params.py` query parameters shared by resources, and the check that refuses unknown ones; `errors.py` every error as RFC 9457 problem details; `middleware.py` headers, ETags, request log; `queries.py` all SQL (a clade's quality stats are a `clade_stats` lookup; `fetch_set_quality` computes a set's); `pagination.py` keyset cursors for every list; `totals.py` list totals cached per dataset build; `schemas.py`; `db.py` connection pool; `settings.py` deployment settings (env + `infra/config/groups.json`, served by `/config`); `clade_sets.py` sets of clades (include minus exclude) and the custom groups built from them |
 | `web/src/` | `api/queries.ts` (all fetches), generated `api/openapi.json` + `schema.ts`; `lib/clade.ts` (the views of a group and their addresses); `pages/CladeLayout.tsx` (loads the current group for every view, `useClade()`); `hooks/useAsync` (results keyed by deps, `reload()`); `hooks/useTree` (visible-node cap); colours are CSS variables in `index.css` |
 | `infra/` | `docker-compose.yml` (dev DB), `docker-compose.prod.yml` (db, api, web, refresher), `postgres/init/001_schema.sql` (schema of record), `lowmem-test/` (1 GB / one-core harness) |
 | `scripts/` | `restore_snapshot.py` (stage, verify, rename swap, `--rollback`), `auto_refresh.py`, `generate_ci_seed.py` + `load_ci_db.py` (CI dataset) |
@@ -35,7 +35,7 @@ changes. Put personal or machine-specific notes in a gitignored `CLAUDE.local.md
 - `uv add`/`uv remove --package X` re-syncs the venv for X only; run `uv sync` afterwards.
 - UI checks in a browser: build the web app, run the API, then
   `VITE_API_URL=http://localhost:<port> web/node_modules/.bin/vite preview` (plain `npx vite`
-  ignores the project config and its `/api` proxy). Check light, dark and ~390 px width.
+  ignores the project config and its `/api/v1` proxy). Check light, dark and ~390 px width.
   `cd web && npm run smoke -- http://localhost:<preview port>` opens every page (CI runs it).
 
 ## Invariants

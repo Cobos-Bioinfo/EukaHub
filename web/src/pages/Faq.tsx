@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { useLocation } from "react-router";
+import { API_BASE } from "../api/client";
 
 /** A short FAQ. Plain language, honest that the numbers are a periodic snapshot. */
 export default function Faq() {
@@ -108,7 +109,7 @@ export default function Faq() {
         <h2 className="faq__q">Is there an API?</h2>
         <p className="faq__a">
           Yes, the whole app runs on a public, read-only API.{" "}
-          <a href="/api/docs" target="_blank" rel="noreferrer">
+          <a href={`${API_BASE}/docs`} target="_blank" rel="noreferrer">
             Browse the API docs
           </a>
           .

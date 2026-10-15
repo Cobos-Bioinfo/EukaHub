@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
 
+import { API_BASE } from "../api/client";
 import { useSiteConfig } from "../hooks/useSiteConfig";
 import { toggleTheme, useTheme } from "../lib/theme";
 
@@ -75,7 +76,7 @@ export default function HeaderMenu() {
             <a
               className="menu__item"
               role="menuitem"
-              href="/api/docs"
+              href={`${API_BASE}/docs`}
               target="_blank"
               rel="noreferrer"
               onClick={close}

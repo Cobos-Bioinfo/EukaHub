@@ -29,7 +29,7 @@ export function isUnit(t: Pick<Taxon, "rank" | "is_infraspecific">): boolean {
 }
 
 export function hasRecords(t: Pick<Taxon, "resources">): boolean {
-  return t.resources.ass.total > 0 || t.resources.ann.total > 0;
+  return t.resources.assemblies.total > 0 || t.resources.annotations.total > 0;
 }
 
 /** The views a clade offers: a unit has no Data map or Gaps, and Records shows
