@@ -328,6 +328,9 @@
       "AppConfig": {
         "description": "What a client reads once before showing any data (served by ``/config``):\nthe dataset it is looking at, how to present each measure, and the\ndeployment's links and groups.",
         "properties": {
+          "assembly_checks": {
+            "$ref": "#/components/schemas/AssemblyChecks"
+          },
           "custom_groups": {
             "items": {
               "$ref": "#/components/schemas/CustomGroupItem"
@@ -384,10 +387,30 @@
           "source_code_url",
           "privacy_contact_email",
           "wikipedia_summary_url",
+          "assembly_checks",
           "groups",
           "custom_groups"
         ],
         "title": "AppConfig",
+        "type": "object"
+      },
+      "AssemblyChecks": {
+        "description": "The thresholds behind an assembly's ``ebp_standard``.",
+        "properties": {
+          "ebp_min_contig_n50": {
+            "title": "Ebp Min Contig N50",
+            "type": "integer"
+          },
+          "ebp_min_scaffold_n50": {
+            "title": "Ebp Min Scaffold N50",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "ebp_min_contig_n50",
+          "ebp_min_scaffold_n50"
+        ],
+        "title": "AssemblyChecks",
         "type": "object"
       },
       "AssemblyComposition": {
@@ -424,6 +447,16 @@
         ],
         "title": "AssemblyComposition",
         "type": "object"
+      },
+      "AssemblyLevel": {
+        "enum": [
+          "complete",
+          "chromosome",
+          "scaffold",
+          "contig"
+        ],
+        "title": "AssemblyLevel",
+        "type": "string"
       },
       "AssemblyPage": {
         "properties": {
@@ -478,6 +511,11 @@
       "AssemblyRecord": {
         "description": "One genome assembly (from the ``assembly`` table), for the drill-down list.\nFields mirror the aliased SELECT so the endpoint builds it from a dict_row.",
         "properties": {
+          "annotations": {
+            "description": "Annotations of this assembly, of any version of its GenBank or RefSeq accession.",
+            "title": "Annotations",
+            "type": "integer"
+          },
           "assembly_accession": {
             "title": "Assembly Accession",
             "type": "string"
@@ -492,6 +530,18 @@
               }
             ],
             "title": "Assembly Level"
+          },
+          "best_busco": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The best BUSCO completeness (%) among those annotations; null when none is scored.",
+            "title": "Best Busco"
           },
           "bioprojects": {
             "items": {
@@ -521,6 +571,11 @@
               }
             ],
             "title": "Download Url"
+          },
+          "ebp_standard": {
+            "description": "Meets the contiguity of the Earth BioGenome Project's reference standard (thresholds in /config).",
+            "title": "Ebp Standard",
+            "type": "boolean"
           },
           "gc_percent": {
             "anyOf": [
@@ -582,6 +637,23 @@
             ],
             "title": "Source Database"
           },
+          "species_assemblies": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "With `best_per_species`: how many assemblies of its species the list would hold without it. Otherwise null.",
+            "title": "Species Assemblies"
+          },
+          "species_taxid": {
+            "description": "The species the assembly belongs to, as in NCBI's assembly summaries: `taxid` itself when the organism is a species, else the species above it (a subspecies, strain or isolate). An organism without a formal species (a hybrid, an unnamed `sp.`) is a species of its own, so this is never null.",
+            "title": "Species Taxid",
+            "type": "integer"
+          },
           "submitter": {
             "anyOf": [
               {
@@ -623,15 +695,22 @@
           "submitter",
           "source_database",
           "bioprojects",
-          "download_url"
+          "download_url",
+          "species_taxid",
+          "ebp_standard",
+          "annotations",
+          "best_busco",
+          "species_assemblies"
         ],
         "title": "AssemblyRecord",
         "type": "object"
       },
       "AssemblySort": {
         "enum": [
+          "recommended",
           "release_date",
           "contig_n50",
+          "scaffold_n50",
           "total_sequence_length"
         ],
         "title": "AssemblySort",
@@ -1427,10 +1506,10 @@
         ]
       }
     },
-    "/assemblies": {
+    "/annotations/report": {
       "get": {
-        "description": "Genome assemblies, newest first by default; records missing the sort field\ncome last. The quality stats of a taxon's assemblies are in ``/taxons/{taxid}/stats``.",
-        "operationId": "assemblies_assemblies_get",
+        "description": "Every annotation ``/annotations`` lists for the same taxon and sort, as a\nstreamed TSV download with the record's fields as columns.",
+        "operationId": "annotations_report_annotations_report_get",
         "parameters": [
           {
             "description": "Only rows on this taxon or below it (e.g. 40674 for mammals).",
@@ -1455,8 +1534,60 @@
             "name": "sort_by",
             "required": false,
             "schema": {
+              "$ref": "#/components/schemas/AnnotationSort",
+              "default": "busco_complete"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sort_order",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/SortOrder",
+              "default": "desc"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "An error, as problem details (RFC 9457)."
+          }
+        },
+        "summary": "Annotations Report",
+        "tags": [
+          "annotations"
+        ]
+      }
+    },
+    "/assemblies": {
+      "get": {
+        "description": "Genome assemblies, recommended first by default. ``total`` counts species\nwith ``best_per_species``. The quality stats of a taxon's assemblies are in\n``/taxons/{taxid}/stats``.",
+        "operationId": "assemblies_assemblies_get",
+        "parameters": [
+          {
+            "description": "`recommended`: reference genomes first, then the most complete level, then the longest contig N50. Or a field of the record; records missing it come last.",
+            "in": "query",
+            "name": "sort_by",
+            "required": false,
+            "schema": {
               "$ref": "#/components/schemas/AssemblySort",
-              "default": "release_date"
+              "default": "recommended",
+              "description": "`recommended`: reference genomes first, then the most complete level, then the longest contig N50. Or a field of the record; records missing it come last."
             }
           },
           {
@@ -1498,6 +1629,101 @@
               "description": "``next`` or ``previous`` from a page with the same sort, for the page after or before it.",
               "title": "Cursor"
             }
+          },
+          {
+            "description": "Only rows on this taxon or below it (e.g. 40674 for mammals).",
+            "in": "query",
+            "name": "within",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only rows on this taxon or below it (e.g. 40674 for mammals).",
+              "title": "Within"
+            }
+          },
+          {
+            "description": "Only assemblies at these levels (any of them).",
+            "in": "query",
+            "name": "assembly_level",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "$ref": "#/components/schemas/AssemblyLevel"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only assemblies at these levels (any of them).",
+              "title": "Assembly Level"
+            }
+          },
+          {
+            "description": "Only the assemblies NCBI marks as reference genomes.",
+            "in": "query",
+            "name": "reference",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "Only the assemblies NCBI marks as reference genomes.",
+              "title": "Reference",
+              "type": "boolean"
+            }
+          },
+          {
+            "description": "Only assemblies with the contiguity of the Earth BioGenome Project's reference standard: contig N50 of 1 Mb or more and scaffold N50 of 10 Mb or more.",
+            "in": "query",
+            "name": "ebp_standard",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "Only assemblies with the contiguity of the Earth BioGenome Project's reference standard: contig N50 of 1 Mb or more and scaffold N50 of 10 Mb or more.",
+              "title": "Ebp Standard",
+              "type": "boolean"
+            }
+          },
+          {
+            "description": "Only assemblies with at least this contig N50 (bp).",
+            "in": "query",
+            "name": "min_contig_n50",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 1000000000000,
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only assemblies with at least this contig N50 (bp).",
+              "title": "Min Contig N50"
+            }
+          },
+          {
+            "description": "Only the best assembly of each species, the first in the recommended order among those the other filters keep. Subspecies and strains count with their species (`species_taxid`).",
+            "in": "query",
+            "name": "best_per_species",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "Only the best assembly of each species, the first in the recommended order among those the other filters keep. Subspecies and strains count with their species (`species_taxid`).",
+              "title": "Best Per Species",
+              "type": "boolean"
+            }
           }
         ],
         "responses": {
@@ -1523,6 +1749,153 @@
           }
         },
         "summary": "Assemblies",
+        "tags": [
+          "assemblies"
+        ]
+      }
+    },
+    "/assemblies/report": {
+      "get": {
+        "description": "Every assembly ``/assemblies`` lists for the same filters and sort, as a\nstreamed TSV download with the record's fields as columns.",
+        "operationId": "assemblies_report_assemblies_report_get",
+        "parameters": [
+          {
+            "description": "`recommended`: reference genomes first, then the most complete level, then the longest contig N50. Or a field of the record; records missing it come last.",
+            "in": "query",
+            "name": "sort_by",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/AssemblySort",
+              "default": "recommended",
+              "description": "`recommended`: reference genomes first, then the most complete level, then the longest contig N50. Or a field of the record; records missing it come last."
+            }
+          },
+          {
+            "in": "query",
+            "name": "sort_order",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/SortOrder",
+              "default": "desc"
+            }
+          },
+          {
+            "description": "Only rows on this taxon or below it (e.g. 40674 for mammals).",
+            "in": "query",
+            "name": "within",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only rows on this taxon or below it (e.g. 40674 for mammals).",
+              "title": "Within"
+            }
+          },
+          {
+            "description": "Only assemblies at these levels (any of them).",
+            "in": "query",
+            "name": "assembly_level",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "$ref": "#/components/schemas/AssemblyLevel"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only assemblies at these levels (any of them).",
+              "title": "Assembly Level"
+            }
+          },
+          {
+            "description": "Only the assemblies NCBI marks as reference genomes.",
+            "in": "query",
+            "name": "reference",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "Only the assemblies NCBI marks as reference genomes.",
+              "title": "Reference",
+              "type": "boolean"
+            }
+          },
+          {
+            "description": "Only assemblies with the contiguity of the Earth BioGenome Project's reference standard: contig N50 of 1 Mb or more and scaffold N50 of 10 Mb or more.",
+            "in": "query",
+            "name": "ebp_standard",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "Only assemblies with the contiguity of the Earth BioGenome Project's reference standard: contig N50 of 1 Mb or more and scaffold N50 of 10 Mb or more.",
+              "title": "Ebp Standard",
+              "type": "boolean"
+            }
+          },
+          {
+            "description": "Only assemblies with at least this contig N50 (bp).",
+            "in": "query",
+            "name": "min_contig_n50",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 1000000000000,
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only assemblies with at least this contig N50 (bp).",
+              "title": "Min Contig N50"
+            }
+          },
+          {
+            "description": "Only the best assembly of each species, the first in the recommended order among those the other filters keep. Subspecies and strains count with their species (`species_taxid`).",
+            "in": "query",
+            "name": "best_per_species",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "Only the best assembly of each species, the first in the recommended order among those the other filters keep. Subspecies and strains count with their species (`species_taxid`).",
+              "title": "Best Per Species",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "An error, as problem details (RFC 9457)."
+          }
+        },
+        "summary": "Assemblies Report",
         "tags": [
           "assemblies"
         ]
@@ -1931,7 +2304,7 @@
     },
     "/taxons/report": {
       "get": {
-        "description": "Every taxon ``/taxons`` lists for the same filters and sort, as a streamed\nTSV download: taxid, name, species count, then the species with each resource\nand the total of each resource. Not cached: a report runs to tens of MB, and\nnginx's cache is kept for the small responses the interface repeats.",
+        "description": "Every taxon ``/taxons`` lists for the same filters and sort, as a streamed\nTSV download: taxid, name, species count, then the species with each resource\nand the total of each resource.",
         "operationId": "taxons_report_taxons_report_get",
         "parameters": [
           {

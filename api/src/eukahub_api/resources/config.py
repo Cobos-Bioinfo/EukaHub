@@ -3,7 +3,12 @@
 from collections.abc import Sequence
 
 import psycopg
-from eukahub_core.metrics import METRICS, QUALITY_STATS
+from eukahub_core.metrics import (
+    EBP_MIN_CONTIG_N50,
+    EBP_MIN_SCAFFOLD_N50,
+    METRICS,
+    QUALITY_STATS,
+)
 from fastapi import APIRouter
 
 from eukahub_api.clade_sets import resolve_groups, taxon_refs
@@ -11,6 +16,7 @@ from eukahub_api.db import Conn
 from eukahub_api.queries import fetch_dataset_meta, fetch_set_taxa
 from eukahub_api.schemas import (
     AppConfig,
+    AssemblyChecks,
     CustomGroup,
     CustomGroupItem,
     DatasetMeta,
@@ -52,6 +58,10 @@ def config(conn: Conn) -> AppConfig:
         source_code_url=settings.source_code_url,
         privacy_contact_email=settings.privacy_contact_email,
         wikipedia_summary_url=settings.wikipedia_summary_url,
+        assembly_checks=AssemblyChecks(
+            ebp_min_contig_n50=EBP_MIN_CONTIG_N50,
+            ebp_min_scaffold_n50=EBP_MIN_SCAFFOLD_N50,
+        ),
         groups=list(settings.groups),
         custom_groups=_custom_groups(conn, settings.custom_groups),
     )

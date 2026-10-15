@@ -15,8 +15,11 @@ from enum import Enum
 
 import psycopg
 from eukahub_core.metrics import (
+    ASSEMBLY_LEVELS,
     COMPOSITION_COLUMNS,
     COVERAGE_KEYS,
+    EBP_MIN_CONTIG_N50,
+    EBP_MIN_SCAFFOLD_N50,
     METRIC_KEYS,
     METRIC_NAMES,
     METRICS,
@@ -30,7 +33,7 @@ from psycopg.rows import dict_row
 from psycopg_pool import ConnectionPool
 
 from eukahub_api.clade_sets import SetTaxon
-from eukahub_api.pagination import Key, Page, beyond, key_columns, order_by, page
+from eukahub_api.pagination import Cursor, Key, Page, beyond, key_columns, order_by, page
 from eukahub_api.pagination import decode as decode_cursor
 from eukahub_api.schemas import COMPOSITION_FIELDS
 from eukahub_api.totals import counts
@@ -94,8 +97,13 @@ TargetRank = Enum("TargetRank", {r: r for r in ALLOWED_RANKS}, type=str)
 
 # Sort columns for the per-record drill-down lists (interpolated as identifiers,
 # so they must be a closed, validated set — hence enums).
-_ASSEMBLY_SORTS: tuple[str, ...] = ("release_date", "contig_n50", "total_sequence_length")
-AssemblySort = Enum("AssemblySort", {c: c for c in _ASSEMBLY_SORTS}, type=str)
+_ASSEMBLY_SORTS: tuple[str, ...] = (
+    "release_date", "contig_n50", "scaffold_n50", "total_sequence_length",
+)
+AssemblySort = Enum(
+    "AssemblySort", {c: c for c in ("recommended", *_ASSEMBLY_SORTS)}, type=str
+)
+AssemblyLevel = Enum("AssemblyLevel", {k: k for k in ASSEMBLY_LEVELS}, type=str)
 _ANNOTATION_SORTS: tuple[str, ...] = ("busco_complete", "protein_coding_count", "release_date")
 AnnotationSort = Enum("AnnotationSort", {c: c for c in _ANNOTATION_SORTS}, type=str)
 # Per-record tables and the columns each may be sorted by.
@@ -516,6 +524,7 @@ _RECORD_KEY: dict[str, str] = {"assembly": "assembly_accession", "annotation": "
 _RECORD_SORT_TYPES: dict[str, str] = {
     "release_date": "date",
     "contig_n50": "bigint",
+    "scaffold_n50": "bigint",
     "total_sequence_length": "bigint",
     "busco_complete": "real",
     "protein_coding_count": "integer",
@@ -537,6 +546,29 @@ def _record_keys(source: str, sort: str, descending: bool) -> list[Key]:
     ]
 
 
+def _records_sql(
+    source: str, within_path: str | None, keys: Sequence[Key], after: Cursor | None,
+    limit: int | None,
+) -> tuple[str, list[object]]:
+    """The records of ``source`` on or below ``within_path`` in the order of ``keys``,
+    as response rows followed by their key values k0, k1, ...: the page after (or
+    before) ``after`` when ``limit`` is set, else every one."""
+    where, params = ("WHERE t.path <@ %s::ltree", [within_path]) if within_path else ("", [])
+    beyond_sql, beyond_params = beyond(keys, after) if after else ("TRUE", [])
+    backward = after is not None and after.backward
+    sql = (
+        f"WITH p AS (SELECT * FROM (SELECT r.{_RECORD_KEY[source]} AS id, "
+        f"{key_columns(keys)} FROM {source} r JOIN taxon t USING (taxid) {where}) m "
+        f"WHERE {beyond_sql} ORDER BY {order_by(keys, backward=backward)} "
+        f"{'LIMIT %s' if limit is not None else ''}) "
+        f"SELECT {_RECORD_SELECT[source]}, {', '.join(f'p.k{i}' for i in range(len(keys)))} "
+        f"FROM p JOIN {source} a ON a.{_RECORD_KEY[source]} = p.id "
+        "JOIN taxon t ON t.taxid = a.taxid "
+        f"ORDER BY {order_by(keys, backward=backward, table='p')}"
+    )
+    return sql, [*params, *beyond_params, *([limit] if limit is not None else [])]
+
+
 def list_records(
     conn: psycopg.Connection,
     *,
@@ -554,24 +586,241 @@ def list_records(
     ordering = f"{source}:{sort}:{'desc' if descending else 'asc'}"
     after = decode_cursor(cursor, ordering=ordering, keys=keys) if cursor else None
     where, params = ("WHERE t.path <@ %s::ltree", [within_path]) if within_path else ("", [])
-    from_sql = f"FROM {source} r JOIN taxon t USING (taxid) {where}"
-    total = counts.count(conn, f"SELECT r.{_RECORD_KEY[source]} {from_sql}", params)
-    beyond_sql, beyond_params = beyond(keys, after) if after else ("TRUE", [])
-    backward = after is not None and after.backward
-    sql = (
-        f"WITH p AS (SELECT * FROM (SELECT r.{_RECORD_KEY[source]} AS id, "
-        f"{key_columns(keys)} {from_sql}) m WHERE {beyond_sql} "
-        f"ORDER BY {order_by(keys, backward=backward)} LIMIT %s) "
-        f"SELECT {_RECORD_SELECT[source]}, {', '.join(f'p.k{i}' for i in range(len(keys)))} "
-        f"FROM p JOIN {source} a ON a.{_RECORD_KEY[source]} = p.id "
-        "JOIN taxon t ON t.taxid = a.taxid "
-        f"ORDER BY {order_by(keys, backward=backward, table='p')}"
+    total = counts.count(
+        conn,
+        f"SELECT r.{_RECORD_KEY[source]} FROM {source} r JOIN taxon t USING (taxid) {where}",
+        params,
     )
+    sql, sql_params = _records_sql(source, within_path, keys, after, limit + 1)
+    return total, _fetch_page(conn, sql, sql_params, keys, after, limit, ordering)
+
+
+def _fetch_page(
+    conn: psycopg.Connection, sql: str, params: Sequence[object], keys: Sequence[Key],
+    after: Cursor | None, limit: int, ordering: str,
+) -> Page[dict]:
     with conn.cursor(row_factory=dict_row) as cur:
-        rows = cur.execute(sql, [*params, *beyond_params, limit + 1]).fetchall()
+        rows = cur.execute(sql, params).fetchall()
     key_names = [f"k{i}" for i in range(len(keys))]
     keys_of = [[row.pop(k) for k in key_names] for row in rows]
-    return total, page(rows, keys_of, limit=limit, cursor=after, ordering=ordering)
+    return page(rows, keys_of, limit=limit, cursor=after, ordering=ordering)
+
+
+@dataclass(frozen=True, slots=True)
+class AssemblyFilter:
+    """The assemblies a list holds: those on or below ``within_path`` (every one when
+    None) that meet each condition given. With ``best_per_species``, only the
+    first of each species among them in the recommended order."""
+
+    within: int | None = None
+    within_path: str | None = None
+    levels: Sequence[str] = ()  # keys of ASSEMBLY_LEVELS
+    reference: bool = False
+    ebp_standard: bool = False
+    min_contig_n50: int | None = None
+    best_per_species: bool = False
+
+
+# The species a record counts under: its own taxon if that is a species (formal or
+# informal), else the nearest such ancestor, read from the labels of its path; a
+# record with neither counts as a unit of its own.
+_SPECIES_OF_SQL = (
+    f"CASE WHEN t.rank IN ({_UNIT_RANKS_SQL}) THEN t.taxid ELSE COALESCE(("
+    "SELECT u.taxid FROM taxon u "
+    "WHERE u.taxid = ANY(string_to_array(ltree2text(subpath(t.path, 0, -1)), '.')::int[]) "
+    f"AND u.rank IN ({_UNIT_RANKS_SQL}) ORDER BY nlevel(u.path) DESC LIMIT 1), t.taxid) END"
+)
+# Annotations name an assembly by any version of its GenBank or RefSeq accession,
+# so they are matched to it by the number in between (GCA_000001405.29 ->
+# 000001405).
+_ASSEMBLY_NUMBER = "split_part(substr({}, 5), '.', 1)"
+
+
+def _is_reference(a: str) -> str:
+    return f"COALESCE({a}.refseq_category = 'reference genome', false)"
+
+
+def _meets_ebp(a: str) -> str:
+    return (
+        f"COALESCE({a}.contig_n50 >= {EBP_MIN_CONTIG_N50} "
+        f"AND {a}.scaffold_n50 >= {EBP_MIN_SCAFFOLD_N50}, false)"
+    )
+
+
+def _level_rank(a: str) -> str:
+    """0 for the most complete level, then up; a missing level last."""
+    whens = " ".join(f"WHEN '{v}' THEN {i}" for i, v in enumerate(ASSEMBLY_LEVELS.values()))
+    return f"CASE {a}.assembly_level {whens} ELSE {len(ASSEMBLY_LEVELS)} END"
+
+
+def _assembly_where(f: AssemblyFilter) -> tuple[str, list[object]]:
+    where: list[str] = []
+    params: list[object] = []
+    if f.within_path is not None:
+        where.append("t.path <@ %s::ltree")
+        params.append(f.within_path)
+    if f.levels:
+        where.append("r.assembly_level = ANY(%s)")
+        params.append([ASSEMBLY_LEVELS[_identifier(level, ASSEMBLY_LEVELS)] for level in f.levels])
+    if f.reference:
+        where.append(_is_reference("r"))
+    if f.ebp_standard:
+        where.append(_meets_ebp("r"))
+    if f.min_contig_n50 is not None:
+        where.append("r.contig_n50 >= %s")
+        params.append(f.min_contig_n50)
+    return (f"WHERE {' AND '.join(where)}" if where else ""), params
+
+
+def _assembly_keys(sort: str, descending: bool) -> list[Key]:
+    """The keys of an assembly sort, over the columns of ``_assembly_candidates``.
+    ``recommended``: reference genomes first, then the most complete level, then
+    the longest contig N50."""
+    sort = _identifier(sort, [s.value for s in AssemblySort])
+    if sort == "recommended":
+        return [
+            Key("is_reference", "boolean", descending),
+            Key("level_rank", "integer", not descending),
+            Key("(contig_n50 IS NULL)", "boolean"),
+            Key("contig_n50", "bigint", descending),
+            Key("id", "text"),
+        ]
+    return [
+        Key(f"({sort} IS NULL)", "boolean"),
+        Key(sort, _RECORD_SORT_TYPES[sort], descending),
+        Key("id", "text"),
+    ]
+
+
+def _assembly_candidates(f: AssemblyFilter) -> tuple[str, list[object]]:
+    """CTEs ending in ``c``: one row per assembly the list holds (per species with
+    ``best_per_species``) with the columns its keys read. Each assembly's species is
+    only looked up for ``best_per_species``: over a large group it costs more than
+    the rest."""
+    where, params = _assembly_where(f)
+    cols = (
+        "r.assembly_accession AS id, r.contig_n50, r.scaffold_n50, "
+        "r.total_sequence_length, r.release_date, "
+        f"{_is_reference('r')} AS is_reference, {_level_rank('r')} AS level_rank"
+    )
+    source = f"FROM assembly r JOIN taxon t USING (taxid) {where}"
+    if not f.best_per_species:
+        return f"c AS (SELECT {cols} {source})", params
+    best = ", ".join(
+        f"{k.sql} {'DESC' if k.descending else 'ASC'}" for k in _assembly_keys("recommended", True)
+    )
+    per_species = (
+        f"m AS (SELECT {cols}, {_SPECIES_OF_SQL} AS species {source}), "
+        "c AS (SELECT DISTINCT ON (species) m.*, "
+        "count(*) OVER (PARTITION BY species) AS species_assemblies "
+        f"FROM m ORDER BY species, {best})"
+    )
+    return per_species, params
+
+
+def _assemblies_sql(
+    f: AssemblyFilter, sort: str, descending: bool, *, after: Cursor | None, limit: int | None
+) -> tuple[str, list[object]]:
+    """The assemblies of ``f`` in the order of ``sort``, as response rows followed by
+    their key values k0, k1, ...: the page after (or before) ``after`` when ``limit``
+    is set, else every one."""
+    keys = _assembly_keys(sort, descending)
+    candidates, params = _assembly_candidates(f)
+    beyond_sql, beyond_params = beyond(keys, after) if after else ("TRUE", [])
+    backward = after is not None and after.backward
+    per_species = "species_assemblies, " if f.best_per_species else ""
+    number = _ASSEMBLY_NUMBER
+    sql = (
+        f"WITH {candidates}, "
+        f"p AS (SELECT * FROM (SELECT id, {per_species}{key_columns(keys)} FROM c) q "
+        f"WHERE {beyond_sql} ORDER BY {order_by(keys, backward=backward)} "
+        f"{'LIMIT %s' if limit is not None else ''}), "
+        f"ann AS (SELECT {number.format('n.assembly_accession')} AS num, count(*) AS n, "
+        "max(n.busco_complete) AS best_busco "
+        f"FROM annotation n WHERE {number.format('n.assembly_accession')} IN "
+        f"(SELECT {number.format('id')} FROM p) GROUP BY 1) "
+        f"SELECT {_ASSEMBLY_RECORD_SELECT}, {_SPECIES_OF_SQL} AS species_taxid, "
+        f"{_meets_ebp('a')} AS ebp_standard, COALESCE(ann.n, 0) AS annotations, ann.best_busco, "
+        f"{'p.species_assemblies' if f.best_per_species else 'NULL::bigint AS species_assemblies'}, "
+        f"{', '.join(f'p.k{i}' for i in range(len(keys)))} "
+        "FROM p JOIN assembly a ON a.assembly_accession = p.id JOIN taxon t ON t.taxid = a.taxid "
+        f"LEFT JOIN ann ON ann.num = {number.format('a.assembly_accession')} "
+        f"ORDER BY {order_by(keys, backward=backward, table='p')}"
+    )
+    return sql, [*params, *beyond_params, *([limit] if limit is not None else [])]
+
+
+def list_assemblies(
+    conn: psycopg.Connection,
+    f: AssemblyFilter,
+    *,
+    sort: str,
+    descending: bool,
+    limit: int,
+    cursor: str | None,
+) -> tuple[int, Page[dict]]:
+    """One page of the assemblies of ``f``, as dicts keyed by the response-model
+    fields, with the number of rows the list holds (species, with
+    ``best_per_species``). Raises ``InvalidCursor`` for a cursor of another ordering."""
+    keys = _assembly_keys(sort, descending)
+    ordering = f"assembly:{sort}:{'desc' if descending else 'asc'}"
+    after = decode_cursor(cursor, ordering=ordering, keys=keys) if cursor else None
+    where, params = _assembly_where(f)
+    unit = f"DISTINCT {_SPECIES_OF_SQL}" if f.best_per_species else "r.assembly_accession"
+    total = counts.count(
+        conn, f"SELECT {unit} FROM assembly r JOIN taxon t USING (taxid) {where}", params
+    )
+    sql, sql_params = _assemblies_sql(f, sort, descending, after=after, limit=limit + 1)
+    return total, _fetch_page(conn, sql, sql_params, keys, after, limit, ordering)
+
+
+def _record_cell(value: object) -> str:
+    """One TSV cell of a record: empty when missing, lists comma-separated."""
+    if value is None:
+        return ""
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, list):
+        return _tsv_cell(",".join(map(str, value)))
+    return _tsv_cell(value)
+
+
+def iter_records_tsv(
+    pool: ConnectionPool, sql: str, params: Sequence[object], *, n_keys: int, batch_rows: int
+) -> Iterator[str]:
+    """Stream the rows of a record query built with ``limit=None`` as TSV: a header of
+    its column names, then one chunk per ``batch_rows`` rows, without the trailing
+    ``n_keys`` sort-key columns. Like ``iter_report_tsv``, it holds one pooled
+    connection and a server-side cursor for the whole stream."""
+    with pool.connection() as conn, conn.cursor(name="records") as cur:
+        # A cursor is planned for reading its first tenth, which favours nested loops
+        # that start fast but make a full download minutes long; this one reads it all.
+        conn.execute("SET LOCAL cursor_tuple_fraction = 1")
+        cur.execute(sql, params)
+        rows = cur.fetchmany(batch_rows)
+        width = len(cur.description) - n_keys
+        yield "\t".join(col.name for col in cur.description[:width]) + "\n"
+        while rows:
+            yield "".join("\t".join(_record_cell(v) for v in row[:width]) + "\n" for row in rows)
+            rows = cur.fetchmany(batch_rows)
+
+
+def assemblies_report_sql(
+    f: AssemblyFilter, *, sort: str, descending: bool
+) -> tuple[str, list[object], int]:
+    """Every assembly ``/assemblies`` lists for ``f`` and ``sort``, for
+    ``iter_records_tsv``: the SQL, its parameters and the number of key columns."""
+    sql, params = _assemblies_sql(f, sort, descending, after=None, limit=None)
+    return sql, params, len(_assembly_keys(sort, descending))
+
+
+def records_report_sql(
+    source: str, within_path: str | None, *, sort: str, descending: bool
+) -> tuple[str, list[object], int]:
+    """Every record ``list_records`` pages through, for ``iter_records_tsv``."""
+    keys = _record_keys(source, sort, descending)
+    sql, params = _records_sql(source, within_path, keys, None, None)
+    return sql, params, len(keys)
 
 
 def _clade_stats(

@@ -21,8 +21,10 @@ _CALLS = {
     "report sort": lambda: next(queries.iter_report_tsv(
         None, queries.TaxonFilter(), sort=HOSTILE, descending=True, batch_rows=1,
     )),
-    "records sort": lambda: queries._record_keys("assembly", HOSTILE, True),
+    "records sort": lambda: queries._record_keys("annotation", HOSTILE, True),
     "records source": lambda: queries._record_keys(HOSTILE, "release_date", True),
+    "assembly sort": lambda: queries._assembly_keys(HOSTILE, True),
+    "assembly level": lambda: queries._assembly_where(queries.AssemblyFilter(levels=[HOSTILE])),
 }
 
 
@@ -41,6 +43,9 @@ def test_everything_the_api_accepts_passes_the_guard():
             filter_keys=[queries.METRIC_KEY_OF[key.value]], logic=FilterLogic.OR
         )
         assert queries._taxon_where(filters)
-    for source, enum in (("assembly", queries.AssemblySort), ("annotation", queries.AnnotationSort)):
-        for sort in enum:
-            assert queries._record_keys(source, sort.value, True)
+    for sort in queries.AnnotationSort:
+        assert queries._record_keys("annotation", sort.value, True)
+    for sort in queries.AssemblySort:
+        assert queries._assembly_keys(sort.value, True)
+    levels = [level.value for level in queries.AssemblyLevel]
+    assert queries._assembly_where(queries.AssemblyFilter(levels=levels))

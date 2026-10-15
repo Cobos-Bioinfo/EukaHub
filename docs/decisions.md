@@ -138,8 +138,9 @@ Streamlit app that answered the same questions but was slow to build and to serv
   `/taxons/{taxid}/stats` and `/taxons/stats` (paged with the same parameters and
   cursors as `/taxons`), so a list that does not show them never reads them and no
   parameter changes a response's shape. Records are their own
-  collections (`/assemblies`, `/annotations`), filtered by `within`, and
-  `/taxons/report` is the whole list as TSV. Names follow Annotrieve's API
+  collections (`/assemblies`, `/annotations`), filtered by `within`. Each list has a
+  `/report` (`/taxons/report`, `/assemblies/report`, `/annotations/report`): the
+  whole list, same filters and order, as a streamed TSV. Names follow Annotrieve's API
   (`/taxons`, `/ancestors`, `sort_by`, `sort_order`, `results`, `/report`), which the
   same people maintain and use.
 - **A count is named after its place in a taxon.** `sort_by` takes the name of a
@@ -151,6 +152,28 @@ Streamlit app that answered the same questions but was slow to build and to serv
   `long_read_rna_seq`) in `resources`, `filter`, `sort_by`, `/config` and the TSV
   report's columns. Quality stats are an object keyed by stat, like `resources`. The
   database's short column names (`n_rows`, `c_ass`, `s_ass`) never reach a client.
+- **The recommended assembly is a fixed order, not a score.** "Which genome
+  should I use?" is answered by `sort_by=recommended`: NCBI reference genomes first,
+  then the most complete level (complete genome, chromosome, scaffold, contig), then
+  the longest contig N50. Each rule is one a user can check against the record,
+  which a weighted score would hide. Size is not one of them: a species' median
+  length can be inflated by contaminated assemblies, and a rule putting assemblies
+  under half that median last changed the pick of only 8 of 28,485 species, all
+  unnamed `sp.` taxa whose median mixes several organisms. A client compares
+  `total_sequence_length` with the species' median genome size (`/taxons/stats`)
+  instead, to flag a "Complete Genome" that is one chromosome (Ovis canadensis
+  GCA_042859625.1: 145 Mb, against 2.7 Gb for the species). `best_per_species`
+  keeps the first assembly of each species in this order among those the filters
+  keep, so it is chosen per request: a flag stored at build time would be wrong as
+  soon as a filter drops the species' best assembly. `species_taxid` is NCBI's:
+  subspecies and strains count with their species, and informal species (hybrids,
+  unnamed `sp.`) as species of their own, so the list can hold a few more species
+  than a taxon's `covered`.
+  `ebp_standard` is the contiguity part of the Earth BioGenome Project's reference
+  standard (contig N50 of 1 Mb or more, scaffold N50 of 10 Mb or more); the dataset
+  has nothing to check its other criteria with. An assembly's `annotations` match
+  it by assembly number, so annotations of its RefSeq copy or of an older version
+  count: by exact accession, 3,400 of 19,500 annotations would match no assembly.
 - **The API is served under `/api/v1`.** Clients of a public API can't be asked to
   change their URLs, so the version is in the path from the first deployment, as
   Annotrieve serves `/api/v0`. It is a mount point: the proxy (nginx, or Vite in
