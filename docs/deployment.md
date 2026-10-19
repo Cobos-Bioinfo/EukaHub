@@ -82,7 +82,7 @@ must be an `https://` URL.
 |---|---|---|
 | `ASSEMBLY_LINK_TEMPLATE` | NCBI Datasets genome search | "Open at the source" link for assemblies. Must contain `{taxid}`, which is replaced by the taxon's id. |
 | `ANNOTATION_LINK_TEMPLATE` | Annotrieve annotation search | The same for annotations. |
-| `RNA_SEQ_LINK_TEMPLATE` / `LONG_READ_LINK_TEMPLATE` | ENA advanced searches | The same for RNA-Seq and long-read RNA-Seq runs. The defaults are in `core/src/eukahub_core/metrics.py`. |
+| `SHORT_READ_LINK_TEMPLATE` / `LONG_READ_LINK_TEMPLATE` | ENA advanced searches | The same for short-read and long-read RNA-Seq runs. The defaults are in `core/src/eukahub_core/metrics.py`. `SHORT_READ_LINK_TEMPLATE` replaced `RNA_SEQ_LINK_TEMPLATE` (RNA-Seq on any platform) in October 2026, which is now ignored. |
 | `FEEDBACK_URL` | the EukaHub Google Form | "Send feedback" in the header menu. |
 | `SOURCE_CODE_URL` | `https://github.com/Cobos-Bioinfo/EukaHub` | The GitHub icon in the header. |
 | `PRIVACY_CONTACT_EMAIL` | `placeholder@crg.eu` | Data protection contact on the Privacy page. Set it to the address of whoever runs the server. |

@@ -37,7 +37,7 @@ const resource = (key: string, label: string, what: string, word: string, part: 
 export const MEASURES: Measure[] = [
   resource("assemblies", "Assemblies", "a genome assembly", "assembled", "With an assembly"),
   resource("annotations", "Annotations", "an annotation", "annotated", "With an annotation"),
-  resource("rna_seq", "RNA-Seq (any)", "RNA-Seq runs", "with RNA-Seq", "With RNA-Seq"),
+  resource("short_read_rna_seq", "Short-read RNA-Seq", "short-read RNA-Seq runs", "with short reads", "With short reads"),
   resource("long_read_rna_seq", "Long-read RNA-Seq", "long-read RNA-Seq runs", "with long reads", "With long reads"),
   {
     key: "chrom",
@@ -54,9 +54,14 @@ export const MEASURES: Measure[] = [
   },
 ];
 
+/** A resource's name now, for one an older address may carry: RNA-Seq on any
+ *  platform became short-read RNA-Seq, which nearly all of it is. */
+export const currentResource = (key: string | null): string | null =>
+  key === "rna_seq" ? "short_read_rna_seq" : key;
+
 /** The measure named in the address (`?colour=`), assemblies by default. */
 export const measureOf = (key: string | null): Measure =>
-  MEASURES.find((m) => m.key === key) ?? MEASURES[0];
+  MEASURES.find((m) => m.key === currentResource(key)) ?? MEASURES[0];
 
 /** A taxon's share as a phrase: "12.5% assembled", "None yet" or "No assemblies"
  *  (a share of assemblies with none to count). */

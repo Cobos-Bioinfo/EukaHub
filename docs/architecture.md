@@ -19,7 +19,7 @@ ENA           ┘   (rebuild.yml)          (public)          ▲
 
 | Component | Code | Role |
 |---|---|---|
-| Pipeline | `pipeline/` | Downloads the NCBI taxonomy and every eukaryotic assembly (NCBI `datasets`), annotation (Annotrieve) and RNA-Seq run count (ENA); rolls counts up the tree; loads Postgres; checks invariants. Runs on GitHub Actions, never on the server. |
+| Pipeline | `pipeline/` | Downloads the NCBI taxonomy and every eukaryotic assembly (NCBI `datasets`), annotation (Annotrieve) and RNA-Seq run (ENA, counted per taxon, study, centre and year); rolls counts up the tree; loads Postgres; checks invariants. Runs on GitHub Actions, never on the server. |
 | Rebuild workflow | `.github/workflows/rebuild.yml` | Monthly (and on demand): runs the pipeline, gates on the invariant checks, publishes a `pg_dump` as a GitHub Release. |
 | Database | `infra/postgres/init/001_schema.sql` | Postgres 17. See [data-model.md](data-model.md). |
 | API | `api/` | FastAPI, read-only, auto-generated OpenAPI at `/api/v1/docs`. One module per resource in `api/src/eukahub_api/resources/`, mapped together in `router.py`; endpoint SQL lives in `api/src/eukahub_api/queries.py`. |

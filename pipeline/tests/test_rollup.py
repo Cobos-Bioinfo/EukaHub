@@ -8,11 +8,12 @@ from eukahub_pipeline.rollup import (
     assemble_leaf_features,
     carrying_taxids,
     rollup_from_frames,
+    runs_per_taxon,
     stats_from_records,
 )
 
 # Output column order of rollup_from_frames (for the full-row tuple asserts):
-# taxid, n_rows, c_ass, c_ann, c_rna, c_lng, s_ass, s_ann, s_rna, s_lng,
+# taxid, n_rows, c_ass, c_ann, c_srt, c_lng, s_ass, s_ann, s_srt, s_lng,
 # n_ass_complete, n_ass_chromosome, n_ass_scaffold, n_ass_contig, n_reference.
 _ZERO_COMPOSITION = (0, 0, 0, 0, 0)  # trailing composition cols when absent from input
 
@@ -37,10 +38,11 @@ def test_rollup_from_frames() -> None:
     out = {r[0]: r for r in rollup_from_frames(taxon, features).iter_rows()}
 
     assert out[9606] == (9606, 1, 1, 1, 1, 0, 2, 1, 5, 0) + _ZERO_COMPOSITION
-    assert out[10090] == (10090, 1, 1, 0, 1, 1, 1, 0, 3, 3) + _ZERO_COMPOSITION
+    # Long-read runs count only as long reads, never as short:
+    assert out[10090] == (10090, 1, 1, 0, 0, 1, 1, 0, 0, 3) + _ZERO_COMPOSITION
     # Ancestors accumulate both species:
-    assert out[2759] == (2759, 2, 2, 1, 2, 1, 3, 1, 8, 3) + _ZERO_COMPOSITION
-    assert out[1] == (1, 2, 2, 1, 2, 1, 3, 1, 8, 3) + _ZERO_COMPOSITION
+    assert out[2759] == (2759, 2, 2, 1, 1, 1, 3, 1, 5, 3) + _ZERO_COMPOSITION
+    assert out[1] == (1, 2, 2, 1, 1, 1, 3, 1, 5, 3) + _ZERO_COMPOSITION
     # A non-species node with no species leaf never appears as a rollup row.
     assert 9605 not in out
 
@@ -211,11 +213,24 @@ def test_rollup_informal_species_and_higher_rank_data() -> None:
 
     genus = out[9605]
     assert genus["n_rows"] == 1  # only the formal species
-    assert (genus["c_ass"], genus["c_rna"]) == (0, 0)  # it has no data of its own
-    assert (genus["s_ass"], genus["s_rna"]) == (3, 2)
+    assert (genus["c_ass"], genus["c_srt"]) == (0, 0)  # it has no data of its own
+    assert (genus["s_ass"], genus["s_srt"]) == (3, 2)
     informal = out[2813598]
     assert (informal["n_rows"], informal["c_ass"], informal["s_ass"]) == (1, 1, 3)
     assert out[9606]["s_ass"] == 0
+
+
+def test_runs_per_taxon_splits_short_and_long() -> None:
+    groups = pl.DataFrame(
+        {
+            "taxid": [9606, 9606, 9606, 10090],
+            "long_read": [False, False, True, True],
+            "runs": [2, 3, 1, 4],
+        }
+    )
+    out = {r["taxid"]: r for r in runs_per_taxon(groups).iter_rows(named=True)}
+    assert out[9606] == {"taxid": 9606, "short": 5, "long": 1}
+    assert out[10090] == {"taxid": 10090, "short": 0, "long": 4}
 
 
 def test_carrying_taxids() -> None:

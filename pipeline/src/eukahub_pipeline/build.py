@@ -1,5 +1,6 @@
-"""Build: NCBI taxdump -> ``taxon``; fresh NCBI/Annotrieve/ENA fetches ->
-per-record ``assembly`` / ``annotation`` tables + the ``clade_features`` rollup and
+"""Build: NCBI taxdump -> ``taxon`` and ``taxon_merged``; fresh NCBI/Annotrieve/ENA
+fetches -> per-record ``assembly`` / ``annotation`` tables, the RNA-Seq run groups
+and their studies (``rna_seq_runs``, ``study``), the ``clade_features`` rollup and
 the per-clade quality stats (``clade_stats``).
 
 No ETE3, no ``precomputed_taxa``. The three sources are fetched (or reused from
@@ -29,6 +30,7 @@ import psycopg
 from eukahub_core.taxonomy import EUKARYOTA_TAXID
 
 from eukahub_pipeline.download import download_taxdump
+from eukahub_pipeline.enrich import with_assembly_links
 from eukahub_pipeline.fetch_annotations import ANNOTATION_COLUMNS, fetch_annotations
 from eukahub_pipeline.fetch_assemblies import (
     ASSEMBLY_COLUMNS,
@@ -36,20 +38,29 @@ from eukahub_pipeline.fetch_assemblies import (
     drop_duplicate_assemblies,
     fetch_assemblies,
 )
-from eukahub_pipeline.fetch_reads import READS_COLUMNS, fetch_reads
+from eukahub_pipeline.fetch_reads import (
+    RUN_GROUP_COLUMNS,
+    STUDY_COLUMNS,
+    fetch_reads,
+    fetch_studies,
+)
 from eukahub_pipeline.load import (
     load_annotation,
     load_assembly,
     load_clade_features,
     load_clade_stats,
     load_dataset_meta,
+    load_rna_seq_runs,
+    load_study,
     load_taxon,
+    load_taxon_merged,
 )
 from eukahub_pipeline.placeholders import orphans_below_species, prune_placeholders
 from eukahub_pipeline.rollup import (
     assemble_leaf_features,
     carrying_taxids,
     rollup_from_frames,
+    runs_per_taxon,
     stats_from_records,
 )
 from eukahub_pipeline.snapshot import cached_frame
@@ -58,6 +69,8 @@ from eukahub_pipeline.taxdump import (
     ancestors,
     build_paths,
     descendants,
+    parse_common_names,
+    parse_merged,
     parse_names,
     parse_nodes,
 )
@@ -107,27 +120,61 @@ _ANNOTATION_SCHEMA: dict[str, pl.DataType] = {
     "busco_duplicated": pl.Float64,
     "busco_lineage": pl.Utf8,
 }
-_READS_SCHEMA: dict[str, pl.DataType] = {
+_RUN_GROUP_SCHEMA: dict[str, pl.DataType] = {
     "taxid": pl.Int64,
-    "short": pl.Int64,
-    "long": pl.Int64,
+    "study_accession": pl.Utf8,
+    "long_read": pl.Boolean,
+    "center_name": pl.Utf8,
+    "first_public_year": pl.Int16,
+    "runs": pl.Int64,
+    "bases": pl.Int64,
+    "reads": pl.Int64,
+}
+_STUDY_SCHEMA: dict[str, pl.DataType] = {
+    "study_accession": pl.Utf8,
+    "title": pl.Utf8,
+    "parents": pl.List(pl.Utf8),
 }
 
 # Fail fast if a schema drifts from its fetch module's declared column set.
 assert tuple(_ASSEMBLY_SCHEMA) == ASSEMBLY_COLUMNS
 assert tuple(_ANNOTATION_SCHEMA) == ANNOTATION_COLUMNS
-assert tuple(_READS_SCHEMA) == READS_COLUMNS
+assert tuple(_RUN_GROUP_SCHEMA) == RUN_GROUP_COLUMNS
+assert tuple(_STUDY_SCHEMA) == STUDY_COLUMNS
 
 
 def _taxon_copy_rows(
-    nodes: dict[int, tuple[int, str]], names: dict[int, str], paths: dict[int, str]
+    nodes: dict[int, tuple[int, str]],
+    names: dict[int, str],
+    common_names: dict[int, str],
+    paths: dict[int, str],
 ) -> Iterator[tuple]:
-    """Stream (taxid, name, rank, parent_id, path) tuples for COPY, sorted by path
-    so that each subtree's rows sit together on disk and a subtree scan reads only
-    its own pages (NCBI's file order scatters them across the table)."""
+    """Stream ``load.TAXON_COLUMNS`` tuples for COPY, sorted by path so that each
+    subtree's rows sit together on disk and a subtree scan reads only its own pages
+    (NCBI's file order scatters them across the table)."""
     for taxid in sorted(nodes, key=paths.__getitem__):
         parent, rank = nodes[taxid]
-        yield (taxid, names.get(taxid, str(taxid)), rank, parent, paths[taxid])
+        yield (
+            taxid, names.get(taxid, str(taxid)), common_names.get(taxid), rank, parent,
+            paths[taxid],
+        )
+
+
+def _remap_merged(frame: pl.DataFrame, merged: dict[int, int], source: str) -> pl.DataFrame:
+    """``frame`` with every taxid NCBI has merged into another replaced by that one."""
+    old = pl.col("taxid").is_in(list(merged))
+    log.info("Remapped %d %s rows from merged taxids", frame.filter(old).height, source)
+    return frame.with_columns(pl.col("taxid").replace(merged))
+
+
+def _studies_to_keep(studies: pl.DataFrame, run_groups: pl.DataFrame) -> pl.DataFrame:
+    """The studies of the run groups, and their parents."""
+    with_runs = run_groups["study_accession"].drop_nulls().unique()
+    parents = studies.filter(pl.col("study_accession").is_in(with_runs.implode()))[
+        "parents"
+    ].explode(empty_as_null=False)
+    wanted = pl.concat([with_runs, parents]).unique()
+    return studies.filter(pl.col("study_accession").is_in(wanted.implode()))
 
 
 def _apply_schema(conn: psycopg.Connection, schema_dir: str) -> None:
@@ -215,7 +262,12 @@ def main(argv: list[str] | None = None) -> int:
     log.info("Parsing taxdump in %s", d)
     nodes = parse_nodes(d / "nodes.dmp")
     names = parse_names(d / "names.dmp")
-    log.info("Parsed %d nodes, %d scientific names", len(nodes), len(names))
+    common_names = parse_common_names(d / "names.dmp")
+    merged = parse_merged(d / "merged.dmp")
+    log.info(
+        "Parsed %d nodes, %d scientific names, %d common names, %d merged taxids",
+        len(nodes), len(names), len(common_names), len(merged),
+    )
     parents = {t: parent for t, (parent, _) in nodes.items()}
     paths = build_paths(parents)
     log.info("Built %d lineage paths", len(paths))
@@ -252,25 +304,36 @@ def main(argv: list[str] | None = None) -> int:
         args.sources_dir,
         refresh=args.refresh_sources,
     )
-    reads = cached_frame(
-        "reads",
+    run_groups = cached_frame(
+        "rna_seq_runs",
         lambda: fetch_reads(sources.ena),
-        _READS_SCHEMA,
+        _RUN_GROUP_SCHEMA,
+        args.sources_dir,
+        refresh=args.refresh_sources,
+    )
+    studies = cached_frame(
+        "studies",
+        lambda: fetch_studies(sources.ena),
+        _STUDY_SCHEMA,
         args.sources_dir,
         refresh=args.refresh_sources,
     )
 
-    # Drop source rows on taxids absent from the taxonomy (merged/deleted NCBI
-    # taxids); the per-record tables should never reference an unknown taxon.
+    # Move rows on merged taxids to the taxon they were merged into, then drop the
+    # rows on taxids absent from the taxonomy (deleted NCBI taxids, or outside
+    # Eukaryota); the record tables never reference an unknown taxon.
     known = pl.DataFrame({"taxid": list(nodes)}, schema={"taxid": pl.Int64})
-    assemblies = assemblies.join(known, on="taxid", how="semi")
-    annotations = annotations.join(known, on="taxid", how="semi")
-    reads = reads.join(known, on="taxid", how="semi")
-    log.info(
-        "After taxonomy filter: %d assemblies, %d annotations, %d read taxa",
-        assemblies.height, annotations.height, reads.height,
+    assemblies, annotations, run_groups = (
+        _remap_merged(frame, merged, source).join(known, on="taxid", how="semi")
+        for frame, source in (
+            (assemblies, "assembly"), (annotations, "annotation"), (run_groups, "RNA-Seq"),
+        )
     )
-    leaf = assemble_leaf_features(assemblies, annotations, reads)
+    log.info(
+        "After taxonomy filter: %d assemblies, %d annotations, %d RNA-Seq run groups",
+        assemblies.height, annotations.height, run_groups.height,
+    )
+    leaf = assemble_leaf_features(assemblies, annotations, runs_per_taxon(run_groups))
 
     nodes, pruned = prune_placeholders(nodes, names, carrying_taxids(leaf))
     paths = {t: paths[t] for t in nodes}
@@ -285,6 +348,10 @@ def main(argv: list[str] | None = None) -> int:
             len(orphans), ", ".join(f"{t} {names.get(t, '')}" for t in orphans[:20]),
         )
 
+    assemblies = with_assembly_links(assemblies, annotations, nodes)
+    studies = _studies_to_keep(studies, run_groups)
+    merged = {old: new for old, new in merged.items() if new in nodes and old not in nodes}
+
     taxon_frame = _taxon_frame(nodes, paths)
     clade = rollup_from_frames(taxon_frame, leaf, root_taxid=EUKARYOTA_TAXID)
     log.info("Rolled up into %d clade rows", clade.height)
@@ -298,11 +365,17 @@ def main(argv: list[str] | None = None) -> int:
     with psycopg.connect(args.database_url) as conn:
         if not args.skip_schema:
             _apply_schema(conn, args.schema_dir)
-        n_taxon = load_taxon(conn, _taxon_copy_rows(nodes, names, paths))
-        log.info("Loaded %d taxon rows", n_taxon)
+        n_taxon = load_taxon(conn, _taxon_copy_rows(nodes, names, common_names, paths))
+        log.info(
+            "Loaded %d taxon rows and %d merged taxids", n_taxon, load_taxon_merged(conn, merged)
+        )
         n_ass = load_assembly(conn, assemblies)
         n_ann = load_annotation(conn, annotations)
         log.info("Loaded %d assembly + %d annotation rows", n_ass, n_ann)
+        log.info(
+            "Loaded %d RNA-Seq run groups and %d studies",
+            load_rna_seq_runs(conn, run_groups), load_study(conn, studies),
+        )
         n_clade = load_clade_features(conn, clade)
         log.info("Loaded %d clade_features rows", n_clade)
         log.info("Loaded %d clade_stats rows", load_clade_stats(conn, stats))

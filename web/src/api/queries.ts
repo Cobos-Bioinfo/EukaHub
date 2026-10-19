@@ -208,7 +208,7 @@ export async function getOverview(): Promise<Overview> {
       species: root.species,
       assemblies: root.resources.assemblies.total,
       annotations: root.resources.annotations.total,
-      rna_seq: root.resources.rna_seq.total,
+      rna_seq: root.resources.short_read_rna_seq.total + root.resources.long_read_rna_seq.total,
       long_read: root.resources.long_read_rna_seq.total,
       reference_genomes: root.composition.reference,
     },

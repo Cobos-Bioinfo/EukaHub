@@ -29,7 +29,7 @@ log = logging.getLogger("eukahub.api.settings")
 LINK_TEMPLATE_VARS: dict[str, str] = {
     "ass": "ASSEMBLY_LINK_TEMPLATE",
     "ann": "ANNOTATION_LINK_TEMPLATE",
-    "rna": "RNA_SEQ_LINK_TEMPLATE",
+    "srt": "SHORT_READ_LINK_TEMPLATE",
     "lng": "LONG_READ_LINK_TEMPLATE",
 }
 

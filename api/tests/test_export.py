@@ -71,7 +71,7 @@ def test_report_streams_one_chunk_per_batch(client, monkeypatch):
     assert small == whole
 
     with main.app.state.pool.connection() as conn:
-        _name, _rank, root_path = queries.fetch_root(conn, 40674)
+        root_path = queries.fetch_root(conn, 40674).path
     chunks = list(
         queries.iter_report_tsv(
             main.app.state.pool,

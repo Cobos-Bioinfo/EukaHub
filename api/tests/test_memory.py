@@ -8,10 +8,12 @@ away, so the client never holds them.
 
 The dataset: Eukaryota with 50 phyla, each level ten times wider down to families,
 then 4 genera per family and 9 species per genus, about 2.1 million taxa (the real
-taxonomy has about 1 million); 2,000,000 assemblies and 1,000,000 annotations
-spread over the species (28 and 50 times the real counts). The counts in
-``clade_features`` follow the tree's shape and every taxon has a row of
-``clade_stats``; both only need to be plausible.
+taxonomy has about 1 million), a quarter of the species with a common name;
+2,000,000 assemblies and 1,000,000 annotations spread over the species (28 and 50
+times the real counts), 3,400,000 groups of RNA-Seq runs and 500,000 studies (ten
+times the real counts), and 100,000 merged taxids. The counts in ``clade_features``
+follow the tree's shape and every taxon has a row of ``clade_stats``; both only
+need to be plausible.
 
 Slow (the dataset takes about 1.5 minutes to build the first time, and 2 GB of
 disk), so these run only when asked for: ``uv run pytest -m ram``. CI runs them.
@@ -57,6 +59,10 @@ LEVELS = (
 )
 ASSEMBLIES = 2_000_000
 ANNOTATIONS = 1_000_000
+RUN_GROUPS = 3_400_000
+STUDIES = 500_000
+MERGED = 100_000
+MERGED_FIRST = 40_000_001
 SPECIES_FIRST, SPECIES = LEVELS[-1][1], LEVELS[-1][2]
 
 
@@ -65,7 +71,8 @@ def build(conninfo: str) -> None:
     with psycopg.connect(conninfo, autocommit=True) as conn:
         conn.execute(SCHEMA.read_text())
         conn.execute(
-            "INSERT INTO taxon VALUES (1, 'root', 'no rank', 1, '1'), "
+            "INSERT INTO taxon (taxid, name, rank, parent_id, path) VALUES "
+            "(1, 'root', 'no rank', 1, '1'), "
             "(131567, 'cellular organisms', 'cellular root', 1, '1.131567'), "
             "(2759, 'Eukaryota', 'domain', 131567, '1.131567.2759')"
         )
@@ -88,6 +95,10 @@ def build(conninfo: str) -> None:
                 },
             )
             parent_first, parent_count = first, count
+        conn.execute(
+            "UPDATE taxon SET common_name = 'common ' || taxid "
+            "WHERE rank = 'species' AND taxid % 4 = 0"
+        )
         species_below = " ".join(
             f"WHEN t.rank = '{rank}' THEN {n}" for rank, _f, _c, _p, n in LEVELS
         )
@@ -112,7 +123,9 @@ def build(conninfo: str) -> None:
             "CASE WHEN i % 50 = 0 THEN 'representative genome' END, "
             "DATE '2000-01-01' + (i % 9000)::int, 'Submitter ' || i % 5000, "
             "(ARRAY['GenBank','RefSeq'])[1 + i % 2], ARRAY['PRJNA' || i % 100000], "
-            "'https://www.ncbi.nlm.nih.gov/datasets/genome/GCA_' || lpad(i::text, 9, '0') || '.1/' "
+            "'https://www.ncbi.nlm.nih.gov/datasets/genome/GCA_' || lpad(i::text, 9, '0') || '.1/', "
+            f"{SPECIES_FIRST} + (i * 7919) % {SPECIES}, (i <= {ANNOTATIONS})::int, "
+            f"CASE WHEN i <= {ANNOTATIONS} AND i % 5 <> 0 THEN 50 + (i % 500) / 10.0 END "
             f"FROM generate_series(1::bigint, {ASSEMBLIES}) i"
         )
         conn.execute(
@@ -125,6 +138,22 @@ def build(conninfo: str) -> None:
             "CASE WHEN i % 5 = 0 THEN NULL ELSE 50 + (i % 500) / 10.0 END, 80, 2, "
             "'eukaryota_odb12' "
             f"FROM generate_series(1::bigint, {ANNOTATIONS}) i"
+        )
+        conn.execute(
+            "INSERT INTO rna_seq_runs SELECT "
+            f"{SPECIES_FIRST} + (i * 7919) % {SPECIES}, 'PRJNA' || i % {STUDIES}, i % 50 = 0, "
+            "CASE WHEN i % 4 <> 0 THEN 'Centre ' || i % 2000 END, (2000 + i % 26)::smallint, "
+            "1 + i % 40, (1 + i % 40) * 4000000000, (1 + i % 40) * 20000000 "
+            f"FROM generate_series(1::bigint, {RUN_GROUPS}) i"
+        )
+        conn.execute(
+            "INSERT INTO study SELECT 'PRJNA' || i, 'Transcriptome of species ' || i, "
+            "CASE WHEN i % 3 = 0 THEN ARRAY['PRJNA' || (i % 1000)] ELSE '{}' END "
+            f"FROM generate_series(0, {STUDIES} - 1) i"
+        )
+        conn.execute(
+            f"INSERT INTO taxon_merged SELECT {MERGED_FIRST} + i, {SPECIES_FIRST} + i * 13 "
+            f"FROM generate_series(0, {MERGED} - 1) i"
         )
         conn.execute(
             "INSERT INTO dataset_meta (built_at, taxon_count, assembly_count, annotation_count, "
@@ -237,6 +266,10 @@ REQUESTS = {
     "major-rank children of a big node": "/taxons?parent=2759&major_ranks=true&limit=1000",
     "search matching 1.8M names": "/taxons?q=pecies&limit=50",
     "close spellings": "/taxons?q=Specis%2020000001&fuzzy=true&limit=50",
+    "search matching 450K common names": "/taxons?q=ommon&limit=50",
+    "close spellings of common names": "/taxons?q=comon%202000004&fuzzy=true&limit=50",
+    "taxon by a merged taxid": f"/taxons/{MERGED_FIRST}",
+    "children of a merged taxid": f"/taxons?parent={MERGED_FIRST}&limit=1000",
     "gaps of every genus": "/taxons?within=2759&rank=genus&sort_by=assemblies_missing&limit=1000",
     "100 chosen taxa": "/taxons?taxids="
     + ",".join(str(SPECIES + i) for i in range(100))
@@ -247,6 +280,7 @@ REQUESTS = {
     "set of clades": f"/taxons/aggregates?include=2759&exclude={PHYLUM}",
     "report of every species": "/taxons/report?within=2759&rank=species",
     "assemblies, first page": "/assemblies?within=2759&limit=200",
+    "assemblies under a merged taxid": f"/assemblies?within={MERGED_FIRST}&limit=200",
     "assemblies, deep page": "/assemblies?within=2759&sort_by=release_date&limit=200&cursor="
     + _cursor("assembly:release_date:desc", False, "2001-01-01", "GCA_000000000.1"),
     "assemblies, best per species": "/assemblies?within=2759&best_per_species=true&limit=200",

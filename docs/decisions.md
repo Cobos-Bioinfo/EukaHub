@@ -27,12 +27,45 @@ Streamlit app that answered the same questions but was slow to build and to serv
   the records (tens of seconds at 30 times today's assemblies). A lookup costs the
   same at any scale. Only a set of clades (include minus exclude) still needs its
   records, since medians cannot be subtracted.
-- **Assemblies and annotations are stored per record; RNA-Seq only as counts.**
-  Per-record data gives download links and quality statistics where it is cheap;
-  RNA-Seq has millions of runs and adds little per record.
+- **Assemblies and annotations are stored per record; RNA-Seq runs in groups.**
+  Per-record data gives download links and quality statistics where it is cheap.
+  ENA has about 8.5 million eukaryote RNA-Seq runs, so they are counted per taxon,
+  study (BioProject), platform (short or long read), submitting centre and year of
+  first release, with their bases and reads summed (`rna_seq_runs`, about 327,000
+  groups), and the studies are kept with their titles and parent projects (`study`).
+  That serves the clade counts, finding runs by project, the centres behind the data,
+  growth over time and sequencing depth (bases over genome size), while a study's
+  run list stays one link away at ENA. Until October 2026 only the runs per taxon
+  were kept.
 - **Source split:** assemblies and their quality fields from NCBI Datasets (all
   assemblies); annotation quality (BUSCO, gene counts, GFF links) from Annotrieve,
-  which already computes it; RNA-Seq run counts from ENA.
+  which already computes it; RNA-Seq runs and their studies from ENA.
+- **Short-read and long-read RNA-Seq replace "RNA-Seq (any)".** The two are
+  separate measures with no overlap: long reads (Oxford Nanopore, PacBio SMRT) are
+  the runs that resolve whole transcripts, and every other run is short-read. "Any"
+  was 98.5% short reads, so it mostly repeated them and hid what long reads add. The
+  number of species with RNA-Seq of either kind is no longer shown (agreed at the 5
+  October 2026 meeting). Old addresses that name `rna_seq` show short reads.
+- **Each assembly stores its species, its annotation count and its best BUSCO.**
+  They are computed at build time (`enrich.py`) instead of for every request: a
+  record's species from its lineage, its annotations matched by assembly number (any
+  version of its GenBank or RefSeq accession). The record list and its download read
+  them as columns, so a list of a large group no longer pays for a lookup per
+  assembly: Eukaryota's best assembly per species went from 0.78 s to 0.21 s, and
+  the download of all its assemblies from 3.1 s to 1.5 s.
+- **A merged taxid stands for the taxon it was merged into.** NCBI merges taxa and
+  keeps their old taxids in `merged.dmp`; links, bookmarks and other databases keep
+  using them. The API answers a merged taxid, in a path or as `within` or `parent`,
+  for the current taxon, whose own taxid the response carries, rather than
+  redirecting: one more primary-key lookup on a miss, and nothing for the proxy to
+  handle. The web app then moves the address to the current taxid. The build also
+  moves source records filed under a merged taxid to the current taxon instead of
+  dropping them.
+- **Common names are NCBI's GenBank common names.** NCBI gives at most one per
+  taxon ("human", "fruit fly"), which search matches like a scientific name and the
+  Summary shows under it. NCBI's other common names (several per taxon) and synonyms
+  are left out: the GenBank one is the name NCBI displays, and one name per taxon
+  keeps search ranking simple.
 - **A species is a taxon with a formal species name.** More than half of NCBI's
   eukaryote species-rank taxa are placeholders ("Homo sp.", "uncultured eukaryote",
   "cf." identifications, crosses between species); counted as species they would
@@ -149,7 +182,7 @@ Streamlit app that answered the same questions but was slow to build and to serv
   `resources.assemblies.covered` (also `_missing` and `_total`), `chromosome` for
   `composition.chromosome`. A taxon has few numbers, so flat names are simpler to
   write than Annotrieve's field paths, which suit its large nested records. Each
-  resource has one name (`assemblies`, `annotations`, `rna_seq`,
+  resource has one name (`assemblies`, `annotations`, `short_read_rna_seq`,
   `long_read_rna_seq`) in `resources`, `filter`, `sort_by`, `/config` and the TSV
   report's columns. Quality stats are an object keyed by stat, like `resources`. The
   database's short column names (`n_rows`, `c_ass`, `s_ass`) never reach a client.

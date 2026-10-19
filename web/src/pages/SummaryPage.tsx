@@ -62,6 +62,7 @@ export default function SummaryPage() {
             <h1 className="dashboard__name">{s.name}</h1>
             <span className="rank-badge">{s.rank}</span>
           </div>
+          {s.common_name && <p className="dashboard__common">{s.common_name}</p>}
           {isInfra ? (
             <p className="dashboard__note">
               This {rankWord} is not counted as a separate species. Its data counts toward its

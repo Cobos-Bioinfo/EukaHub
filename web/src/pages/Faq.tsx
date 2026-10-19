@@ -29,7 +29,7 @@ export default function Faq() {
         <h2 className="faq__q">Where does the data come from?</h2>
         <p className="faq__a">
           Genome assemblies from NCBI, functional annotations from Annotrieve, and RNA-Seq
-          reads (including long-read) from ENA. The taxonomy itself is the NCBI Taxonomy tree.
+          runs (short-read and long-read) from ENA. The taxonomy itself is the NCBI Taxonomy tree.
         </p>
       </div>
 

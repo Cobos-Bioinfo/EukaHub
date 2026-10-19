@@ -8,13 +8,14 @@ import { useAsync } from "../hooks/useAsync";
 import { useCladeLabel } from "../hooks/useSiteConfig";
 import { cladePath, isUnit } from "../lib/clade";
 import { fmt, fmtCompact, fmtPct, fmtQuality } from "../lib/format";
+import { currentResource } from "../lib/measures";
 import { NoBreakdown } from "./BreakdownPage";
 import { useClade } from "./CladeLayout";
 
 // Ranks the leaderboard can group by (species excluded — a species is one row,
 // so its "gap" is 0 or 1 and meaningless). Coarse → fine, the selector order.
 const RANKS: TargetRank[] = ["phylum", "class", "order", "family", "genus"];
-const RESOURCES: MetricFilter[] = ["assemblies", "annotations", "rna_seq", "long_read_rna_seq"];
+const RESOURCES: MetricFilter[] = ["assemblies", "annotations", "short_read_rna_seq", "long_read_rna_seq"];
 // One step finer, for the "look inside" re-root that walks down the tree.
 const FINER: Record<string, TargetRank> = {
   phylum: "class",
@@ -42,7 +43,7 @@ export default function GapsPage() {
   const root = clade.taxid;
   const rawRank = params.get("rank") as TargetRank;
   const rank: TargetRank = RANKS.includes(rawRank) ? rawRank : "order";
-  const rawRes = params.get("resource") as MetricFilter;
+  const rawRes = currentResource(params.get("resource")) as MetricFilter;
   const resource: MetricFilter = RESOURCES.includes(rawRes) ? rawRes : "assemblies";
   const view: "list" | "scatter" = params.get("view") === "scatter" ? "scatter" : "list";
 

@@ -3,7 +3,7 @@
 The static card chrome (titles, help text, colors, external URLs) lives in
 ``eukahub_core.metrics.METRICS`` and is served once in ``/config``.
 These per-clade payloads carry only the numbers, keyed by resource name
-("assemblies", "annotations", "rna_seq", "long_read_rna_seq"), so the frontend
+("assemblies", "annotations", "short_read_rna_seq", "long_read_rna_seq"), so the frontend
 loops the metric config to render one card per resource.
 """
 
@@ -135,6 +135,9 @@ class CladeSummary(BaseModel):
 
     taxid: int
     name: str
+    common_name: str | None = Field(
+        None, description="NCBI's GenBank common name (\"human\"), if it has one."
+    )
     rank: str
     species: int = Field(
         description="Species on or below the taxon (1 for a species or a finer taxon)."
@@ -156,11 +159,17 @@ class CladeSummary(BaseModel):
 
     @classmethod
     def from_metadata(
-        cls, name: str, rank: str, meta: CladeMetadata, is_infraspecific: bool = False
+        cls,
+        name: str,
+        rank: str,
+        meta: CladeMetadata,
+        is_infraspecific: bool = False,
+        common_name: str | None = None,
     ) -> CladeSummary:
         return cls(
             taxid=meta.taxid,
             name=name,
+            common_name=common_name,
             rank=rank,
             species=meta.n_rows,
             is_infraspecific=is_infraspecific,

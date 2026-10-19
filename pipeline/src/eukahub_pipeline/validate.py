@@ -35,7 +35,7 @@ from eukahub_core.metrics import (
     QUALITY_STATS,
     TOTAL_KEYS,
 )
-from eukahub_core.taxonomy import EUKARYOTA_TAXID, INFORMAL_SPECIES_RANK
+from eukahub_core.taxonomy import EUKARYOTA_TAXID, INFORMAL_SPECIES_RANK, UNIT_RANKS
 
 log = logging.getLogger("eukahub.validate")
 
@@ -48,9 +48,25 @@ COMMON = [
     (33090, "Viridiplantae"),
 ]
 
-# Order matters — index 0 = n_rows, index 7 = s_rna (used in the printout).
-_COLS = ("n_rows", "c_ass", "c_ann", "c_rna", "c_lng", "s_ass", "s_ann", "s_rna", "s_lng")
+# The parity printout's columns: species, then every RNA-Seq run. Euka-Survey's
+# `rna` counted runs on any platform, which here are the short- and long-read runs.
+_OLD_COLS = ("n_rows", "s_rna")
+_NEW_COLS = ("n_rows", "s_srt + s_lng")
 
+
+# Tables a build fills from the sources; an empty one means a fetch failed.
+_CORE_TABLES = (
+    "taxon", "clade_features", "clade_stats", "assembly", "annotation", "rna_seq_runs", "study",
+)
+# The number every version of an assembly's GenBank and RefSeq accessions share.
+_NUMBER = "split_part(substr({}, 5), '.', 1)"
+# Each total at Eukaryota and the count of what it sums.
+_TOTALS_SQL: dict[str, str] = {
+    "s_ass": "SELECT count(*) FROM assembly",
+    "s_ann": "SELECT count(*) FROM annotation",
+    "s_srt": "SELECT sum(runs) FROM rna_seq_runs WHERE NOT long_read",
+    "s_lng": "SELECT sum(runs) FROM rna_seq_runs WHERE long_read",
+}
 
 # The smallest share of records that must carry each field. A field the source
 # renames or stops sending comes back empty on every record, far below these.
@@ -60,6 +76,12 @@ MIN_FILLED: dict[tuple[str, str], float] = {
     ("assembly", "total_sequence_length"): 0.9,
     ("annotation", "protein_coding_count"): 0.9,
     ("annotation", "busco_complete"): 0.5,
+    ("rna_seq_runs", "study_accession"): 0.9,
+    ("rna_seq_runs", "first_public_year"): 0.9,
+    ("rna_seq_runs", "bases"): 0.9,
+    ("rna_seq_runs", "reads"): 0.9,
+    # ENA leaves the centre out on about a quarter of runs.
+    ("rna_seq_runs", "center_name"): 0.5,
 }
 
 # The largest drop of a key count since the previous Release, as a share, before
@@ -82,7 +104,9 @@ def check_invariants(conn: psycopg.Connection) -> None:
     species is kept without data, coverage never exceeds the species count, the
     additive assembly-composition split reconciles with the assembly total, every
     resource has data, one row per assembly, the fields the stats read are filled,
-    and the per-clade quality stats cover the clades with records and match them.
+    the per-clade quality stats cover the clades with records and match them, the
+    columns stored on each assembly agree with the taxonomy and the annotations, and
+    every merged taxid points at a taxon.
     """
     with conn.cursor() as cur:
 
@@ -93,7 +117,7 @@ def check_invariants(conn: psycopg.Connection) -> None:
 
         # 1. Nothing came back empty — the most common "the fetch silently failed"
         #    failure mode. Every core table must have rows.
-        for table in ("taxon", "clade_features", "clade_stats", "assembly", "annotation"):
+        for table in _CORE_TABLES:
             n = scalar(f"SELECT count(*) FROM {table}")
             if n == 0:
                 raise DataValidationError(f"{table} is empty after build")
@@ -117,21 +141,21 @@ def check_invariants(conn: psycopg.Connection) -> None:
             )
         log.info("invariant: Eukaryota n_rows == species count (%d)", euk_n_rows)
 
-        # 3. Every record counts at Eukaryota, whatever rank it is attached to, so
-        #    its totals match the record tables.
-        for table, total in (("assembly", "s_ass"), ("annotation", "s_ann")):
-            records = scalar(f"SELECT count(*) FROM {table}")
+        # 3. Every record and run counts at Eukaryota, whatever rank it is attached
+        #    to, so its totals match the record tables and the run groups.
+        for total, sql in _TOTALS_SQL.items():
+            records = scalar(sql)
             rolled = euk[total]
             if rolled != records:
                 raise DataValidationError(
-                    f"Eukaryota {total} ({rolled}) != {table} records ({records})"
+                    f"Eukaryota {total} ({rolled}) != its records ({records}): {sql}"
                 )
-        log.info("invariant: Eukaryota totals match the record tables")
+        log.info("invariant: Eukaryota totals match the record tables and run groups")
 
         # 4. Informal species are kept only when they carry data.
         empty_informal = scalar(
             "SELECT count(*) FROM taxon t LEFT JOIN clade_features f USING (taxid) "
-            "WHERE t.rank = %s AND COALESCE(f.s_ass + f.s_ann + f.s_rna, 0) = 0",
+            f"WHERE t.rank = %s AND COALESCE({' + '.join(f'f.{c}' for c in TOTAL_KEYS)}, 0) = 0",
             (INFORMAL_SPECIES_RANK,),
         )
         if empty_informal:
@@ -140,7 +164,7 @@ def check_invariants(conn: psycopg.Connection) -> None:
         # 5. Coverage never exceeds the species count, for any clade.
         bad = scalar(
             "SELECT count(*) FROM clade_features "
-            "WHERE c_ass > n_rows OR c_ann > n_rows OR c_rna > n_rows OR c_lng > n_rows"
+            f"WHERE {' OR '.join(f'{c} > n_rows' for c in COVERAGE_KEYS)}"
         )
         if bad:
             raise DataValidationError(f"{bad} clade rows have coverage > n_rows")
@@ -212,6 +236,36 @@ def check_invariants(conn: psycopg.Connection) -> None:
                 if (a is None) != (b is None) or (a is not None and not math.isclose(a, b)):
                     raise DataValidationError(f"{name} {key}: stored {a}, its records give {b}")
         log.info("invariant: clade_stats match their records")
+
+        # 12. Each assembly's stored species is a species (formal or informal), or the
+        #     assembly's own taxon when it has none above it.
+        bad = scalar(
+            "SELECT count(*) FROM assembly a LEFT JOIN taxon s ON s.taxid = a.species_taxid "
+            "WHERE s.taxid IS NULL OR (s.rank <> ALL(%s) AND a.species_taxid <> a.taxid)",
+            (list(UNIT_RANKS),),
+        )
+        if bad:
+            raise DataValidationError(f"{bad} assemblies have a species_taxid that is not a species")
+
+        # 13. The stored annotation counts add up to the annotations of an assembly.
+        stored = scalar("SELECT sum(annotations) FROM assembly")
+        matched = scalar(
+            f"SELECT count(*) FROM annotation n WHERE {_NUMBER.format('n.assembly_accession')} "
+            f"IN (SELECT {_NUMBER.format('a.assembly_accession')} FROM assembly a)"
+        )
+        if stored != matched:
+            raise DataValidationError(
+                f"assemblies count {stored} annotations, but {matched} annotations name one"
+            )
+
+        # 14. A merged taxid points at a taxon, and is not a taxon itself.
+        bad = scalar(
+            "SELECT count(*) FROM taxon_merged m LEFT JOIN taxon t ON t.taxid = m.merged_into "
+            "WHERE t.taxid IS NULL OR EXISTS (SELECT 1 FROM taxon o WHERE o.taxid = m.taxid)"
+        )
+        if bad:
+            raise DataValidationError(f"{bad} merged taxids are a taxon or point at none")
+        log.info("invariant: assembly species and annotation counts; merged taxids")
 
     log.info("all invariants passed")
 
@@ -315,7 +369,7 @@ def _old(sqlite_path: str) -> dict[int, tuple | None]:
     try:
         return {
             taxid: con.execute(
-                f"SELECT {', '.join(_COLS)} FROM precomputed_clade_features WHERE taxid=?",
+                f"SELECT {', '.join(_OLD_COLS)} FROM precomputed_clade_features WHERE taxid=?",
                 (taxid,),
             ).fetchone()
             for taxid, _ in COMMON
@@ -329,7 +383,7 @@ def _new(conn: psycopg.Connection) -> dict[int, tuple | None]:
     with conn.cursor() as cur:
         for taxid, _ in COMMON:
             cur.execute(
-                f"SELECT {', '.join(_COLS)} FROM clade_features WHERE taxid=%s", (taxid,)
+                f"SELECT {', '.join(_NEW_COLS)} FROM clade_features WHERE taxid=%s", (taxid,)
             )
             out[taxid] = cur.fetchone()
     return out
@@ -349,7 +403,7 @@ def validate(conn: psycopg.Connection, leaf_sqlite: str | None = None) -> None:
     print("\n=== Validation vs Euka-Survey (species count + total RNA-Seq runs) ===")
     print(
         f"{'taxid':>7} {'name':<13} {'n_rows old':>12} {'n_rows new':>12} {'Δ%':>6}"
-        f" {'s_rna old':>12} {'s_rna new':>12}"
+        f" {'runs old':>12} {'runs new':>12}"
     )
     for taxid, name in COMMON:
         o, n = old[taxid], new.get(taxid)
@@ -359,5 +413,5 @@ def validate(conn: psycopg.Connection, leaf_sqlite: str | None = None) -> None:
         delta = (n[0] - o[0]) / o[0] * 100 if o[0] else float("nan")
         print(
             f"{taxid:>7} {name:<13} {o[0]:>12,} {n[0]:>12,} {delta:>5.1f}%"
-            f" {o[7]:>12,} {n[7]:>12,}"
+            f" {o[1]:>12,} {n[1]:>12,}"
         )

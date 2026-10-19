@@ -7,12 +7,12 @@ React frontend can reuse.
 
 The app and pipeline both reason about four genomic resources:
 
-| key | name              | what it means                                  |
-|-----|-------------------|------------------------------------------------|
-| ass | assemblies        | genome assemblies                              |
-| ann | annotations       | functional annotations of assemblies           |
-| rna | rna_seq           | RNA-Seq runs, any sequencing platform          |
-| lng | long_read_rna_seq | RNA-Seq runs on Oxford Nanopore or PacBio SMRT |
+| key | name               | what it means                                  |
+|-----|--------------------|------------------------------------------------|
+| ass | assemblies         | genome assemblies                              |
+| ann | annotations        | functional annotations of assemblies           |
+| srt | short_read_rna_seq | RNA-Seq runs on any other sequencing platform  |
+| lng | long_read_rna_seq  | RNA-Seq runs on Oxford Nanopore or PacBio SMRT |
 
 ``key`` names the database columns below; ``name`` is the resource's name in
 the API and in the TSV report's columns.
@@ -71,7 +71,7 @@ class Metric:
     external_source_name: str
     external_url_template: str
     empty_text: str
-    # Optional — only `lng` carries a tooltip on the card title today.
+    # Optional: only the RNA-Seq metrics carry a tooltip on the card title.
     card_title_help: str | None = None
 
     @property
@@ -133,27 +133,31 @@ METRICS: tuple[Metric, ...] = (
         empty_text="No functional annotations yet",
     ),
     Metric(
-        key="rna",
-        name="rna_seq",
+        key="srt",
+        name="short_read_rna_seq",
         color="#b2df8a",  # light green
         side="right",
         overlay=False,
-        legend_label="RNA-Seq (Any)",
-        filter_label="RNA-Seq (Any)",
-        sort_count_label="Species with RNA-Seq (Any)",
-        sort_total_label="RNA-Seq experiments (Any)",
-        card_title="RNA-Seq (Any)",
-        species_help="Unique species with any RNA-Seq read data",
+        legend_label="Short-Read RNA",
+        filter_label="Short-Read RNA",
+        sort_count_label="Species with Short-Read RNA",
+        sort_total_label="Short-Read RNA-Seq experiments",
+        card_title="Short-Read RNA-Seq",
+        card_title_help="RNA-Seq experiments performed on any platform other than Oxford "
+        "Nanopore or PacBio SMRT, mostly Illumina",
+        species_help="Unique species with at least one short-read RNA-Seq experiment",
         total_label="Total Runs",
-        total_help="Total number of RNA-Seq runs in this group",
+        total_help="Total number of short-read RNA-Seq runs in this group",
         external_source_name="ENA",
         external_url_template=(
             "https://www.ebi.ac.uk/ena/browser/advanced-search?"
             "result=read_run&query=tax_tree({taxid})%20AND%20"
-            "(library_strategy%3D%22rna-seq%22%20OR%20library_source%3D%22TRANSCRIPTOMIC%22)&"
-            "fields=run_accession%2Cexperiment_title%2Ctax_id%2Clibrary_strategy&limit=0"
+            "(library_strategy%3D%22rna-seq%22%20OR%20library_source%3D%22transcriptomic%22)%20AND%20"
+            "instrument_platform!%3D%22oxford_nanopore%22%20AND%20"
+            "instrument_platform!%3D%22pacbio_smrt%22&"
+            "fields=run_accession%2Cexperiment_title%2Ctax_id%2Clibrary_strategy%2Cinstrument_platform&limit=0"
         ),
-        empty_text="No RNA-Seq runs yet",
+        empty_text="No short-read RNA-Seq runs yet",
     ),
     Metric(
         key="lng",
@@ -344,11 +348,11 @@ class CladeMetadata:
     n_rows: int
     c_ass: int
     c_ann: int
-    c_rna: int
+    c_srt: int
     c_lng: int
     s_ass: int
     s_ann: int
-    s_rna: int
+    s_srt: int
     s_lng: int
     n_ass_complete: int = 0
     n_ass_chromosome: int = 0
@@ -359,7 +363,7 @@ class CladeMetadata:
     def percent(self, key: str) -> float:
         """Coverage percentage ``c_<key> / n_rows * 100``.
 
-        ``key`` is one of METRIC_KEYS ("ass", "ann", "rna", "lng").
+        ``key`` is one of METRIC_KEYS ("ass", "ann", "srt", "lng").
         Returns 0.0 when ``n_rows == 0`` to avoid division by zero.
         """
         coverage: int = getattr(self, f"c_{key}")
@@ -377,10 +381,10 @@ class CladeMetadata:
             n_rows=0,
             c_ass=0,
             c_ann=0,
-            c_rna=0,
+            c_srt=0,
             c_lng=0,
             s_ass=0,
             s_ann=0,
-            s_rna=0,
+            s_srt=0,
             s_lng=0,
         )

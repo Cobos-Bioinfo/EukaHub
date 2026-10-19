@@ -11,6 +11,8 @@ from eukahub_pipeline.taxdump import (
     build_paths,
     descendants,
     iter_taxon_rows,
+    parse_common_names,
+    parse_merged,
     parse_names,
     parse_nodes,
 )
@@ -30,7 +32,11 @@ _NAMES_DMP = (
     "2759\t|\tEukaryota\t|\t\t|\tscientific name\t|\n"
     "2759\t|\tEucarya\t|\t\t|\tsynonym\t|\n"
     "9606\t|\tHomo sapiens\t|\t\t|\tscientific name\t|\n"
+    "9606\t|\thuman\t|\t\t|\tgenbank common name\t|\n"
+    "9606\t|\tman\t|\t\t|\tcommon name\t|\n"
 )
+
+_MERGED_DMP = "12\t|\t74109\t|\n30\t|\t29\t|\n"
 
 
 def _write_taxdump(tmp_path: Path) -> Path:
@@ -51,6 +57,16 @@ def test_parse_names_keeps_only_scientific(tmp_path: Path) -> None:
     names = parse_names(d / "names.dmp")
     assert names[2759] == "Eukaryota"  # synonym "Eucarya" ignored
     assert names[9606] == "Homo sapiens"
+
+
+def test_parse_common_names_keeps_genbank_ones(tmp_path: Path) -> None:
+    d = _write_taxdump(tmp_path)
+    assert parse_common_names(d / "names.dmp") == {9606: "human"}
+
+
+def test_parse_merged(tmp_path: Path) -> None:
+    (tmp_path / "merged.dmp").write_text(_MERGED_DMP, encoding="utf-8")
+    assert parse_merged(tmp_path / "merged.dmp") == {12: 74109, 30: 29}
 
 
 def test_build_paths() -> None:

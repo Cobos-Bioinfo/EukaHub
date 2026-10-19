@@ -427,7 +427,7 @@ function TileTooltip({ hover }: { hover: Hover }) {
       <div className="bmap-tip__group">Coverage</div>
       <CovRow label="Assemblies" r={node.resources.assemblies} />
       <CovRow label="Annotations" r={node.resources.annotations} />
-      <CovRow label="RNA-Seq" r={node.resources.rna_seq} />
+      <CovRow label="Short-read RNA" r={node.resources.short_read_rna_seq} />
       <CovRow label="Long-read RNA" r={node.resources.long_read_rna_seq} />
       <div className="bmap-tip__group">Quality</div>
       <ValRow label="Chromosome-level+" value={contig != null ? `${fmtPct(contig)}%` : "—"} />

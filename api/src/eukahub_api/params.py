@@ -11,7 +11,10 @@ from eukahub_api.queries import fetch_root
 
 Within = Annotated[
     int | None,
-    Query(description="Only rows on this taxon or below it (e.g. 40674 for mammals)."),
+    Query(
+        description="Only rows on this taxon or below it (e.g. 40674 for mammals). A taxid "
+        "NCBI has merged into another stands for that one."
+    ),
 ]
 Cursor = Annotated[
     str | None,
@@ -24,8 +27,9 @@ Cursor = Annotated[
 
 
 def within_path(conn: psycopg.Connection, taxid: int | None) -> str | None:
-    """The path of the ``within`` taxon; an unknown taxon is a 404 (see ``errors``)."""
-    return None if taxid is None else fetch_root(conn, taxid)[2]
+    """The path of the ``within`` taxon (of the one it was merged into, for a merged
+    taxid); an unknown taxon is a 404 (see ``errors``)."""
+    return None if taxid is None else fetch_root(conn, taxid).path
 
 
 def only_known_parameters(request: Request) -> None:

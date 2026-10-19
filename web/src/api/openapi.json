@@ -948,7 +948,7 @@
         "enum": [
           "assemblies",
           "annotations",
-          "rna_seq",
+          "short_read_rna_seq",
           "long_read_rna_seq"
         ],
         "title": "MetricFilter",
@@ -1134,6 +1134,18 @@
       "Taxon": {
         "description": "One taxon: the object ``/taxons/{taxid}`` returns and ``/taxons`` lists. Its\nancestors are in ``/taxons/{taxid}/ancestors`` and its quality stats in\n``/taxons/{taxid}/stats``.",
         "properties": {
+          "common_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "NCBI's GenBank common name (\"human\"), if it has one.",
+            "title": "Common Name"
+          },
           "composition": {
             "$ref": "#/components/schemas/AssemblyComposition"
           },
@@ -1296,9 +1308,9 @@
           "annotations_covered",
           "annotations_missing",
           "annotations_total",
-          "rna_seq_covered",
-          "rna_seq_missing",
-          "rna_seq_total",
+          "short_read_rna_seq_covered",
+          "short_read_rna_seq_missing",
+          "short_read_rna_seq_total",
           "long_read_rna_seq_covered",
           "long_read_rna_seq_missing",
           "long_read_rna_seq_total",
@@ -1411,7 +1423,7 @@
         "operationId": "annotations_annotations_get",
         "parameters": [
           {
-            "description": "Only rows on this taxon or below it (e.g. 40674 for mammals).",
+            "description": "Only rows on this taxon or below it (e.g. 40674 for mammals). A taxid NCBI has merged into another stands for that one.",
             "in": "query",
             "name": "within",
             "required": false,
@@ -1424,7 +1436,7 @@
                   "type": "null"
                 }
               ],
-              "description": "Only rows on this taxon or below it (e.g. 40674 for mammals).",
+              "description": "Only rows on this taxon or below it (e.g. 40674 for mammals). A taxid NCBI has merged into another stands for that one.",
               "title": "Within"
             }
           },
@@ -1512,7 +1524,7 @@
         "operationId": "annotations_report_annotations_report_get",
         "parameters": [
           {
-            "description": "Only rows on this taxon or below it (e.g. 40674 for mammals).",
+            "description": "Only rows on this taxon or below it (e.g. 40674 for mammals). A taxid NCBI has merged into another stands for that one.",
             "in": "query",
             "name": "within",
             "required": false,
@@ -1525,7 +1537,7 @@
                   "type": "null"
                 }
               ],
-              "description": "Only rows on this taxon or below it (e.g. 40674 for mammals).",
+              "description": "Only rows on this taxon or below it (e.g. 40674 for mammals). A taxid NCBI has merged into another stands for that one.",
               "title": "Within"
             }
           },
@@ -1631,7 +1643,7 @@
             }
           },
           {
-            "description": "Only rows on this taxon or below it (e.g. 40674 for mammals).",
+            "description": "Only rows on this taxon or below it (e.g. 40674 for mammals). A taxid NCBI has merged into another stands for that one.",
             "in": "query",
             "name": "within",
             "required": false,
@@ -1644,7 +1656,7 @@
                   "type": "null"
                 }
               ],
-              "description": "Only rows on this taxon or below it (e.g. 40674 for mammals).",
+              "description": "Only rows on this taxon or below it (e.g. 40674 for mammals). A taxid NCBI has merged into another stands for that one.",
               "title": "Within"
             }
           },
@@ -1780,7 +1792,7 @@
             }
           },
           {
-            "description": "Only rows on this taxon or below it (e.g. 40674 for mammals).",
+            "description": "Only rows on this taxon or below it (e.g. 40674 for mammals). A taxid NCBI has merged into another stands for that one.",
             "in": "query",
             "name": "within",
             "required": false,
@@ -1793,7 +1805,7 @@
                   "type": "null"
                 }
               ],
-              "description": "Only rows on this taxon or below it (e.g. 40674 for mammals).",
+              "description": "Only rows on this taxon or below it (e.g. 40674 for mammals). A taxid NCBI has merged into another stands for that one.",
               "title": "Within"
             }
           },
@@ -2069,7 +2081,7 @@
             }
           },
           {
-            "description": "Only taxa whose name contains this text, ignoring case (or is spelled like it, with `fuzzy`). The root and 'cellular organisms' are left out.",
+            "description": "Only taxa whose scientific or common name contains this text, ignoring case (or is spelled like it, with `fuzzy`). The root and 'cellular organisms' are left out.",
             "in": "query",
             "name": "q",
             "required": false,
@@ -2084,7 +2096,7 @@
                   "type": "null"
                 }
               ],
-              "description": "Only taxa whose name contains this text, ignoring case (or is spelled like it, with `fuzzy`). The root and 'cellular organisms' are left out.",
+              "description": "Only taxa whose scientific or common name contains this text, ignoring case (or is spelled like it, with `fuzzy`). The root and 'cellular organisms' are left out.",
               "title": "Q"
             }
           },
@@ -2101,7 +2113,7 @@
             }
           },
           {
-            "description": "Only the direct children of this taxon.",
+            "description": "Only the direct children of this taxon (of the one a merged taxid was merged into).",
             "in": "query",
             "name": "parent",
             "required": false,
@@ -2114,7 +2126,7 @@
                   "type": "null"
                 }
               ],
-              "description": "Only the direct children of this taxon.",
+              "description": "Only the direct children of this taxon (of the one a merged taxid was merged into).",
               "title": "Parent"
             }
           },
@@ -2131,7 +2143,7 @@
             }
           },
           {
-            "description": "Only rows on this taxon or below it (e.g. 40674 for mammals).",
+            "description": "Only rows on this taxon or below it (e.g. 40674 for mammals). A taxid NCBI has merged into another stands for that one.",
             "in": "query",
             "name": "within",
             "required": false,
@@ -2144,7 +2156,7 @@
                   "type": "null"
                 }
               ],
-              "description": "Only rows on this taxon or below it (e.g. 40674 for mammals).",
+              "description": "Only rows on this taxon or below it (e.g. 40674 for mammals). A taxid NCBI has merged into another stands for that one.",
               "title": "Within"
             }
           },
@@ -2347,7 +2359,7 @@
             }
           },
           {
-            "description": "Only taxa whose name contains this text, ignoring case (or is spelled like it, with `fuzzy`). The root and 'cellular organisms' are left out.",
+            "description": "Only taxa whose scientific or common name contains this text, ignoring case (or is spelled like it, with `fuzzy`). The root and 'cellular organisms' are left out.",
             "in": "query",
             "name": "q",
             "required": false,
@@ -2362,7 +2374,7 @@
                   "type": "null"
                 }
               ],
-              "description": "Only taxa whose name contains this text, ignoring case (or is spelled like it, with `fuzzy`). The root and 'cellular organisms' are left out.",
+              "description": "Only taxa whose scientific or common name contains this text, ignoring case (or is spelled like it, with `fuzzy`). The root and 'cellular organisms' are left out.",
               "title": "Q"
             }
           },
@@ -2379,7 +2391,7 @@
             }
           },
           {
-            "description": "Only the direct children of this taxon.",
+            "description": "Only the direct children of this taxon (of the one a merged taxid was merged into).",
             "in": "query",
             "name": "parent",
             "required": false,
@@ -2392,7 +2404,7 @@
                   "type": "null"
                 }
               ],
-              "description": "Only the direct children of this taxon.",
+              "description": "Only the direct children of this taxon (of the one a merged taxid was merged into).",
               "title": "Parent"
             }
           },
@@ -2409,7 +2421,7 @@
             }
           },
           {
-            "description": "Only rows on this taxon or below it (e.g. 40674 for mammals).",
+            "description": "Only rows on this taxon or below it (e.g. 40674 for mammals). A taxid NCBI has merged into another stands for that one.",
             "in": "query",
             "name": "within",
             "required": false,
@@ -2422,7 +2434,7 @@
                   "type": "null"
                 }
               ],
-              "description": "Only rows on this taxon or below it (e.g. 40674 for mammals).",
+              "description": "Only rows on this taxon or below it (e.g. 40674 for mammals). A taxid NCBI has merged into another stands for that one.",
               "title": "Within"
             }
           },
@@ -2597,7 +2609,7 @@
             }
           },
           {
-            "description": "Only taxa whose name contains this text, ignoring case (or is spelled like it, with `fuzzy`). The root and 'cellular organisms' are left out.",
+            "description": "Only taxa whose scientific or common name contains this text, ignoring case (or is spelled like it, with `fuzzy`). The root and 'cellular organisms' are left out.",
             "in": "query",
             "name": "q",
             "required": false,
@@ -2612,7 +2624,7 @@
                   "type": "null"
                 }
               ],
-              "description": "Only taxa whose name contains this text, ignoring case (or is spelled like it, with `fuzzy`). The root and 'cellular organisms' are left out.",
+              "description": "Only taxa whose scientific or common name contains this text, ignoring case (or is spelled like it, with `fuzzy`). The root and 'cellular organisms' are left out.",
               "title": "Q"
             }
           },
@@ -2629,7 +2641,7 @@
             }
           },
           {
-            "description": "Only the direct children of this taxon.",
+            "description": "Only the direct children of this taxon (of the one a merged taxid was merged into).",
             "in": "query",
             "name": "parent",
             "required": false,
@@ -2642,7 +2654,7 @@
                   "type": "null"
                 }
               ],
-              "description": "Only the direct children of this taxon.",
+              "description": "Only the direct children of this taxon (of the one a merged taxid was merged into).",
               "title": "Parent"
             }
           },
@@ -2659,7 +2671,7 @@
             }
           },
           {
-            "description": "Only rows on this taxon or below it (e.g. 40674 for mammals).",
+            "description": "Only rows on this taxon or below it (e.g. 40674 for mammals). A taxid NCBI has merged into another stands for that one.",
             "in": "query",
             "name": "within",
             "required": false,
@@ -2672,7 +2684,7 @@
                   "type": "null"
                 }
               ],
-              "description": "Only rows on this taxon or below it (e.g. 40674 for mammals).",
+              "description": "Only rows on this taxon or below it (e.g. 40674 for mammals). A taxid NCBI has merged into another stands for that one.",
               "title": "Within"
             }
           },
@@ -2787,7 +2799,7 @@
     },
     "/taxons/{taxid}": {
       "get": {
-        "description": "One taxon, the same object ``/taxons`` lists: species count, per-resource\ncoverage and assembly composition. A species, an informal species or a finer\ntaxon also has ``direct``: its records attached to the taxon itself rather than\nto a finer taxon below it.",
+        "description": "One taxon, the same object ``/taxons`` lists: species count, per-resource\ncoverage and assembly composition. A species, an informal species or a finer\ntaxon also has ``direct``: its records attached to the taxon itself rather than\nto a finer taxon below it. For a taxid NCBI has merged into another, that taxon,\nwith its own ``taxid``: this and the sub-resources below answer for it.",
         "operationId": "taxon_taxons__taxid__get",
         "parameters": [
           {

@@ -14,14 +14,18 @@ import polars as pl
 import psycopg
 from eukahub_core.metrics import QUALITY_KEYS
 
+from eukahub_pipeline.enrich import ASSEMBLY_TABLE_COLUMNS
 from eukahub_pipeline.fetch_annotations import ANNOTATION_COLUMNS
-from eukahub_pipeline.fetch_assemblies import ASSEMBLY_COLUMNS
+from eukahub_pipeline.fetch_reads import RUN_GROUP_COLUMNS, STUDY_COLUMNS
 
 log = logging.getLogger("eukahub.load")
 
 
+TAXON_COLUMNS: tuple[str, ...] = ("taxid", "name", "common_name", "rank", "parent_id", "path")
+
+
 def load_taxon(conn: psycopg.Connection, rows: Iterable[tuple]) -> int:
-    """COPY (taxid, name, rank, parent_id, path) rows into ``taxon``.
+    """COPY ``TAXON_COLUMNS`` rows into ``taxon``.
 
     The ``path`` element is a dot-separated taxid string — a valid ltree
     literal, parsed by the column's input function during COPY.
@@ -29,7 +33,7 @@ def load_taxon(conn: psycopg.Connection, rows: Iterable[tuple]) -> int:
     n = 0
     with conn.cursor() as cur:
         cur.execute("TRUNCATE taxon CASCADE")  # also clears clade_features (FK)
-        with cur.copy("COPY taxon (taxid, name, rank, parent_id, path) FROM STDIN") as cp:
+        with cur.copy(f"COPY taxon ({', '.join(TAXON_COLUMNS)}) FROM STDIN") as cp:
             for row in rows:
                 cp.write_row(row)
                 n += 1
@@ -102,10 +106,30 @@ def load_dataset_meta(
 
 
 def load_assembly(conn: psycopg.Connection, df: pl.DataFrame) -> int:
-    """COPY per-assembly rows (``fetch_assemblies``) into ``assembly``."""
-    return _copy_frame(conn, "assembly", ASSEMBLY_COLUMNS, df)
+    """COPY per-assembly rows (``fetch_assemblies`` with ``enrich``'s columns) into
+    ``assembly``."""
+    return _copy_frame(conn, "assembly", ASSEMBLY_TABLE_COLUMNS, df)
 
 
 def load_annotation(conn: psycopg.Connection, df: pl.DataFrame) -> int:
     """COPY per-annotation rows (``fetch_annotations``) into ``annotation``."""
     return _copy_frame(conn, "annotation", ANNOTATION_COLUMNS, df)
+
+
+def load_rna_seq_runs(conn: psycopg.Connection, df: pl.DataFrame) -> int:
+    """COPY the RNA-Seq run groups (``fetch_reads``) into ``rna_seq_runs``."""
+    return _copy_frame(conn, "rna_seq_runs", RUN_GROUP_COLUMNS, df)
+
+
+def load_study(conn: psycopg.Connection, df: pl.DataFrame) -> int:
+    """COPY studies (``fetch_studies``) into ``study``."""
+    return _copy_frame(conn, "study", STUDY_COLUMNS, df)
+
+
+def load_taxon_merged(conn: psycopg.Connection, merged: dict[int, int]) -> int:
+    """COPY ``old taxid -> current taxid`` pairs into ``taxon_merged``."""
+    frame = pl.DataFrame(
+        {"taxid": list(merged), "merged_into": list(merged.values())},
+        schema={"taxid": pl.Int64, "merged_into": pl.Int64},
+    )
+    return _copy_frame(conn, "taxon_merged", ("taxid", "merged_into"), frame)

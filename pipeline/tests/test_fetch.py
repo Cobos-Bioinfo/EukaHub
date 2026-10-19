@@ -234,17 +234,23 @@ class _Reply:
         return iter(self._tsv.splitlines())
 
 
-def _tsv(taxids: list[int]) -> str:
-    return "run_accession\ttax_id\n" + "".join(f"ERR{i}\t{t}\n" for i, t in enumerate(taxids))
+_RUN_HEADER = "run_accession\ttax_id\tstudy_accession\tcenter_name\tfirst_public\tbase_count\tread_count\n"
+
+
+def _tsv(runs: list[tuple]) -> str:
+    """A read_run TSV: each run is (taxid, study, centre, first_public, bases, reads)."""
+    return _RUN_HEADER + "".join(
+        f"ERR{i}\t" + "\t".join(map(str, run)) + "\n" for i, run in enumerate(runs)
+    )
 
 
 def _ena(monkeypatch, bodies: dict[str, list[str]], expected: dict[str, int]) -> None:
-    """Stub ENA: ``bodies`` and ``expected`` are keyed by "short" / "long", and each
-    search answers with the next body for its query."""
+    """Stub ENA: ``bodies`` and ``expected`` are keyed by "short", "long" or "study",
+    and each search answers with the next body for its query."""
     queue = {kind: iter(b) for kind, b in bodies.items()}
 
-    def post(source, endpoint, query, *, stream=False, **fields):
-        kind = "long" if query == fr._LONG_QUERY else "short"
+    def post(source, endpoint, result, query, *, stream=False, **fields):
+        kind = "study" if result == "study" else "long" if query == fr._LONG_QUERY else "short"
         assert fields.get("format", "tsv") == "tsv"
         if endpoint == "count":
             return _Reply(text=f"count\n{expected[kind]}\n")
@@ -253,41 +259,76 @@ def _ena(monkeypatch, bodies: dict[str, list[str]], expected: dict[str, int]) ->
     monkeypatch.setattr(fr, "_post", post)
 
 
-def test_fetch_reads_counts_runs_per_taxon(monkeypatch):
+HUMAN = (9606, "PRJEB1", "SC", "2020-05-01", 100, 10)
+
+
+def test_fetch_reads_counts_runs_per_taxon_study_centre_and_year(monkeypatch):
     _ena(
         monkeypatch,
-        bodies={"short": [_tsv([9606, 10090])], "long": [_tsv([9606])]},
-        expected={"short": 2, "long": 1},
+        bodies={
+            "short": [_tsv([HUMAN, HUMAN, (9606, "PRJEB1", "SC", "2021-01-02", 5, 1), (10090, "", "", "", "", "")])],
+            "long": [_tsv([HUMAN])],
+        },
+        expected={"short": 4, "long": 1},
     )
-    rows = {r["taxid"]: r for r in fr.fetch_reads()}
-    assert rows[9606] == {"taxid": 9606, "short": 1, "long": 1}
-    assert rows[10090] == {"taxid": 10090, "short": 1, "long": 0}
+    rows = list(fr.fetch_reads())
+    assert all(tuple(r) == fr.RUN_GROUP_COLUMNS for r in rows)
+    got = {(r["taxid"], r["long_read"], r["first_public_year"]): r for r in rows}
+    assert got[(9606, False, 2020)] == {
+        "taxid": 9606, "study_accession": "PRJEB1", "long_read": False, "center_name": "SC",
+        "first_public_year": 2020, "runs": 2, "bases": 200, "reads": 20,
+    }
+    assert got[(9606, False, 2021)]["runs"] == 1
+    assert got[(9606, True, 2020)]["runs"] == 1
+    assert got[(10090, False, None)] == {
+        "taxid": 10090, "study_accession": None, "long_read": False, "center_name": None,
+        "first_public_year": None, "runs": 1, "bases": None, "reads": None,
+    }
 
 
 @pytest.mark.parametrize(
     "body",
     [
-        _tsv([9606]),  # ended early with a clean, shorter body
-        _tsv([9606]) + "Request execution cancelled\n",  # an error message mid-stream
+        _tsv([HUMAN]),  # ended early with a clean, shorter body
+        _tsv([HUMAN]) + "Request execution cancelled\n",  # an error message mid-stream
         "",  # empty
     ],
 )
 def test_fetch_reads_rejects_an_incomplete_download(monkeypatch, body):
     """ENA can end a response early; the count endpoint tells."""
     _ena(monkeypatch, bodies={"short": [body]}, expected={"short": 3})
-    once = fr._runs_per_taxon.retry_with(stop=stop_after_attempt(1))
-    with pytest.raises(RuntimeError, match="of 3 runs|unexpected ENA header"):
+    once = fr._run_groups.retry_with(stop=stop_after_attempt(1))
+    with pytest.raises(RuntimeError, match="of 3 read_run rows|unexpected ENA header"):
         once(ENA, fr._SHORT_QUERY)
 
 
 def test_fetch_reads_retries_until_the_download_is_complete(monkeypatch):
     _ena(
         monkeypatch,
-        bodies={"short": [_tsv([9606]), _tsv([9606, 9606, 10090])]},
+        bodies={"short": [_tsv([HUMAN]), _tsv([HUMAN, HUMAN, (10090, "PRJEB2", "", "", 1, 1)])]},
         expected={"short": 3},
     )
-    counts = fr._runs_per_taxon.retry_with(wait=wait_none())(ENA, fr._SHORT_QUERY)
-    assert counts == {9606: 2, 10090: 1}
+    groups = fr._run_groups.retry_with(wait=wait_none())(ENA, fr._SHORT_QUERY)
+    assert groups == {
+        (9606, "PRJEB1", "SC", 2020): [2, 200, 20],
+        (10090, "PRJEB2", None, None): [1, 1, 1],
+    }
+
+
+def test_fetch_studies_splits_parents_and_skips_stray_lines(monkeypatch):
+    body = (
+        "study_accession\tparent_study_accession\tstudy_title\n"
+        "PRJEB42931\tPRJEB42945;PRJNA312255\tVanessa cardui, genomic and transcriptomic data\n"
+        "PRJEB1\t\t\n"
+        "PRJEB2\t\tA title with a\n"
+        "line break\n"
+    )
+    _ena(monkeypatch, bodies={"study": [body]}, expected={"study": 3})
+    studies = {s["study_accession"]: s for s in fr.fetch_studies()}
+    assert studies["PRJEB42931"]["parents"] == ["PRJEB42945", "PRJNA312255"]
+    assert studies["PRJEB1"] == {"study_accession": "PRJEB1", "title": None, "parents": []}
+    assert studies["PRJEB2"]["title"] == "A title with a"  # cut at its line break
+    assert len(studies) == 3
 
 
 def test_the_two_queries_split_rna_seq_by_platform():
