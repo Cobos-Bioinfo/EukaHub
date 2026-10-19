@@ -23,9 +23,9 @@ eukaryotic tree of life. Pick any taxon and it answers two questions:
    annotation-quality statistics (BUSCO completeness, contig N50, genome size,
    gene counts). This is a group's Summary.
 2. **How is it distributed below that taxon?** Break any clade down at a lower
-   rank and compare its subgroups: as an interactive "data map", a radial Tree
-   of Life, or a side-by-side comparison, so the under-sequenced groups stand
-   out at a glance.
+   rank and compare its subgroups: as an interactive "data map", a Tree of
+   Life, or a side-by-side comparison, so the under-sequenced groups stand out
+   at a glance.
 
 The dataset is rebuilt offline on a schedule and served **read-only**, which
 shapes most of the design: reads are fast aggregate lookups over a precomputed
@@ -47,9 +47,11 @@ production-grade stack (PostgreSQL + FastAPI + a React/TypeScript SPA).
 - **Quality dimension**: best BUSCO completeness and median contig N50, genome
   size and protein-coding gene counts for every clade, computed at build time from
   per-record tables.
-- **Interactive radial Tree of Life**: a lazily-expanded dendrogram where node
-  size scales with species count and colour encodes coverage for a chosen
-  resource, with search-to-locate and a keyboard/screen-reader outline fallback.
+- **Tree of Life**: the clade's tree drawn left to right and opened a branch at a
+  time, by the main ranks (kingdom to species) or every rank. Each group shows its
+  species and is coloured by its share of a chosen resource; its name opens its
+  Summary. It zooms, a search box finds a group inside it, and the whole tree reads
+  as a nested list for keyboards and screen readers.
 - **Data map**: a click-to-drill treemap of a clade's subgroups. Area encodes
   magnitude and colour encodes a chosen coverage or quality "lens", so a big
   pale tile immediately reads as a large but under-studied group.
