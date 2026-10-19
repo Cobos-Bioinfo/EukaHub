@@ -83,6 +83,15 @@ def taxon_filter(
     parent: Annotated[
         int | None, Query(description="Only the direct children of this taxon.")
     ] = None,
+    major_ranks: Annotated[
+        bool,
+        Query(
+            description="With `parent`: its nearest descendants of a major rank (the ranks "
+            "`rank` takes, informal species counting as species) instead of its children, "
+            "skipping the clades in between. `has_children` then says whether a taxon has "
+            "any descendant of a major rank."
+        ),
+    ] = False,
     within: Within = None,
     rank: Annotated[TargetRank | None, Query(description="Only taxa of this rank.")] = None,
     taxids: Annotated[
@@ -106,12 +115,15 @@ def taxon_filter(
         raise HTTPException(status_code=422, detail="q: contains a NUL character")
     if fuzzy and q is None:
         raise HTTPException(status_code=422, detail="fuzzy: needs q")
+    if major_ranks and parent is None:
+        raise HTTPException(status_code=422, detail="major_ranks: needs parent")
     if parent is not None:
         within_path(conn, parent)
     return TaxonFilter(
         q=q,
         fuzzy=fuzzy,
         parent=parent,
+        major_ranks=major_ranks,
         within=within,
         within_path=within_path(conn, within),
         rank=rank.value if rank else None,

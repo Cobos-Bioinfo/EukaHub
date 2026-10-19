@@ -88,3 +88,50 @@ def test_children_of_informal_species_are_infraspecific(client):
 
 def test_children_of_an_unknown_taxon_is_a_404(client):
     assert client.get("/taxons", params={"parent": 999999999}).status_code == 404
+
+
+# The ranks `major_ranks` keeps, informal species counting as species.
+MAJOR_RANKS = [
+    "kingdom", "phylum", "class", "order", "family", "genus", "species", "informal species"
+]
+
+
+def test_major_ranks_are_the_nearest_descendants_of_a_major_rank(client):
+    """Every descendant of a major rank with none of a major rank above it, below
+    the parent, and nothing else."""
+    with psycopg.connect(database_url()) as conn:
+        expected = {
+            taxid
+            for (taxid,) in conn.execute(
+                "SELECT d.taxid FROM taxon x JOIN taxon d ON d.path <@ x.path "
+                "WHERE x.taxid = %(x)s AND d.taxid <> x.taxid AND d.rank = ANY(%(ranks)s) "
+                "AND NOT EXISTS (SELECT 1 FROM taxon a WHERE a.path @> d.path "
+                "AND a.path <@ x.path AND a.taxid <> ALL(ARRAY[x.taxid, d.taxid]) "
+                "AND a.rank = ANY(%(ranks)s))",
+                {"x": 40674, "ranks": MAJOR_RANKS},
+            )
+        }
+    d = _children(client, 40674, major_ranks=True, limit=1000)  # Mammalia
+    assert d["total"] == len(expected)
+    assert {i["taxid"] for i in d["results"]} == expected
+    assert "order" in {i["rank"] for i in d["results"]}
+
+
+def test_major_ranks_has_children_agrees_with_the_next_level(client):
+    """A taxon has children under major ranks iff its own list is not empty; a
+    species has none, though its subspecies are its children."""
+    items = _children(client, 9443, major_ranks=True, limit=5)["results"]  # Primates
+    items += _children(client, 9605, major_ranks=True)["results"]  # Homo
+    assert any(i["has_children"] for i in items)
+    for item in items:
+        below = _children(client, item["taxid"], major_ranks=True, limit=1)
+        assert item["has_children"] == (below["total"] > 0)
+    sapiens = next(i for i in items if i["taxid"] == 9606)
+    assert sapiens["has_children"] is False
+    assert _children(client, 9606)["total"] > 0
+
+
+def test_major_ranks_needs_parent(client):
+    response = client.get("/taxons", params={"within": 2759, "major_ranks": True})
+    assert response.status_code == 422
+    assert "major_ranks" in response.json()["detail"]

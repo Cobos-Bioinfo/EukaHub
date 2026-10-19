@@ -28,7 +28,7 @@ from eukahub_core.metrics import (
     TOTAL_KEYS,
     CladeMetadata,
 )
-from eukahub_core.taxonomy import SPINE_TAXIDS, UNIT_RANKS
+from eukahub_core.taxonomy import INFORMAL_SPECIES_RANK, SPINE_TAXIDS, UNIT_RANKS
 from psycopg.rows import dict_row
 from psycopg_pool import ConnectionPool
 
@@ -94,6 +94,20 @@ ALLOWED_RANKS: tuple[str, ...] = (
     "species",
 )
 TargetRank = Enum("TargetRank", {r: r for r in ALLOWED_RANKS}, type=str)
+
+# A tree of major ranks shows these, informal species standing in for species.
+_MAJOR_RANKS_SQL = ", ".join(f"'{r}'" for r in (*ALLOWED_RANKS, INFORMAL_SPECIES_RANK))
+# A taxon's nearest descendants of a major rank: its children, and the children of
+# any of other ranks in turn, down to a major rank. Each step is a parent_id lookup.
+_NEAREST_MAJOR_SQL = (
+    "WITH RECURSIVE walk AS ("
+    " SELECT c.taxid, c.rank FROM taxon c WHERE c.parent_id = %s AND c.taxid <> c.parent_id"
+    " UNION ALL"
+    " SELECT c.taxid, c.rank FROM walk w"
+    " JOIN taxon c ON c.parent_id = w.taxid AND c.taxid <> c.parent_id"
+    f" WHERE w.rank NOT IN ({_MAJOR_RANKS_SQL})"
+    f") SELECT taxid FROM walk WHERE rank IN ({_MAJOR_RANKS_SQL})"
+)
 
 # Sort columns for the per-record drill-down lists (interpolated as identifiers,
 # so they must be a closed, validated set — hence enums).
@@ -240,6 +254,7 @@ class TaxonFilter:
     q: str | None = None  # name contains it, or with ``fuzzy`` is spelled like it
     fuzzy: bool = False
     parent: int | None = None  # direct children of this taxon
+    major_ranks: bool = False  # with parent: its nearest descendants of a major rank
     within: int | None = None  # this taxon and everything below it
     within_path: str | None = None  # the path of ``within``
     rank: str | None = None
@@ -266,7 +281,10 @@ def _taxon_where(f: TaxonFilter) -> tuple[list[str], list[object]]:
         # The root and "cellular organisms" are never what a name search is after.
         where.append("t.taxid <> ALL(%s)")
         params.append(list(SPINE_TAXIDS))
-    if f.parent is not None:
+    if f.parent is not None and f.major_ranks:
+        where.append(f"t.taxid IN ({_NEAREST_MAJOR_SQL})")
+        params.append(f.parent)
+    elif f.parent is not None:
         where.append("t.parent_id = %s AND t.taxid <> t.parent_id")
         params.append(f.parent)
     if f.within_path is not None:
@@ -343,22 +361,34 @@ def _taxon_keys(
 _CONTEXT_RANKS = ("class", "phylum", "kingdom")
 _CONTEXT_RANKS_SQL = ", ".join(f"'{r}'" for r in _CONTEXT_RANKS)
 
-# Per listed taxon: its rollup, whether it has children, and from its ancestors
-# (the labels of its path, so primary-key lookups) whether it sits below a species
-# and its nearest class, phylum or kingdom.
-_TAXON_ITEM_SQL = (
-    f"t.taxid, t.name, t.rank, {', '.join('f.' + c for c in _FEATURE_COLS)}, "
-    "EXISTS (SELECT 1 FROM taxon c WHERE c.parent_id = t.taxid AND c.taxid <> t.taxid) "
-    "AS has_children, COALESCE(anc.infraspecific, false) AS is_infraspecific, anc.context "
-    "FROM p JOIN taxon t ON t.taxid = p.id LEFT JOIN clade_features f ON f.taxid = t.taxid "
-    "LEFT JOIN LATERAL ("
-    f"  SELECT bool_or(a.rank IN ({_UNIT_RANKS_SQL})) AS infraspecific,"
-    "   (array_agg(a.name ORDER BY nlevel(a.path) DESC)"
-    f"    FILTER (WHERE a.rank IN ({_CONTEXT_RANKS_SQL})))[1] AS context"
-    "   FROM taxon a"
-    "   WHERE a.taxid = ANY(string_to_array(ltree2text(subpath(t.path, 0, -1)), '.')::int[])"
-    ") anc ON true"
+_HAS_CHILDREN_SQL = (
+    "EXISTS (SELECT 1 FROM taxon c WHERE c.parent_id = t.taxid AND c.taxid <> t.taxid)"
 )
+_HAS_MAJOR_CHILDREN_SQL = (
+    "EXISTS (SELECT 1 FROM taxon c WHERE c.path <@ t.path AND c.taxid <> t.taxid "
+    f"AND c.rank IN ({_MAJOR_RANKS_SQL}))"
+)
+
+
+def _taxon_item_sql(major_ranks: bool) -> str:
+    """Per listed taxon: its rollup, whether it has children (with ``major_ranks``,
+    any descendant of a major rank), and from its ancestors (the labels of its
+    path, so primary-key lookups) whether it sits below a species and its nearest
+    class, phylum or kingdom."""
+    has_children = _HAS_MAJOR_CHILDREN_SQL if major_ranks else _HAS_CHILDREN_SQL
+    return (
+        f"t.taxid, t.name, t.rank, {', '.join('f.' + c for c in _FEATURE_COLS)}, "
+        f"{has_children} AS has_children, "
+        "COALESCE(anc.infraspecific, false) AS is_infraspecific, anc.context "
+        "FROM p JOIN taxon t ON t.taxid = p.id LEFT JOIN clade_features f ON f.taxid = t.taxid "
+        "LEFT JOIN LATERAL ("
+        f"  SELECT bool_or(a.rank IN ({_UNIT_RANKS_SQL})) AS infraspecific,"
+        "   (array_agg(a.name ORDER BY nlevel(a.path) DESC)"
+        f"    FILTER (WHERE a.rank IN ({_CONTEXT_RANKS_SQL})))[1] AS context"
+        "   FROM taxon a"
+        "   WHERE a.taxid = ANY(string_to_array(ltree2text(subpath(t.path, 0, -1)), '.')::int[])"
+        ") anc ON true"
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -407,7 +437,8 @@ def list_taxa(
     sql = (
         f"WITH p AS (SELECT * FROM ({matches}) m WHERE {beyond_sql} "
         f"ORDER BY {order_by(keys, backward=backward)} LIMIT %s) "
-        f"SELECT {', '.join(f'p.k{i}' for i in range(len(keys)))}, {_TAXON_ITEM_SQL} "
+        f"SELECT {', '.join(f'p.k{i}' for i in range(len(keys)))}, "
+        f"{_taxon_item_sql(f.major_ranks)} "
         f"ORDER BY {order_by(keys, backward=backward, table='p')}"
     )
     rows = conn.execute(sql, [*key_params, *where_params, *beyond_params, limit + 1]).fetchall()
