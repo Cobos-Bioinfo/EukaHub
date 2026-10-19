@@ -56,4 +56,4 @@ def test_a_dropped_download_is_retried(tmp_path, monkeypatch):
     monkeypatch.setattr(download, "_download", download._download.retry_with(wait=wait_none()))
     download_taxdump(tmp_path, SOURCE)
     assert calls == [SOURCE.url, SOURCE.url]
-    assert sorted(p.name for p in tmp_path.iterdir()) == ["names.dmp", "nodes.dmp"]
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["merged.dmp", "names.dmp", "nodes.dmp"]

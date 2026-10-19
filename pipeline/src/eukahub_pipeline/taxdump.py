@@ -1,7 +1,7 @@
 """Parse an NCBI taxdump into rows for the ``taxon`` table. No ETE3.
 
-Input: an unpacked taxdump directory containing ``nodes.dmp`` and
-``names.dmp`` (from ftp.ncbi.nih.gov/pub/taxonomy/taxdump.tar.gz).
+Input: an unpacked taxdump directory containing ``nodes.dmp``, ``names.dmp``
+and ``merged.dmp`` (from ftp.ncbi.nih.gov/pub/taxonomy/taxdump.tar.gz).
 
 Output: ``TaxonRow(taxid, name, rank, parent_id, path)`` where ``path`` is a
 materialized ``ltree`` lineage — the root->node chain of taxids joined by
@@ -67,6 +67,27 @@ def parse_names(names_path: Path) -> dict[int, str]:
         if fields[3] == "scientific name":
             names[int(fields[0])] = fields[1]
     return names
+
+
+def parse_common_names(names_path: Path) -> dict[int, str]:
+    """Map ``taxid -> GenBank common name`` ("human", "fruit fly") from ``names.dmp``.
+
+    NCBI gives at most one per taxon; the other common names are left out.
+    """
+    names: dict[int, str] = {}
+    for fields in _iter_dmp(names_path):
+        if fields[3] == "genbank common name":
+            names[int(fields[0])] = fields[1]
+    return names
+
+
+def parse_merged(merged_path: Path) -> dict[int, int]:
+    """Map each merged taxid to the taxid it was merged into, from ``merged.dmp``.
+
+    merged.dmp columns: old_tax_id | new_tax_id. NCBI points every old taxid at
+    a current one, so there are no chains to follow.
+    """
+    return {int(fields[0]): int(fields[1]) for fields in _iter_dmp(merged_path)}
 
 
 def build_paths(parents: dict[int, int]) -> dict[int, str]:

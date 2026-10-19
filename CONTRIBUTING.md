@@ -23,7 +23,7 @@ uv run --package eukahub-pipeline python scripts/restore_snapshot.py \
   --url https://github.com/Cobos-Bioinfo/EukaHub/releases/latest/download/eukahub-dataset.dump
 
 # 3b. ...or build it from the sources. Only needed for pipeline work: it downloads
-#     the NCBI taxonomy and fetches every assembly, annotation and RNA-Seq count,
+#     the NCBI taxonomy and fetches every assembly, annotation and RNA-Seq run,
 #     which takes a while. Needs the NCBI `datasets` CLI on PATH.
 uv run --package eukahub-pipeline python -m eukahub_pipeline.build --refresh-sources
 

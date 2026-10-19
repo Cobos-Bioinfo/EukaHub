@@ -15,12 +15,15 @@ What it produces (all public NCBI data, no secrets):
                        Eukaryota's 21 real direct children (the tree/children
                        tests).
 - ``assembly`` /       real per-record rows for the anchor species, capped for
-  ``annotation``       the data-rich ones so the file stays tiny.
+  ``annotation``       the data-rich ones so the file stays tiny; each assembly's
+                       species and annotation count recomputed from the slice.
+- ``rna_seq_runs`` /   real run groups of the slice's taxa, capped per taxon, and
+  ``study``            the studies they name with their parents.
+- ``taxon_merged``     a few real merged taxids of the slice's taxa.
 - ``clade_features``   **recomputed** for exactly this slice via the pipeline's
                        own rollup, scoped to Eukaryota — so ``n_rows`` and every
                        aggregate is exact and consistent with the sliced records
-                       (reads, which have no per-record table, are carried over
-                       from the production rollup's leaf values).
+                       and run groups.
 - ``clade_stats``      recomputed the same way from the sliced records.
 
 Run it against the full local serving DB (docker-compose Postgres) and commit
@@ -41,11 +44,16 @@ import polars as pl
 import psycopg
 from eukahub_core.metrics import QUALITY_KEYS, clade_feature_columns
 from eukahub_core.taxonomy import EUKARYOTA_TAXID
+from eukahub_pipeline.build import _studies_to_keep
+from eukahub_pipeline.enrich import ASSEMBLY_TABLE_COLUMNS, with_assembly_links
 from eukahub_pipeline.fetch_annotations import ANNOTATION_COLUMNS
 from eukahub_pipeline.fetch_assemblies import ASSEMBLY_COLUMNS
+from eukahub_pipeline.fetch_reads import RUN_GROUP_COLUMNS, STUDY_COLUMNS
+from eukahub_pipeline.load import TAXON_COLUMNS
 from eukahub_pipeline.rollup import (
     assemble_leaf_features,
     rollup_from_frames,
+    runs_per_taxon,
     stats_from_records,
 )
 
@@ -82,6 +90,9 @@ ANCHOR_TAXIDS: tuple[int, ...] = (
 # small enough to include whole.
 ASSEMBLY_CAP: dict[int, int] = {9606: 120, 7227: 20, 10090: 20}
 ANNOTATION_CAP: dict[int, int] = {9606: 20, 10090: 20}
+# Run groups kept per taxon (those with the most runs), and merged taxids in all.
+RUN_GROUP_CAP = 12
+MERGED_CAP = 10
 
 
 # --------------------------------------------------------------------------- #
@@ -113,14 +124,11 @@ def select_slice(conn: psycopg.Connection) -> pl.DataFrame:
         taxids.add(child)
 
     rows = conn.execute(
-        "SELECT taxid, name, rank, parent_id, path::text "
-        "FROM taxon WHERE taxid = ANY(%s) ORDER BY taxid",
+        f"SELECT {', '.join(TAXON_COLUMNS)} FROM taxon WHERE taxid = ANY(%s) ORDER BY taxid",
         (list(taxids),),
     ).fetchall()
     return pl.DataFrame(
-        rows,
-        schema=["taxid", "name", "rank", "parent_id", "path"],
-        orient="row",
+        [(*row[:-1], str(row[-1])) for row in rows], schema=list(TAXON_COLUMNS), orient="row"
     )
 
 
@@ -154,15 +162,12 @@ def fetch_records(
 
 
 def build_clade_features(
-    taxon: pl.DataFrame, conn: psycopg.Connection,
-    assemblies: list[tuple], annotations: list[tuple],
+    taxon: pl.DataFrame, assemblies: list[tuple], annotations: list[tuple],
+    run_groups: pl.DataFrame,
 ) -> pl.DataFrame:
-    """Recompute ``clade_features`` for the slice via the pipeline's own rollup.
-
-    Leaf inputs are rebuilt from the slice's *own* per-record rows (so the
-    aggregates match the seeded assemblies/annotations exactly), except reads —
-    which have no per-record table — whose per-taxon counts are read back from the
-    production rollup as each taxon's total minus its children's."""
+    """Recompute ``clade_features`` for the slice via the pipeline's own rollup,
+    from the slice's own records and run groups, so the aggregates match them
+    exactly."""
     acol = {c: i for i, c in enumerate(ASSEMBLY_COLUMNS)}
     assemblies_pl = pl.DataFrame(
         {
@@ -178,25 +183,75 @@ def build_clade_features(
         schema={"taxid": pl.Int64},
     )
 
-    reads_rows = conn.execute(
-        "SELECT f.taxid, "
-        "f.s_rna - f.s_lng - COALESCE(sum(cf.s_rna - cf.s_lng), 0) AS short, "
-        "f.s_lng - COALESCE(sum(cf.s_lng), 0) AS long "
-        "FROM clade_features f "
-        "LEFT JOIN taxon c ON c.parent_id = f.taxid AND c.taxid <> c.parent_id "
-        "LEFT JOIN clade_features cf ON cf.taxid = c.taxid "
-        "WHERE f.taxid = ANY(%s) "
-        "GROUP BY f.taxid, f.s_rna, f.s_lng",
-        (taxon["taxid"].to_list(),),
+    leaf = assemble_leaf_features(assemblies_pl, annotations_pl, runs_per_taxon(run_groups))
+    taxon_for_rollup = taxon.select("taxid", "rank", "path")
+    return rollup_from_frames(taxon_for_rollup, leaf, root_taxid=EUKARYOTA_TAXID)
+
+
+def link_assemblies(
+    taxon: pl.DataFrame, assemblies: list[tuple], annotations: list[tuple]
+) -> list[tuple]:
+    """The assembly rows with ``enrich``'s columns, computed from the slice."""
+    frame = pl.DataFrame(
+        assemblies,
+        schema={c: pl.Object for c in ASSEMBLY_COLUMNS} | {"assembly_accession": pl.Utf8, "taxid": pl.Int64},
+        orient="row",
+    )
+    ncol = {c: i for i, c in enumerate(ANNOTATION_COLUMNS)}
+    annotation_frame = pl.DataFrame(
+        {
+            "assembly_accession": [r[ncol["assembly_accession"]] for r in annotations],
+            "busco_complete": [r[ncol["busco_complete"]] for r in annotations],
+        },
+        schema={"assembly_accession": pl.Utf8, "busco_complete": pl.Float64},
+    )
+    nodes = {t: (parent, rank) for t, parent, rank in taxon.select("taxid", "parent_id", "rank").rows()}
+    return with_assembly_links(frame, annotation_frame, nodes).rows()
+
+
+def fetch_run_groups(conn: psycopg.Connection, taxids: list[int]) -> pl.DataFrame:
+    """The run groups of these taxa, at most ``RUN_GROUP_CAP`` per taxon (most runs first)."""
+    rows = conn.execute(
+        f"SELECT {', '.join(RUN_GROUP_COLUMNS)} FROM ("
+        f"SELECT *, row_number() OVER (PARTITION BY taxid ORDER BY runs DESC, study_accession, "
+        "center_name, first_public_year, long_read) AS n FROM rna_seq_runs WHERE taxid = ANY(%s)"
+        ") g WHERE n <= %s ORDER BY taxid, long_read, runs DESC, study_accession",
+        (taxids, RUN_GROUP_CAP),
     ).fetchall()
-    reads_pl = pl.DataFrame(
-        reads_rows, schema={"taxid": pl.Int64, "short": pl.Int64, "long": pl.Int64},
+    return pl.DataFrame(
+        rows,
+        schema={
+            "taxid": pl.Int64, "study_accession": pl.Utf8, "long_read": pl.Boolean,
+            "center_name": pl.Utf8, "first_public_year": pl.Int16, "runs": pl.Int64,
+            "bases": pl.Int64, "reads": pl.Int64,
+        },
         orient="row",
     )
 
-    leaf = assemble_leaf_features(assemblies_pl, annotations_pl, reads_pl)
-    taxon_for_rollup = taxon.select("taxid", "rank", "path")
-    return rollup_from_frames(taxon_for_rollup, leaf, root_taxid=EUKARYOTA_TAXID)
+
+def fetch_studies(conn: psycopg.Connection, run_groups: pl.DataFrame) -> pl.DataFrame:
+    """The studies of the sliced run groups and their parents, as the build keeps them."""
+    named = run_groups["study_accession"].drop_nulls().unique().to_list()
+    rows = conn.execute(
+        f"SELECT {', '.join(STUDY_COLUMNS)} FROM study WHERE study_accession = ANY(%s) "
+        "OR study_accession IN (SELECT unnest(parents) FROM study WHERE study_accession = ANY(%s))",
+        (named, named),
+    ).fetchall()
+    studies = pl.DataFrame(
+        rows,
+        schema={"study_accession": pl.Utf8, "title": pl.Utf8, "parents": pl.List(pl.Utf8)},
+        orient="row",
+    )
+    return _studies_to_keep(studies, run_groups).sort("study_accession")
+
+
+def fetch_merged(conn: psycopg.Connection, taxids: list[int]) -> list[tuple]:
+    """A few merged taxids of the slice's taxa."""
+    return conn.execute(
+        "SELECT taxid, merged_into FROM taxon_merged WHERE merged_into = ANY(%s) "
+        "ORDER BY merged_into, taxid LIMIT %s",
+        (taxids, MERGED_CAP),
+    ).fetchall()
 
 
 def build_clade_stats(
@@ -274,13 +329,18 @@ def generate(source_url: str, out_path: Path) -> None:
             conn, "annotation", ANNOTATION_COLUMNS, slice_taxids, ANNOTATION_CAP,
             order_by="busco_complete DESC NULLS LAST, annotation_id",
         )
-        clade = build_clade_features(taxon, conn, assemblies, annotations)
+        run_groups = fetch_run_groups(conn, slice_taxids)
+        studies = fetch_studies(conn, run_groups)
+        merged = fetch_merged(conn, slice_taxids)
+        clade = build_clade_features(taxon, assemblies, annotations, run_groups)
         stats = build_clade_stats(taxon, assemblies, annotations)
+        assemblies = link_assemblies(taxon, assemblies, annotations)
 
     n_species = taxon.filter(pl.col("rank") == "species").height
     counts = (
         f"-- taxon={taxon.height} clade_features={clade.height} "
-        f"clade_stats={stats.height} assembly={len(assemblies)} annotation={len(annotations)}"
+        f"clade_stats={stats.height} assembly={len(assemblies)} annotation={len(annotations)} "
+        f"rna_seq_runs={run_groups.height} study={studies.height} taxon_merged={len(merged)}"
     )
     lines: list[str] = [
         "-- EukaHub CI test seed — GENERATED by scripts/generate_ci_seed.py.",
@@ -290,25 +350,29 @@ def generate(source_url: str, out_path: Path) -> None:
         "",
         "BEGIN;",
         (
-            "TRUNCATE annotation, assembly, clade_stats, clade_features, taxon "
-            "RESTART IDENTITY CASCADE;"
+            "TRUNCATE study, rna_seq_runs, annotation, assembly, clade_stats, clade_features, "
+            "taxon_merged, taxon RESTART IDENTITY CASCADE;"
         ),
         "",
     ]
 
     clade_cols = ("taxid", "n_rows", *clade_feature_columns())
-    emit_insert(lines, "taxon",
-                ("taxid", "name", "rank", "parent_id", "path"),
-                taxon.rows())
+    emit_insert(lines, "taxon", TAXON_COLUMNS, taxon.rows())
+    lines.append("")
+    emit_insert(lines, "taxon_merged", ("taxid", "merged_into"), merged)
     lines.append("")
     emit_insert(lines, "clade_features", clade_cols,
                 clade.select(list(clade_cols)).rows())
     lines.append("")
     emit_insert(lines, "clade_stats", ("taxid", *QUALITY_KEYS), stats.rows())
     lines.append("")
-    emit_insert(lines, "assembly", ASSEMBLY_COLUMNS, assemblies)
+    emit_insert(lines, "assembly", ASSEMBLY_TABLE_COLUMNS, assemblies)
     lines.append("")
     emit_insert(lines, "annotation", ANNOTATION_COLUMNS, annotations)
+    lines.append("")
+    emit_insert(lines, "rna_seq_runs", RUN_GROUP_COLUMNS, run_groups.rows())
+    lines.append("")
+    emit_insert(lines, "study", STUDY_COLUMNS, studies.rows())
     lines.append("")
     lines.append("COMMIT;")
     lines.append("")
@@ -317,8 +381,8 @@ def generate(source_url: str, out_path: Path) -> None:
     print(
         f"Wrote {out_path} — taxon={taxon.height} (species={n_species}) "
         f"clade_features={clade.height} clade_stats={stats.height} "
-        f"assembly={len(assemblies)} "
-        f"annotation={len(annotations)}"
+        f"assembly={len(assemblies)} annotation={len(annotations)} "
+        f"rna_seq_runs={run_groups.height} study={studies.height} taxon_merged={len(merged)}"
     )
 
 

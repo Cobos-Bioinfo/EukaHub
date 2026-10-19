@@ -117,6 +117,12 @@ def parse_assembly_record(record: dict) -> dict | None:
     }
 
 
+def assembly_number(accession: pl.Expr) -> pl.Expr:
+    """The number shared by every version of an assembly's GenBank and RefSeq
+    accessions: GCA_000001405.29 and GCF_000001405.40 are both 000001405."""
+    return accession.str.slice(4).str.split(".").list.first()
+
+
 def drop_duplicate_assemblies(assemblies: pl.DataFrame) -> pl.DataFrame:
     """Keep one row per assembly: GenBank over its RefSeq copy, then the latest version.
 
@@ -125,7 +131,7 @@ def drop_duplicate_assemblies(assemblies: pl.DataFrame) -> pl.DataFrame:
     """
     accession = pl.col("assembly_accession")
     ranked = assemblies.with_columns(
-        accession.str.slice(4).str.split(".").list.first().alias("_number"),
+        assembly_number(accession).alias("_number"),
         accession.str.starts_with("GCA").alias("_genbank"),
         accession.str.split(".").list.last().cast(pl.Int64, strict=False).alias("_version"),
     )

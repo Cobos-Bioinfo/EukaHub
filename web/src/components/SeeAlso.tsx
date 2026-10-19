@@ -97,7 +97,12 @@ async function findRelatives(clade: TaxonWithLineage): Promise<Relatives | null>
       taxids: page.results.map((a) => a.species_taxid),
       limit: SHOWN,
     });
-    const rnaSeqRuns = new Map(taxa.results.map((t) => [t.taxid, t.resources.rna_seq?.total ?? 0]));
+    const rnaSeqRuns = new Map(
+      taxa.results.map((t) => [
+        t.taxid,
+        (t.resources.short_read_rna_seq?.total ?? 0) + (t.resources.long_read_rna_seq?.total ?? 0),
+      ]),
+    );
     return { group, assemblies: page.results, rnaSeqRuns };
   }
   return null;

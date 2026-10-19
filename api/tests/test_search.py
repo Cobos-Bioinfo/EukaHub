@@ -88,3 +88,18 @@ def test_search_query_length(client):
 
 def test_search_rejects_a_nul_character(client):
     assert client.get("/taxons", params={"q": "homo\x00"}).status_code == 422
+
+
+def test_search_matches_common_names(client):
+    hits = _search(client, "human", limit=50)
+    assert hits[0]["taxid"] == 9606  # its GenBank common name, an exact match
+    assert hits[0]["common_name"] == "human"
+    for hit in hits:
+        names = (hit["name"] + " " + (hit["common_name"] or "")).lower()
+        assert "human" in names
+
+
+def test_taxa_carry_their_common_name(client):
+    assert client.get("/taxons/9606").json()["common_name"] == "human"
+    root = client.get("/taxons/1").json()
+    assert "common_name" in root and root["common_name"] is None

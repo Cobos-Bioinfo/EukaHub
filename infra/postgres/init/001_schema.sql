@@ -13,6 +13,7 @@ CREATE EXTENSION IF NOT EXISTS pg_trgm;  -- fast case-insensitive name search
 CREATE TABLE IF NOT EXISTS taxon (
     taxid       INTEGER PRIMARY KEY,
     name        TEXT    NOT NULL,        -- scientific name
+    common_name TEXT,                    -- NCBI's GenBank common name ('human'), if any
     rank        TEXT    NOT NULL,        -- 'species','genus',...
     parent_id   INTEGER NOT NULL,
     path        LTREE   NOT NULL         -- root -> node, dot-separated taxids
@@ -22,11 +23,20 @@ CREATE INDEX IF NOT EXISTS taxon_parent_id_idx ON taxon (parent_id);
 CREATE INDEX IF NOT EXISTS taxon_rank_idx      ON taxon (rank);
 -- Descendant/ancestor operators for the breakdown + breadcrumb queries.
 CREATE INDEX IF NOT EXISTS taxon_path_gist_idx ON taxon USING GIST (path);
--- Trigram index for the name-search endpoint (ILIKE '%q%' and prefix 'q%').
+-- Trigram indexes for the name search (ILIKE '%q%' and prefix 'q%'), which matches
+-- scientific and common names.
 CREATE INDEX IF NOT EXISTS taxon_name_trgm_idx ON taxon USING GIN (name gin_trgm_ops);
+CREATE INDEX IF NOT EXISTS taxon_common_name_trgm_idx ON taxon USING GIN (common_name gin_trgm_ops);
+
+-- NCBI taxids merged into another one (merged.dmp), so a link or a record that
+-- still uses an old taxid finds the taxon it now belongs to.
+CREATE TABLE IF NOT EXISTS taxon_merged (
+    taxid       INTEGER PRIMARY KEY,     -- the old taxid
+    merged_into INTEGER NOT NULL         -- its current taxid, in `taxon`
+);
 
 -- Precomputed rollups: one row per taxon at ANY rank (computed offline).
--- Column set mirrors eukahub_core.metrics.METRICS (keys: ass, ann, rna, lng):
+-- Column set mirrors eukahub_core.metrics.METRICS (keys: ass, ann, srt, lng):
 --   c_<key> = species with >=1 of that resource on themselves or a finer taxon
 --   s_<key> = total resource count in the subtree, at any rank
 -- Percentages (p_<key>) are derived in code, not stored.
@@ -35,11 +45,11 @@ CREATE TABLE IF NOT EXISTS clade_features (
     n_rows  INTEGER NOT NULL DEFAULT 0,  -- species in subtree
     c_ass   INTEGER NOT NULL DEFAULT 0,
     c_ann   INTEGER NOT NULL DEFAULT 0,
-    c_rna   INTEGER NOT NULL DEFAULT 0,
+    c_srt   INTEGER NOT NULL DEFAULT 0,
     c_lng   INTEGER NOT NULL DEFAULT 0,
     s_ass   INTEGER NOT NULL DEFAULT 0,
     s_ann   INTEGER NOT NULL DEFAULT 0,
-    s_rna   INTEGER NOT NULL DEFAULT 0,
+    s_srt   INTEGER NOT NULL DEFAULT 0,
     s_lng   INTEGER NOT NULL DEFAULT 0,
     -- Additive assembly-composition (data-model enrichment): genome assemblies
     -- by level + reference-genome count. Filled by the same explode->sum rollup;
@@ -87,7 +97,11 @@ CREATE TABLE IF NOT EXISTS assembly (
     submitter             TEXT,
     source_database       TEXT,     -- GenBank | RefSeq
     bioprojects           TEXT[],   -- deep-link
-    download_url          TEXT      -- NCBI Datasets page for the assembly
+    download_url          TEXT,     -- NCBI Datasets page for the assembly
+    -- Computed at build time:
+    species_taxid         INTEGER NOT NULL,  -- taxid if a species, else the nearest one above
+    annotations           INTEGER NOT NULL,  -- annotations of any version of the accession
+    best_busco            REAL               -- best BUSCO complete % among them
 );
 CREATE INDEX IF NOT EXISTS assembly_taxid_idx ON assembly (taxid);
 
@@ -112,6 +126,32 @@ CREATE TABLE IF NOT EXISTS annotation (
 );
 CREATE INDEX IF NOT EXISTS annotation_taxid_idx    ON annotation (taxid);
 CREATE INDEX IF NOT EXISTS annotation_assembly_idx ON annotation (assembly_accession);
+
+-- RNA-Seq runs in ENA, counted per taxon, study, platform, submitting centre and
+-- year of first release: about 8.5 million runs are too many to keep one by one.
+-- One row per such group; like the record tables, no FK on taxid.
+CREATE TABLE IF NOT EXISTS rna_seq_runs (
+    taxid             INTEGER  NOT NULL,
+    study_accession   TEXT,              -- the run's study (BioProject), in `study`
+    long_read         BOOLEAN  NOT NULL, -- Oxford Nanopore or PacBio SMRT
+    center_name       TEXT,              -- the submitting centre, as ENA spells it
+    first_public_year SMALLINT,
+    runs              INTEGER  NOT NULL,
+    bases             BIGINT,            -- sum of the runs' base_count; null if none has one
+    reads             BIGINT             -- sum of the runs' read_count; null if none has one
+);
+CREATE INDEX IF NOT EXISTS rna_seq_runs_taxid_idx ON rna_seq_runs (taxid);
+CREATE INDEX IF NOT EXISTS rna_seq_runs_study_idx ON rna_seq_runs (study_accession);
+
+-- The ENA studies (BioProjects) of those runs and their parents, to find runs by
+-- project: a study's parents are the umbrella projects it belongs to (several
+-- for some, such as a Darwin Tree of Life project under ERGA and the EBP).
+CREATE TABLE IF NOT EXISTS study (
+    study_accession TEXT   PRIMARY KEY,
+    title           TEXT,
+    parents         TEXT[] NOT NULL
+);
+CREATE INDEX IF NOT EXISTS study_title_trgm_idx ON study USING GIN (title gin_trgm_ops);
 
 -- Dataset provenance: a single row stamped by the build at the very end, so the
 -- app can show "Data updated <date>" and the record counts travel with the data

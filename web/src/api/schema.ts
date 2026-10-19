@@ -262,7 +262,8 @@ export interface paths {
          * @description One taxon, the same object ``/taxons`` lists: species count, per-resource
          *     coverage and assembly composition. A species, an informal species or a finer
          *     taxon also has ``direct``: its records attached to the taxon itself rather than
-         *     to a finer taxon below it.
+         *     to a finer taxon below it. For a taxid NCBI has merged into another, that taxon,
+         *     with its own ``taxid``: this and the sub-resources below answer for it.
          */
         get: operations["taxon_taxons__taxid__get"];
         put?: never;
@@ -661,7 +662,7 @@ export interface components {
          * MetricFilter
          * @enum {string}
          */
-        MetricFilter: "assemblies" | "annotations" | "rna_seq" | "long_read_rna_seq";
+        MetricFilter: "assemblies" | "annotations" | "short_read_rna_seq" | "long_read_rna_seq";
         /**
          * ParameterError
          * @description One parameter a request got wrong.
@@ -765,6 +766,11 @@ export interface components {
          *     ``/taxons/{taxid}/stats``.
          */
         Taxon: {
+            /**
+             * Common Name
+             * @description NCBI's GenBank common name ("human"), if it has one.
+             */
+            common_name?: string | null;
             composition: components["schemas"]["AssemblyComposition"];
             /**
              * Context
@@ -834,7 +840,7 @@ export interface components {
          * TaxonSort
          * @enum {string}
          */
-        TaxonSort: "species" | "assemblies_covered" | "assemblies_missing" | "assemblies_total" | "annotations_covered" | "annotations_missing" | "annotations_total" | "rna_seq_covered" | "rna_seq_missing" | "rna_seq_total" | "long_read_rna_seq_covered" | "long_read_rna_seq_missing" | "long_read_rna_seq_total" | "complete" | "chromosome" | "scaffold" | "contig" | "reference" | "name";
+        TaxonSort: "species" | "assemblies_covered" | "assemblies_missing" | "assemblies_total" | "annotations_covered" | "annotations_missing" | "annotations_total" | "short_read_rna_seq_covered" | "short_read_rna_seq_missing" | "short_read_rna_seq_total" | "long_read_rna_seq_covered" | "long_read_rna_seq_missing" | "long_read_rna_seq_total" | "complete" | "chromosome" | "scaffold" | "contig" | "reference" | "name";
         /**
          * TaxonStats
          * @description The quality stats of one taxon: the object ``/taxons/{taxid}/stats`` returns
@@ -878,7 +884,7 @@ export interface operations {
     annotations_annotations_get: {
         parameters: {
             query?: {
-                /** @description Only rows on this taxon or below it (e.g. 40674 for mammals). */
+                /** @description Only rows on this taxon or below it (e.g. 40674 for mammals). A taxid NCBI has merged into another stands for that one. */
                 within?: number | null;
                 sort_by?: components["schemas"]["AnnotationSort"];
                 sort_order?: components["schemas"]["SortOrder"];
@@ -915,7 +921,7 @@ export interface operations {
     annotations_report_annotations_report_get: {
         parameters: {
             query?: {
-                /** @description Only rows on this taxon or below it (e.g. 40674 for mammals). */
+                /** @description Only rows on this taxon or below it (e.g. 40674 for mammals). A taxid NCBI has merged into another stands for that one. */
                 within?: number | null;
                 sort_by?: components["schemas"]["AnnotationSort"];
                 sort_order?: components["schemas"]["SortOrder"];
@@ -955,7 +961,7 @@ export interface operations {
                 limit?: number;
                 /** @description ``next`` or ``previous`` from a page with the same sort, for the page after or before it. */
                 cursor?: string | null;
-                /** @description Only rows on this taxon or below it (e.g. 40674 for mammals). */
+                /** @description Only rows on this taxon or below it (e.g. 40674 for mammals). A taxid NCBI has merged into another stands for that one. */
                 within?: number | null;
                 /** @description Only assemblies at these levels (any of them). */
                 assembly_level?: components["schemas"]["AssemblyLevel"][] | null;
@@ -1000,7 +1006,7 @@ export interface operations {
                 /** @description `recommended`: reference genomes first, then the most complete level, then the longest contig N50. Or a field of the record; records missing it come last. */
                 sort_by?: components["schemas"]["AssemblySort"];
                 sort_order?: components["schemas"]["SortOrder"];
-                /** @description Only rows on this taxon or below it (e.g. 40674 for mammals). */
+                /** @description Only rows on this taxon or below it (e.g. 40674 for mammals). A taxid NCBI has merged into another stands for that one. */
                 within?: number | null;
                 /** @description Only assemblies at these levels (any of them). */
                 assembly_level?: components["schemas"]["AssemblyLevel"][] | null;
@@ -1139,15 +1145,15 @@ export interface operations {
                 limit?: number;
                 /** @description ``next`` or ``previous`` from a page with the same sort, for the page after or before it. */
                 cursor?: string | null;
-                /** @description Only taxa whose name contains this text, ignoring case (or is spelled like it, with `fuzzy`). The root and 'cellular organisms' are left out. */
+                /** @description Only taxa whose scientific or common name contains this text, ignoring case (or is spelled like it, with `fuzzy`). The root and 'cellular organisms' are left out. */
                 q?: string | null;
                 /** @description Match `q` by spelling instead, for a misspelt name. */
                 fuzzy?: boolean;
-                /** @description Only the direct children of this taxon. */
+                /** @description Only the direct children of this taxon (of the one a merged taxid was merged into). */
                 parent?: number | null;
                 /** @description With `parent`: its nearest descendants of a major rank (the ranks `rank` takes, informal species counting as species) instead of its children, skipping the clades in between. `has_children` then says whether a taxon has any descendant of a major rank. */
                 major_ranks?: boolean;
-                /** @description Only rows on this taxon or below it (e.g. 40674 for mammals). */
+                /** @description Only rows on this taxon or below it (e.g. 40674 for mammals). A taxid NCBI has merged into another stands for that one. */
                 within?: number | null;
                 /** @description Only taxa of this rank. */
                 rank?: components["schemas"]["TargetRank"] | null;
@@ -1226,15 +1232,15 @@ export interface operations {
                 /** @description A number in a taxon, by its name: `species`; `<resource>_covered`, `<resource>_missing` or `<resource>_total` (`resources.<resource>.covered`...); or a field of `composition`. Or `name`. Without it: relevance for `q`, else `species`. */
                 sort_by?: components["schemas"]["TaxonSort"] | null;
                 sort_order?: components["schemas"]["SortOrder"];
-                /** @description Only taxa whose name contains this text, ignoring case (or is spelled like it, with `fuzzy`). The root and 'cellular organisms' are left out. */
+                /** @description Only taxa whose scientific or common name contains this text, ignoring case (or is spelled like it, with `fuzzy`). The root and 'cellular organisms' are left out. */
                 q?: string | null;
                 /** @description Match `q` by spelling instead, for a misspelt name. */
                 fuzzy?: boolean;
-                /** @description Only the direct children of this taxon. */
+                /** @description Only the direct children of this taxon (of the one a merged taxid was merged into). */
                 parent?: number | null;
                 /** @description With `parent`: its nearest descendants of a major rank (the ranks `rank` takes, informal species counting as species) instead of its children, skipping the clades in between. `has_children` then says whether a taxon has any descendant of a major rank. */
                 major_ranks?: boolean;
-                /** @description Only rows on this taxon or below it (e.g. 40674 for mammals). */
+                /** @description Only rows on this taxon or below it (e.g. 40674 for mammals). A taxid NCBI has merged into another stands for that one. */
                 within?: number | null;
                 /** @description Only taxa of this rank. */
                 rank?: components["schemas"]["TargetRank"] | null;
@@ -1282,15 +1288,15 @@ export interface operations {
                 limit?: number;
                 /** @description ``next`` or ``previous`` from a page with the same sort, for the page after or before it. */
                 cursor?: string | null;
-                /** @description Only taxa whose name contains this text, ignoring case (or is spelled like it, with `fuzzy`). The root and 'cellular organisms' are left out. */
+                /** @description Only taxa whose scientific or common name contains this text, ignoring case (or is spelled like it, with `fuzzy`). The root and 'cellular organisms' are left out. */
                 q?: string | null;
                 /** @description Match `q` by spelling instead, for a misspelt name. */
                 fuzzy?: boolean;
-                /** @description Only the direct children of this taxon. */
+                /** @description Only the direct children of this taxon (of the one a merged taxid was merged into). */
                 parent?: number | null;
                 /** @description With `parent`: its nearest descendants of a major rank (the ranks `rank` takes, informal species counting as species) instead of its children, skipping the clades in between. `has_children` then says whether a taxon has any descendant of a major rank. */
                 major_ranks?: boolean;
-                /** @description Only rows on this taxon or below it (e.g. 40674 for mammals). */
+                /** @description Only rows on this taxon or below it (e.g. 40674 for mammals). A taxid NCBI has merged into another stands for that one. */
                 within?: number | null;
                 /** @description Only taxa of this rank. */
                 rank?: components["schemas"]["TargetRank"] | null;

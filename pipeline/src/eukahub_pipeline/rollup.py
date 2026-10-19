@@ -35,6 +35,15 @@ _OUTPUT_COLUMNS: tuple[str, ...] = (
 )
 
 
+def runs_per_taxon(run_groups: pl.DataFrame) -> pl.DataFrame:
+    """Short- and long-read RNA-Seq runs per taxid, ``(taxid, short, long)``, from
+    the run groups of ``fetch_reads``."""
+    return run_groups.group_by("taxid").agg(
+        pl.col("runs").filter(~pl.col("long_read")).sum().cast(pl.Int64).alias("short"),
+        pl.col("runs").filter(pl.col("long_read")).sum().cast(pl.Int64).alias("long"),
+    )
+
+
 def assemble_leaf_features(
     assemblies: pl.DataFrame, annotations: pl.DataFrame, reads: pl.DataFrame
 ) -> pl.DataFrame:
@@ -101,7 +110,7 @@ def _subtree_totals(taxon: pl.DataFrame, features: pl.DataFrame) -> pl.DataFrame
         "path",
         pl.col("ass").alias("s_ass"),
         pl.col("ann").alias("s_ann"),
-        (pl.col("short") + pl.col("long")).alias("s_rna"),
+        pl.col("short").alias("s_srt"),
         pl.col("long").alias("s_lng"),
         *COMPOSITION_COLUMNS,
     )

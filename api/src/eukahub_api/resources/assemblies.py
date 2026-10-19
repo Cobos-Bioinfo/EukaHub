@@ -114,5 +114,5 @@ def assemblies_report(
         request.app.state.pool, sql, params, n_keys=n_keys,
         batch_rows=get_settings().export_batch_rows,
     )
-    name = fetch_root(conn, f.within)[0] if f.within is not None else "all"
+    name = fetch_root(conn, f.within).name if f.within is not None else "all"
     return tsv_download(rows, f"{name}_assemblies.tsv")

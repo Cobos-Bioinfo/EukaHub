@@ -1,4 +1,4 @@
-"""Download and unpack the NCBI taxdump (nodes.dmp + names.dmp)."""
+"""Download and unpack the NCBI taxdump (nodes.dmp, names.dmp, merged.dmp)."""
 
 from __future__ import annotations
 
@@ -19,16 +19,16 @@ from eukahub_pipeline.sources import TAXDUMP, Source
 
 log = logging.getLogger("eukahub.download")
 
-# Only these two members are needed; the archive holds several others.
-_WANTED = ("nodes.dmp", "names.dmp")
+# Only these members are needed; the archive holds several others.
+_WANTED = ("nodes.dmp", "names.dmp", "merged.dmp")
 
 
 def download_taxdump(
     dest_dir: str | Path, source: Source = TAXDUMP, force: bool = False
 ) -> Path:
-    """Fetch and extract nodes.dmp + names.dmp into ``dest_dir``.
+    """Fetch and extract the ``_WANTED`` members into ``dest_dir``.
 
-    Skips the download when both files are already present unless ``force``.
+    Skips the download when they are all present already, unless ``force``.
     """
     dest = Path(dest_dir)
     dest.mkdir(parents=True, exist_ok=True)

@@ -103,8 +103,9 @@ def test_release_counts_are_the_eukaryota_totals(conn):
         (
             (
                 "INSERT INTO assembly (assembly_accession, taxid, assembly_level, contig_n50, "
-                "total_sequence_length) SELECT 'GCF_' || substr(assembly_accession, 5), taxid, "
-                "assembly_level, contig_n50, total_sequence_length FROM assembly "
+                "total_sequence_length, species_taxid, annotations) "
+                "SELECT 'GCF_' || substr(assembly_accession, 5), taxid, assembly_level, "
+                "contig_n50, total_sequence_length, species_taxid, 0 FROM assembly "
                 "WHERE assembly_accession LIKE 'GCA_%' LIMIT 1; "
                 f"UPDATE clade_features SET s_ass = s_ass + 1 WHERE taxid = {EUKARYOTA_TAXID}"
             ),
@@ -112,6 +113,32 @@ def test_release_counts_are_the_eukaryota_totals(conn):
         ),
         ("UPDATE assembly SET contig_n50 = NULL", r"assembly.contig_n50 is filled on 0%"),
         ("UPDATE annotation SET busco_complete = NULL", r"annotation.busco_complete is filled"),
+        ("UPDATE rna_seq_runs SET first_public_year = NULL", r"rna_seq_runs.first_public_year is filled"),
+        (
+            (
+                "UPDATE rna_seq_runs SET runs = runs + 1 WHERE ctid = "
+                "(SELECT ctid FROM rna_seq_runs WHERE NOT long_read LIMIT 1)"
+            ),
+            r"Eukaryota s_srt \(\d+\) != its records",
+        ),
+        (
+            (
+                "UPDATE assembly SET species_taxid = 2759 WHERE assembly_accession = "
+                "(SELECT min(assembly_accession) FROM assembly)"
+            ),
+            "1 assemblies have a species_taxid that is not a species",
+        ),
+        (
+            (
+                "UPDATE assembly SET annotations = annotations + 1 WHERE assembly_accession = "
+                "(SELECT min(assembly_accession) FROM assembly)"
+            ),
+            "assemblies count",
+        ),
+        (
+            "INSERT INTO taxon_merged VALUES (2147483646, 2147483647)",
+            "1 merged taxids are a taxon or point at none",
+        ),
     ],
     ids=[
         "no Eukaryota taxon",
@@ -120,6 +147,11 @@ def test_release_counts_are_the_eukaryota_totals(conn):
         "a repeated assembly",
         "a renamed assembly field",
         "a renamed annotation field",
+        "a renamed run field",
+        "a run total that does not add up",
+        "an assembly species that is not a species",
+        "an annotation count that does not add up",
+        "a merged taxid pointing nowhere",
     ],
 )
 def test_a_broken_dataset_fails_with_a_clear_message(conn, change, message):

@@ -61,5 +61,5 @@ def annotations_report(
         request.app.state.pool, sql, params, n_keys=n_keys,
         batch_rows=get_settings().export_batch_rows,
     )
-    name = fetch_root(conn, within)[0] if within is not None else "all"
+    name = fetch_root(conn, within).name if within is not None else "all"
     return tsv_download(rows, f"{name}_annotations.tsv")

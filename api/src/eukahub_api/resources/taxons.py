@@ -73,15 +73,20 @@ def taxon_filter(
         Query(
             min_length=3,
             max_length=100,
-            description="Only taxa whose name contains this text, ignoring case (or is "
-            "spelled like it, with `fuzzy`). The root and 'cellular organisms' are left out.",
+            description="Only taxa whose scientific or common name contains this text, "
+            "ignoring case (or is spelled like it, with `fuzzy`). The root and 'cellular "
+            "organisms' are left out.",
         ),
     ] = None,
     fuzzy: Annotated[
         bool, Query(description="Match `q` by spelling instead, for a misspelt name.")
     ] = False,
     parent: Annotated[
-        int | None, Query(description="Only the direct children of this taxon.")
+        int | None,
+        Query(
+            description="Only the direct children of this taxon (of the one a merged taxid "
+            "was merged into)."
+        ),
     ] = None,
     major_ranks: Annotated[
         bool,
@@ -117,12 +122,10 @@ def taxon_filter(
         raise HTTPException(status_code=422, detail="fuzzy: needs q")
     if major_ranks and parent is None:
         raise HTTPException(status_code=422, detail="major_ranks: needs parent")
-    if parent is not None:
-        within_path(conn, parent)
     return TaxonFilter(
         q=q,
         fuzzy=fuzzy,
-        parent=parent,
+        parent=fetch_root(conn, parent).taxid if parent is not None else None,
         major_ranks=major_ranks,
         within=within,
         within_path=within_path(conn, within),
@@ -150,7 +153,9 @@ _Limit = Annotated[int, Query(ge=1, le=MAX_PAGE)]
 
 
 def _taxon(r: TaxonListRow) -> Taxon:
-    summary = CladeSummary.from_metadata(r.name, r.rank, r.meta, r.is_infraspecific)
+    summary = CladeSummary.from_metadata(
+        r.name, r.rank, r.meta, r.is_infraspecific, common_name=r.common_name
+    )
     summary.direct = r.direct
     return Taxon(**summary.model_dump(), context=r.context, has_children=r.has_children)
 
@@ -242,7 +247,7 @@ def taxons_report(
         descending=sort_order is SortOrder.desc,
         batch_rows=get_settings().export_batch_rows,
     )
-    name = fetch_root(conn, f.within)[0] if f.within is not None else "taxa"
+    name = fetch_root(conn, f.within).name if f.within is not None else "taxa"
     return tsv_download(rows, f"{name}_{f.rank or 'all'}_data.tsv")
 
 
@@ -295,7 +300,8 @@ def taxon(taxid: int, conn: Conn) -> Taxon:
     """One taxon, the same object ``/taxons`` lists: species count, per-resource
     coverage and assembly composition. A species, an informal species or a finer
     taxon also has ``direct``: its records attached to the taxon itself rather than
-    to a finer taxon below it."""
+    to a finer taxon below it. For a taxid NCBI has merged into another, that taxon,
+    with its own ``taxid``: this and the sub-resources below answer for it."""
     return _taxon(fetch_taxon(conn, taxid))
 
 
@@ -312,5 +318,5 @@ def taxon_stats(taxid: int, conn: Conn) -> TaxonStats:
     """The quality stats (best BUSCO, median genes, genome size and N50) of the
     records on or below one taxon, the same object ``/taxons/stats`` lists,
     computed at build time."""
-    name, stats = fetch_taxon_stats(conn, taxid)
-    return TaxonStats(taxid=taxid, name=name, stats=stats)
+    root, stats = fetch_taxon_stats(conn, taxid)
+    return TaxonStats(taxid=root.taxid, name=root.name, stats=stats)

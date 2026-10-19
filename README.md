@@ -70,7 +70,7 @@ production-grade stack (PostgreSQL + FastAPI + a React/TypeScript SPA).
 |---|---|
 | **NCBI** (via the `datasets` CLI) | Genome assemblies + quality fields (assembly level, contig N50, genome size, GC) and the NCBI taxonomy (taxdump) |
 | **Annotrieve** | Functional annotation metadata on the annotated subset (BUSCO, gene/transcript counts, source database, direct GFF links) |
-| **ENA** | RNA-Seq run counts (short and long read) |
+| **ENA** | RNA-Seq runs (short and long read), counted per taxon, study, centre and year |
 
 All ingested data is public. The pipeline caches each source as a local snapshot
 so a rebuild is reproducible and re-runnable.

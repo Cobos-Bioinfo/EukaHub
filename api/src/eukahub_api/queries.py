@@ -12,6 +12,7 @@ from __future__ import annotations
 from collections.abc import Collection, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from enum import Enum
+from typing import NamedTuple
 
 import psycopg
 from eukahub_core.metrics import (
@@ -166,17 +167,35 @@ class TaxonNotFound(Exception):
         self.taxid = taxid
 
 
-def fetch_root(conn: psycopg.Connection, taxid: int) -> tuple[str, str, str]:
-    """Return a root taxon's ``(name, rank, path)`` or raise ``TaxonNotFound``.
+class Root(NamedTuple):
+    """A taxon a request names, by the taxid it now has."""
 
-    Shared by the breakdown and export paths — both need the root's name (for
-    the response / filename) and its ``ltree`` path (the subtree anchor)."""
-    row = conn.execute(
-        "SELECT name, rank, path FROM taxon WHERE taxid = %s", (taxid,)
-    ).fetchone()
+    taxid: int
+    name: str
+    rank: str
+    path: str
+
+
+# A taxon by its taxid or, when NCBI has merged that taxid into another, by the
+# other: the second branch only runs when the first finds nothing.
+_ROOT_SQL = (
+    "SELECT taxid, name, rank, path FROM taxon WHERE taxid = %s "
+    "UNION ALL "
+    "SELECT t.taxid, t.name, t.rank, t.path FROM taxon_merged m "
+    "JOIN taxon t ON t.taxid = m.merged_into WHERE m.taxid = %s "
+    "LIMIT 1"
+)
+
+
+def fetch_root(conn: psycopg.Connection, taxid: int) -> Root:
+    """The taxon ``taxid`` names, or the one it was merged into; raises
+    ``TaxonNotFound`` when there is neither. Used wherever a request names a taxon:
+    its name (for the response or filename) and its ``ltree`` path (the subtree
+    anchor)."""
+    row = conn.execute(_ROOT_SQL, (taxid, taxid)).fetchone()
     if row is None:
         raise TaxonNotFound(taxid)
-    return row
+    return Root(*row)
 
 
 def _direct_totals(
@@ -204,21 +223,23 @@ def _direct_totals(
     }
 
 
-def fetch_taxon(conn: psycopg.Connection, taxid: int) -> TaxonListRow:
-    """One taxon, built exactly as ``list_taxa`` builds a list item. Raises
-    ``TaxonNotFound``."""
+def _list_one(conn: psycopg.Connection, taxid: int) -> list[TaxonListRow]:
     _total, result = list_taxa(
         conn, TaxonFilter(taxids=[taxid]), sort=None, descending=True, limit=1, cursor=None
     )
-    if not result.rows:
-        raise TaxonNotFound(taxid)
-    return result.rows[0]
+    return result.rows
+
+
+def fetch_taxon(conn: psycopg.Connection, taxid: int) -> TaxonListRow:
+    """One taxon, built exactly as ``list_taxa`` builds a list item: for a merged
+    taxid, the taxon it was merged into. Raises ``TaxonNotFound``."""
+    return (_list_one(conn, taxid) or _list_one(conn, fetch_root(conn, taxid).taxid))[0]
 
 
 def fetch_ancestors(conn: psycopg.Connection, taxid: int) -> list[TaxonListRow]:
     """The root, every taxon down to ``taxid``, and the taxon itself, in that order:
     the labels of its path. Raises ``TaxonNotFound``."""
-    labels = [int(label) for label in fetch_root(conn, taxid)[2].split(".")]
+    labels = [int(label) for label in fetch_root(conn, taxid).path.split(".")]
     _total, result = list_taxa(
         conn, TaxonFilter(taxids=labels), sort=None, descending=True, limit=len(labels), cursor=None
     )
@@ -228,11 +249,11 @@ def fetch_ancestors(conn: psycopg.Connection, taxid: int) -> list[TaxonListRow]:
 
 def fetch_taxon_stats(
     conn: psycopg.Connection, taxid: int
-) -> tuple[str, dict[str, float | None]]:
-    """``(name, QUALITY_STATS)`` of one taxon over the records on or below it,
-    computed at build time. Raises ``TaxonNotFound``."""
-    name, _rank, _path = fetch_root(conn, taxid)
-    return name, _clade_stats(conn, [taxid]).get(taxid, dict.fromkeys(QUALITY_KEYS))
+) -> tuple[Root, dict[str, float | None]]:
+    """The taxon (as ``fetch_root`` finds it) and its QUALITY_STATS over the records
+    on or below it, computed at build time. Raises ``TaxonNotFound``."""
+    root = fetch_root(conn, taxid)
+    return root, _clade_stats(conn, [root.taxid]).get(root.taxid, dict.fromkeys(QUALITY_KEYS))
 
 
 def fetch_dataset_meta(
@@ -251,7 +272,7 @@ def fetch_dataset_meta(
 class TaxonFilter:
     """Which taxa ``/taxons`` lists; every field set narrows the list further."""
 
-    q: str | None = None  # name contains it, or with ``fuzzy`` is spelled like it
+    q: str | None = None  # name or common name contains it (with ``fuzzy``: spelled like it)
     fuzzy: bool = False
     parent: int | None = None  # direct children of this taxon
     major_ranks: bool = False  # with parent: its nearest descendants of a major rank
@@ -273,11 +294,11 @@ def _taxon_where(f: TaxonFilter) -> tuple[list[str], list[object]]:
     params: list[object] = []
     if f.q is not None:
         if f.fuzzy:
-            where.append("t.name %% %s")
-            params.append(f.q)
+            where.append("(t.name %% %s OR t.common_name %% %s)")
+            params += [f.q] * 2
         else:
-            where.append("t.name ILIKE %s")
-            params.append(f"%{_escape_like(f.q)}%")
+            where.append("(t.name ILIKE %s OR t.common_name ILIKE %s)")
+            params += [f"%{_escape_like(f.q)}%"] * 2
         # The root and "cellular organisms" are never what a name search is after.
         where.append("t.taxid <> ALL(%s)")
         params.append(list(SPINE_TAXIDS))
@@ -318,31 +339,33 @@ def _taxon_keys(
         return (
             f"similar:{f.q}",
             [
-                Key("similarity(t.name, %s)", "real", True),
+                Key("greatest(similarity(t.name, %s), similarity(t.common_name, %s))", "real", True),
                 Key("length(t.name)", "integer"),
                 *_NAME_KEYS,
             ],
-            [f.q],
+            [f.q] * 2,
         )
     if sort is None and f.q is not None:
         # An exact name first; then names starting with the query, those with the
         # most records and species first; then the rest, shortest first. Only the
-        # prefix matches are ranked by data, read only for them.
-        prefix = "t.name ILIKE %s"
+        # prefix matches are ranked by data, read only for them. A common name counts
+        # as a name.
+        exact = "(lower(t.name) = lower(%s) OR COALESCE(lower(t.common_name) = lower(%s), false))"
+        prefix = "(t.name ILIKE %s OR COALESCE(t.common_name ILIKE %s, false))"
         data = "(SELECT g.{} FROM clade_features g WHERE g.taxid = t.taxid)"
-        records = data.format("s_ass + g.s_ann + g.s_rna")
+        records = data.format(" + g.".join(TOTAL_KEYS))
         species = data.format("n_rows")
         return (
             f"relevance:{f.q}",
             [
-                Key("lower(t.name) = lower(%s)", "boolean", True),
+                Key(exact, "boolean", True),
                 Key(prefix, "boolean", True),
                 Key(f"CASE WHEN {prefix} THEN COALESCE({records}, 0) ELSE 0 END", "integer", True),
                 Key(f"CASE WHEN {prefix} THEN COALESCE({species}, 0) ELSE 0 END", "integer", True),
                 Key("length(t.name)", "integer"),
                 *_NAME_KEYS,
             ],
-            [f.q, *[f"{_escape_like(f.q)}%"] * 3],
+            [f.q, f.q, *[f"{_escape_like(f.q)}%"] * 6],
         )
     sort = _identifier(sort or "species", [t.value for t in TaxonSort])
     order = "desc" if descending else "asc"
@@ -377,7 +400,7 @@ def _taxon_item_sql(major_ranks: bool) -> str:
     class, phylum or kingdom."""
     has_children = _HAS_MAJOR_CHILDREN_SQL if major_ranks else _HAS_CHILDREN_SQL
     return (
-        f"t.taxid, t.name, t.rank, {', '.join('f.' + c for c in _FEATURE_COLS)}, "
+        f"t.taxid, t.name, t.common_name, t.rank, {', '.join('f.' + c for c in _FEATURE_COLS)}, "
         f"{has_children} AS has_children, "
         "COALESCE(anc.infraspecific, false) AS is_infraspecific, anc.context "
         "FROM p JOIN taxon t ON t.taxid = p.id LEFT JOIN clade_features f ON f.taxid = t.taxid "
@@ -395,6 +418,7 @@ def _taxon_item_sql(major_ranks: bool) -> str:
 class TaxonListRow:
     meta: CladeMetadata
     name: str
+    common_name: str | None
     rank: str
     context: str | None
     is_infraspecific: bool
@@ -446,14 +470,14 @@ def list_taxa(
     keys_of = [list(row[:n_keys]) for row in rows]
     parsed = []
     for row in rows:
-        taxid, name, rank, *rest = row[n_keys:]
+        taxid, name, common_name, rank, *rest = row[n_keys:]
         *features, has_children, is_infraspecific, context = rest
         meta = (
             CladeMetadata.zero(taxid) if features[0] is None else CladeMetadata(taxid, *features)
         )
-        parsed.append((meta, name, rank, context, is_infraspecific, has_children))
+        parsed.append((meta, name, common_name, rank, context, is_infraspecific, has_children))
     direct = _direct_totals(
-        conn, {p[0].taxid: p[0] for p in parsed if p[4] or p[2] in UNIT_RANKS}
+        conn, {p[0].taxid: p[0] for p in parsed if p[5] or p[3] in UNIT_RANKS}
     )
     items = [TaxonListRow(*p, direct=direct.get(p[0].taxid)) for p in parsed]
     return total, page(items, keys_of, limit=limit, cursor=after, ordering=ordering)
@@ -523,7 +547,7 @@ _ASSEMBLY_RECORD_SELECT = (
     "a.assembly_accession, a.taxid, t.name AS organism_name, a.assembly_level, "
     "a.contig_n50, a.scaffold_n50, a.total_sequence_length, a.gc_percent, "
     "a.refseq_category, a.release_date, a.submitter, a.source_database, "
-    "a.bioprojects, a.download_url"
+    "a.bioprojects, a.download_url, a.species_taxid"
 )
 _ANNOTATION_RECORD_SELECT = (
     "a.annotation_id, a.assembly_accession, a.taxid, t.name AS organism_name, "
@@ -652,21 +676,6 @@ class AssemblyFilter:
     best_per_species: bool = False
 
 
-# The species a record counts under: its own taxon if that is a species (formal or
-# informal), else the nearest such ancestor, read from the labels of its path; a
-# record with neither counts as a unit of its own.
-_SPECIES_OF_SQL = (
-    f"CASE WHEN t.rank IN ({_UNIT_RANKS_SQL}) THEN t.taxid ELSE COALESCE(("
-    "SELECT u.taxid FROM taxon u "
-    "WHERE u.taxid = ANY(string_to_array(ltree2text(subpath(t.path, 0, -1)), '.')::int[]) "
-    f"AND u.rank IN ({_UNIT_RANKS_SQL}) ORDER BY nlevel(u.path) DESC LIMIT 1), t.taxid) END"
-)
-# Annotations name an assembly by any version of its GenBank or RefSeq accession,
-# so they are matched to it by the number in between (GCA_000001405.29 ->
-# 000001405).
-_ASSEMBLY_NUMBER = "split_part(substr({}, 5), '.', 1)"
-
-
 def _is_reference(a: str) -> str:
     return f"COALESCE({a}.refseq_category = 'reference genome', false)"
 
@@ -725,9 +734,7 @@ def _assembly_keys(sort: str, descending: bool) -> list[Key]:
 
 def _assembly_candidates(f: AssemblyFilter) -> tuple[str, list[object]]:
     """CTEs ending in ``c``: one row per assembly the list holds (per species with
-    ``best_per_species``) with the columns its keys read. Each assembly's species is
-    only looked up for ``best_per_species``: over a large group it costs more than
-    the rest."""
+    ``best_per_species``) with the columns its keys read."""
     where, params = _assembly_where(f)
     cols = (
         "r.assembly_accession AS id, r.contig_n50, r.scaffold_n50, "
@@ -741,7 +748,7 @@ def _assembly_candidates(f: AssemblyFilter) -> tuple[str, list[object]]:
         f"{k.sql} {'DESC' if k.descending else 'ASC'}" for k in _assembly_keys("recommended", True)
     )
     per_species = (
-        f"m AS (SELECT {cols}, {_SPECIES_OF_SQL} AS species {source}), "
+        f"m AS (SELECT {cols}, r.species_taxid AS species {source}), "
         "c AS (SELECT DISTINCT ON (species) m.*, "
         "count(*) OVER (PARTITION BY species) AS species_assemblies "
         f"FROM m ORDER BY species, {best})"
@@ -760,22 +767,16 @@ def _assemblies_sql(
     beyond_sql, beyond_params = beyond(keys, after) if after else ("TRUE", [])
     backward = after is not None and after.backward
     per_species = "species_assemblies, " if f.best_per_species else ""
-    number = _ASSEMBLY_NUMBER
     sql = (
         f"WITH {candidates}, "
         f"p AS (SELECT * FROM (SELECT id, {per_species}{key_columns(keys)} FROM c) q "
         f"WHERE {beyond_sql} ORDER BY {order_by(keys, backward=backward)} "
-        f"{'LIMIT %s' if limit is not None else ''}), "
-        f"ann AS (SELECT {number.format('n.assembly_accession')} AS num, count(*) AS n, "
-        "max(n.busco_complete) AS best_busco "
-        f"FROM annotation n WHERE {number.format('n.assembly_accession')} IN "
-        f"(SELECT {number.format('id')} FROM p) GROUP BY 1) "
-        f"SELECT {_ASSEMBLY_RECORD_SELECT}, {_SPECIES_OF_SQL} AS species_taxid, "
-        f"{_meets_ebp('a')} AS ebp_standard, COALESCE(ann.n, 0) AS annotations, ann.best_busco, "
+        f"{'LIMIT %s' if limit is not None else ''}) "
+        f"SELECT {_ASSEMBLY_RECORD_SELECT}, "
+        f"{_meets_ebp('a')} AS ebp_standard, a.annotations, a.best_busco, "
         f"{'p.species_assemblies' if f.best_per_species else 'NULL::bigint AS species_assemblies'}, "
         f"{', '.join(f'p.k{i}' for i in range(len(keys)))} "
         "FROM p JOIN assembly a ON a.assembly_accession = p.id JOIN taxon t ON t.taxid = a.taxid "
-        f"LEFT JOIN ann ON ann.num = {number.format('a.assembly_accession')} "
         f"ORDER BY {order_by(keys, backward=backward, table='p')}"
     )
     return sql, [*params, *beyond_params, *([limit] if limit is not None else [])]
@@ -797,7 +798,7 @@ def list_assemblies(
     ordering = f"assembly:{sort}:{'desc' if descending else 'asc'}"
     after = decode_cursor(cursor, ordering=ordering, keys=keys) if cursor else None
     where, params = _assembly_where(f)
-    unit = f"DISTINCT {_SPECIES_OF_SQL}" if f.best_per_species else "r.assembly_accession"
+    unit = "DISTINCT r.species_taxid" if f.best_per_species else "r.assembly_accession"
     total = counts.count(
         conn, f"SELECT {unit} FROM assembly r JOIN taxon t USING (taxid) {where}", params
     )
