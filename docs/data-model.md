@@ -103,7 +103,9 @@ come from independent sources, and the build drops what doesn't match instead of
 - **Breakdown** (the data map and the gaps leaderboard): the clade's descendants at
   a rank, `taxon.path <@ <clade path> AND rank = ...`, joined to `clade_features`.
 - **Lineage / breadcrumb:** ancestors via `path @> ...`.
-- **Tree of Life:** direct children via `parent_id`.
+- **Tree of Life:** direct children via `parent_id`; by major ranks, a recursive
+  walk down `parent_id` through the children of other ranks, stopping at each taxon
+  of a major rank.
 - **Name search:** trigram index on `taxon.name`. Names starting with the query are
   ranked by their records, then species; names containing it fill the remaining
   slots, shortest first (ranking every mid-word match by data is too slow for short

@@ -36,7 +36,7 @@ export default function App() {
   }, [searchOpen]);
 
   return (
-    <div className="app">
+    <div className={"app" + (route?.view === "tree" ? " app--fill" : "")}>
       <a className="skip-link" href="#main">
         Skip to content
       </a>

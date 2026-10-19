@@ -44,3 +44,9 @@ export const RANK_PLURAL: Record<string, string> = {
   phylum: "phyla", class: "classes", order: "orders",
   family: "families", genus: "genera", species: "species",
 };
+
+/** The ranks the Tree of Life keeps by default, as the API's `major_ranks` does:
+ *  informal species stand in for species. */
+export const MAJOR_RANKS: ReadonlySet<string> = new Set([
+  "kingdom", "phylum", "class", "order", "family", "genus", "species", "informal species",
+]);

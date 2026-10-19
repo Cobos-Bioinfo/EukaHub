@@ -234,6 +234,7 @@ REQUESTS = {
     "every species, deep page": "/taxons?within=2759&rank=species&limit=1000&cursor="
     + _cursor("species:desc", 1, 0, "Species 20900000", 20900000),
     "children of a big node": "/taxons?parent=2759&limit=1000",
+    "major-rank children of a big node": "/taxons?parent=2759&major_ranks=true&limit=1000",
     "search matching 1.8M names": "/taxons?q=pecies&limit=50",
     "close spellings": "/taxons?q=Specis%2020000001&fuzzy=true&limit=50",
     "gaps of every genus": "/taxons?within=2759&rank=genus&sort_by=assemblies_missing&limit=1000",

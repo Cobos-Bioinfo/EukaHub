@@ -130,7 +130,8 @@ Streamlit app that answered the same questions but was slow to build and to serv
   one object everywhere: `/taxons/{taxid}` returns it, `/taxons` lists it, and
   `/taxons/{taxid}/ancestors` gives the whole lineage as a plain list of the same
   objects, root first (a few dozen taxa at most, so it is not paged).
-  `/taxons` lists taxa by name, parent, rank under a taxon or taxid, sorted by any
+  `/taxons` lists taxa by name, parent (or a parent's nearest descendants of a major
+  rank), rank under a taxon or taxid, sorted by any
   count or by the species still missing a resource. Search, the tree's
   children, the data map, the gaps list, compare and the landing numbers are that
   one list with different filters, so each page's request is cached on its own and
@@ -242,9 +243,26 @@ Streamlit app that answered the same questions but was slow to build and to serv
   fasciatus: two of 2 Mb beside its 3.4 Gb reference genome). Filters and sort stay in the address (`?one=0`, `?ebp=1`, `?ref=1`,
   `?level=`, `?n50=`, `?sort=`, `?show=annotations`), so a filtered list can be
   linked to.
-- **The Tree of Life is a radial tree in SVG**, using `d3-hierarchy` and `d3-shape`
-  for layout only. The radial form is the recognizable "tree of life"; SVG keeps it
-  accessible and themeable; lazy expansion keeps the node count manageable.
+- **The Tree of Life is drawn left to right and opened a branch at a time.** It
+  replaced a radial tree, in which drilling around the circle made it easy to get lost
+  (issues #36 and #52). Each group is an HTML card: a column per level, each open
+  group centred on its children, the links drawn in SVG behind. A click anywhere on a
+  card opens or closes its branch, its name links to its Summary, and its arrow is the
+  button keyboards use; a long list of children opens ten at a time, or all at once
+  when they fit. The cards are nested lists of real links and buttons, so the drawing
+  is also its own outline for keyboards and screen readers, and it scrolls natively
+  (dragging also moves it). Zoom scales the drawing: Ctrl (or Cmd) with the wheel or a
+  trackpad pinch zooms around the pointer, and buttons in a corner zoom, reset and fit
+  the tree, so a plain wheel keeps scrolling. By default it skips the clades between
+  the main ranks (`/taxons?parent=` with `major_ranks`: the nearest descendants of
+  rank kingdom, phylum, class, order, family, genus or species, found by walking
+  `parent_id` down through the others), since taxonomy hides the real splits several
+  unranked clades deep (Mammalia, then Theria, Eutheria and Boreoeutheria before its
+  orders); "Every rank" shows every child. Wider than a phone, the page is exactly the
+  window's height and the tree takes what the bars leave, so only the tree scrolls;
+  its options sit in a card in the corner, which the scrolling keeps clear of. At most
+  600 groups are open at once. The measure and the ranks stay in the address
+  (`?colour=`, `?ranks=all`).
 - **The breakdown is a click-to-drill treemap (the "Data map"), with a list beside
   it.** Tile area is the number of species (or assemblies) and colour one share, so a
   large, pale tile is a large group with little data. Clicking a tile makes it the
@@ -261,7 +279,7 @@ Streamlit app that answered the same questions but was slow to build and to serv
   every measure, light to dark in both themes (the dark theme lifts its dark end so
   it clears the surface). Most shares are small: of the orders by assemblies, 35% have
   none, 6% under 1%, 19% 1 to 5%, 26% 5 to 20%, 8% 20 to 50% and 6% 50% or more, so a
-  continuous 0 to 100% ramp left most of the map pale. The Data map uses them; the
-  Tree of Life keeps a continuous ramp per measure until its own redesign. Any other
+  continuous 0 to 100% ramp left most of the map pale. The Data map and the Tree of
+  Life use them. Any other
   magnitude gets one sequential ramp, and every chart has a text alternative (a list,
   a table or an outline).

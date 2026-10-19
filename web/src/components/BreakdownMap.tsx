@@ -7,6 +7,7 @@ import type { CladeSummary, TargetRank, TaxonRef } from "../api/types";
 import { useAsync } from "../hooks/useAsync";
 import { cladePath } from "../lib/clade";
 import { fmt, fmtBp, fmtPct } from "../lib/format";
+import { MEASURES, contiguityPct, measureOf, shareText, type Measure } from "../lib/measures";
 import { RANGE_LABELS, rangeOf, rangeStyle } from "../lib/ranges";
 import { RANK_PLURAL, nextRank, ranksBelow, targetRankFor } from "../lib/ranks";
 import RangeLegend from "./RangeLegend";
@@ -14,57 +15,6 @@ import RangeLegend from "./RangeLegend";
 const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 type BucketStats = Record<string, number | null>;
-
-function levels(n: CladeSummary): { top: number; total: number } {
-  const c = n.composition;
-  return { top: c.complete + c.chromosome, total: c.complete + c.chromosome + c.scaffold + c.contig };
-}
-function contiguityPct(n: CladeSummary): number | null {
-  const { top, total } = levels(n);
-  return total > 0 ? (top / total) * 100 : null;
-}
-
-/** What a tile's colour shows: always a share, so every measure uses the same
- *  colour ranges. `count` gives the share's parts for the list. */
-interface Measure {
-  key: string;
-  label: string;
-  legend: string;
-  word: string;
-  whole: string;
-  part: string;
-  share: (n: CladeSummary) => number | null;
-  count: (n: CladeSummary) => { part: number; whole: number };
-}
-const resource = (key: string, label: string, what: string, word: string, part: string): Measure => ({
-  key,
-  label,
-  legend: `Share of species with ${what}`,
-  word,
-  whole: "Species",
-  part,
-  share: (n) => ((n.resources[key]?.covered ?? 0) > 0 ? n.resources[key].percent : 0),
-  count: (n) => ({ part: n.resources[key]?.covered ?? 0, whole: n.species }),
-});
-const MEASURES: Measure[] = [
-  resource("assemblies", "Assemblies", "a genome assembly", "assembled", "With an assembly"),
-  resource("annotations", "Annotations", "an annotation", "annotated", "With an annotation"),
-  resource("rna_seq", "RNA-Seq (any)", "RNA-Seq runs", "with RNA-Seq", "With RNA-Seq"),
-  resource("long_read_rna_seq", "Long-read RNA-Seq", "long-read RNA-Seq runs", "with long reads", "With long reads"),
-  {
-    key: "chrom",
-    label: "Chromosome-level assemblies",
-    legend: "Share of assemblies at chromosome level or better",
-    word: "at chromosome level",
-    whole: "Assemblies",
-    part: "Chromosome level or better",
-    share: contiguityPct,
-    count: (n) => {
-      const { top, total } = levels(n);
-      return { part: top, whole: total };
-    },
-  },
-];
 
 type SizeBy = "species" | "assemblies";
 const sizeValue = (n: CladeSummary, by: SizeBy): number =>
@@ -128,7 +78,7 @@ export default function BreakdownMap({
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
   const view = params.get("view") === "list" ? "list" : "map";
-  const measure = MEASURES.find((m) => m.key === params.get("colour")) ?? MEASURES[0];
+  const measure = measureOf(params.get("colour"));
   const sizeBy: SizeBy = params.get("size") === "assemblies" ? "assemblies" : "species";
   const choose = (key: string, value: string, initial: string) =>
     setParams(
@@ -218,11 +168,6 @@ export default function BreakdownMap({
     return cladePath(taxid, "map") + (search ? `?${search}` : "");
   };
   const target = (n: CladeSummary) => (nextRank(n.rank) ? openOnMap(n.taxid) : cladePath(n.taxid));
-  const shareText = (n: CladeSummary) => {
-    const share = measure.share(n);
-    if (share === null) return "No assemblies";
-    return share > 0 ? `${fmtPct(share)}% ${measure.word}` : "None yet";
-  };
   const capped = bd.data ? bd.data.total_matches > bd.data.returned : false;
 
   return (
@@ -351,7 +296,7 @@ export default function BreakdownMap({
                   onClick={() => (t.grouped ? choose("view", "list", "map") : navigate(target(n)))}
                   onMouseMove={(e) => setHover({ node: n, q: qmap.get(n.taxid), x: e.clientX, y: e.clientY })}
                   onMouseLeave={() => setHover(null)}
-                  aria-label={`${n.name}, ${fmt(n.species)} species, ${shareText(n)}. ${action}`}
+                  aria-label={`${n.name}, ${fmt(n.species)} species, ${shareText(measure, n)}. ${action}`}
                 >
                   {labelled && (
                     <span className="bmap-tile__body">
@@ -363,7 +308,7 @@ export default function BreakdownMap({
                               ? `${fmt(n.species)} species`
                               : `${fmt(n.resources.assemblies.total)} assemblies`}
                           </span>
-                          <span className="bmap-tile__share">{shareText(n)}</span>
+                          <span className="bmap-tile__share">{shareText(measure, n)}</span>
                         </>
                       )}
                     </span>

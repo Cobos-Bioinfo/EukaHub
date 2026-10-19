@@ -1145,6 +1145,8 @@ export interface operations {
                 fuzzy?: boolean;
                 /** @description Only the direct children of this taxon. */
                 parent?: number | null;
+                /** @description With `parent`: its nearest descendants of a major rank (the ranks `rank` takes, informal species counting as species) instead of its children, skipping the clades in between. `has_children` then says whether a taxon has any descendant of a major rank. */
+                major_ranks?: boolean;
                 /** @description Only rows on this taxon or below it (e.g. 40674 for mammals). */
                 within?: number | null;
                 /** @description Only taxa of this rank. */
@@ -1230,6 +1232,8 @@ export interface operations {
                 fuzzy?: boolean;
                 /** @description Only the direct children of this taxon. */
                 parent?: number | null;
+                /** @description With `parent`: its nearest descendants of a major rank (the ranks `rank` takes, informal species counting as species) instead of its children, skipping the clades in between. `has_children` then says whether a taxon has any descendant of a major rank. */
+                major_ranks?: boolean;
                 /** @description Only rows on this taxon or below it (e.g. 40674 for mammals). */
                 within?: number | null;
                 /** @description Only taxa of this rank. */
@@ -1284,6 +1288,8 @@ export interface operations {
                 fuzzy?: boolean;
                 /** @description Only the direct children of this taxon. */
                 parent?: number | null;
+                /** @description With `parent`: its nearest descendants of a major rank (the ranks `rank` takes, informal species counting as species) instead of its children, skipping the clades in between. `has_children` then says whether a taxon has any descendant of a major rank. */
+                major_ranks?: boolean;
                 /** @description Only rows on this taxon or below it (e.g. 40674 for mammals). */
                 within?: number | null;
                 /** @description Only taxa of this rank. */

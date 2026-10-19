@@ -112,12 +112,14 @@ export const getTaxonStats = async (taxid: number): Promise<TaxonStats> =>
   unwrap(await api.GET("/taxons/{taxid}/stats", { params: { path: { taxid } } }));
 
 // Taxa with their counts: a name search (q, or close spellings with fuzzy), a
-// taxon's children (parent), the taxa of a rank under a taxon (within + rank) or
-// chosen taxids. Pass a page's `next` as `cursor` for the page after it.
+// taxon's children (parent; with major_ranks its nearest descendants of a major
+// rank), the taxa of a rank under a taxon (within + rank) or chosen taxids. Pass
+// a page's `next` as `cursor` for the page after it.
 export interface TaxaParams {
   q?: string;
   fuzzy?: boolean;
   parent?: number;
+  major_ranks?: boolean;
   within?: number;
   rank?: TargetRank;
   taxids?: number[];
@@ -146,10 +148,11 @@ export const getTaxaStats = async ({ taxids, ...params }: TaxaParams): Promise<T
 
 const statsById = (page: TaxonStatsPage) => new Map(page.results.map((t) => [t.taxid, t.stats]));
 
-// Direct children of a taxon, for lazy-expanding the tree, biggest first.
+// Children of a taxon (or its nearest descendants of a major rank), for
+// lazy-expanding the tree, biggest first.
 export const getChildren = (
   taxid: number,
-  params: Pick<TaxaParams, "sort_by" | "limit" | "cursor"> = {},
+  params: Pick<TaxaParams, "major_ranks" | "sort_by" | "limit" | "cursor"> = {},
 ): Promise<TaxonPage> => getTaxa({ parent: taxid, ...params });
 
 /** A name-search result for the picker. */

@@ -76,7 +76,7 @@ export default function SubspeciesSection({
             {direct && (
               <tr>
                 <td className="bd-name">{name} (directly)</td>
-                <td className="tree-outline__rank" data-label="Rank">
+                <td className="bd-rank" data-label="Rank">
                   {rank}
                 </td>
                 {metrics.map((m) => (
@@ -91,7 +91,7 @@ export default function SubspeciesSection({
                 <td className="bd-name">
                   <Link to={`/clade/${it.taxid}`}>{it.name}</Link>
                 </td>
-                <td className="tree-outline__rank" data-label="Rank">
+                <td className="bd-rank" data-label="Rank">
                   {it.rank}
                 </td>
                 {metrics.map((m) => (

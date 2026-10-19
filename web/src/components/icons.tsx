@@ -134,3 +134,23 @@ export function TreeIcon({ size = 16, className }: IconProps) {
     </svg>
   );
 }
+
+/** Right-pointing chevron for a branch that opens (turned down when open). */
+export function ChevronIcon({ size = 16, className }: IconProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2.2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden="true"
+    >
+      <path d="m9 6 6 6-6 6" />
+    </svg>
+  );
+}

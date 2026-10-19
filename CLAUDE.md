@@ -7,7 +7,7 @@ changes. Put personal or machine-specific notes in a gitignored `CLAUDE.local.md
 ## Project
 - EukaHub: explorer of public genomic-data availability across Eukaryota. Per taxon, as
   tabs under `/clade/:taxid`: a Summary, a click-to-drill treemap ("Data map"), its
-  Records, a radial Tree of Life and a Gaps leaderboard; plus Compare.
+  Records, a left-to-right Tree of Life and a Gaps leaderboard; plus Compare.
 - Sources: NCBI `datasets` CLI (assemblies), Annotrieve `api/v0` (annotations, BUSCO),
   ENA (RNA-Seq run counts). Rewrite of Euka-Survey (Streamlit).
 - The dataset is rebuilt monthly on GitHub Actions (`.github/workflows/rebuild.yml`),
