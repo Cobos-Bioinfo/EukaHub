@@ -1,5 +1,5 @@
 """Sets of clades and custom groups: the groups-file rules, resolution against the
-taxonomy, and the ``/aggregate`` and ``/custom-groups`` endpoints. Only the endpoint
+taxonomy, ``/taxons/aggregates``, and the custom groups in ``/config``. Only the endpoint
 tests need the database."""
 
 from __future__ import annotations
@@ -10,7 +10,7 @@ from pathlib import Path
 
 import psycopg
 import pytest
-from eukahub_api import main, queries
+from eukahub_api import queries
 from eukahub_api.clade_sets import (
     SetTaxon,
     clade_set,
@@ -19,9 +19,10 @@ from eukahub_api.clade_sets import (
     set_pieces,
 )
 from eukahub_api.db import database_url
+from eukahub_api.resources import config as config_resource
 from eukahub_api.schemas import MAX_CLADES_PER_GROUP, CustomGroup
 from eukahub_api.settings import MAX_CUSTOM_GROUPS, load_settings
-from eukahub_core.metrics import METRIC_KEYS, QUALITY_STATS, CladeMetadata
+from eukahub_core.metrics import METRIC_NAMES, QUALITY_STATS, CladeMetadata
 
 CURATED = [{"taxid": 40674, "label": "Mammals"}]
 
@@ -234,23 +235,25 @@ ENDPOINT_GROUPS = [
 
 def _counts(body: dict) -> list[int]:
     return (
-        [body["n_rows"]]
-        + [body["resources"][k][f] for k in METRIC_KEYS for f in ("covered", "total")]
+        [body["species"]]
+        + [body["resources"][k][f] for k in METRIC_NAMES for f in ("covered", "missing", "total")]
         + list(body["composition"].values())
     )
 
 
 def _stats(body: dict) -> dict[str, float | None]:
-    return {s["key"]: s["value"] for s in body["quality"]}
+    return body["stats"]
 
 
 def _aggregate(client, include: list[int], exclude: list[int] = ()) -> dict:
     response = client.get(
-        "/aggregate",
+        "/taxons/aggregates",
         params={"include": ",".join(map(str, include)), "exclude": ",".join(map(str, exclude))},
     )
     assert response.status_code == 200, response.text
-    return response.json()
+    body = response.json()
+    assert body["total"] == 1 and body["next"] is None
+    return body["results"][0]
 
 
 def _expected_quality(where: str, paths: list[str]) -> dict[str, float | None]:
@@ -276,8 +279,8 @@ def _path(taxid: int) -> str:
 
 def test_aggregate_counts_are_clade_differences(client):
     body = _aggregate(client, [40674], [9443])
-    mammals = client.get("/clade/40674/summary").json()
-    primates = client.get("/clade/9443/summary").json()
+    mammals = client.get("/taxons/40674").json()
+    primates = client.get("/taxons/9443").json()
     assert _counts(body) == [m - p for m, p in zip(_counts(mammals), _counts(primates))]
     assert [t["taxid"] for t in body["include"]] == [40674]
     assert [t["taxid"] for t in body["exclude"]] == [9443]
@@ -286,16 +289,18 @@ def test_aggregate_counts_are_clade_differences(client):
     )
 
 
-def test_aggregate_of_one_clade_matches_the_clade(client):
-    body = _aggregate(client, [40674])
-    assert _counts(body) == _counts(client.get("/clade/40674/summary").json())
-    compared = client.get("/compare", params={"taxids": "40674"}).json()["groups"][0]
-    assert _stats(body) == _stats(compared)
+@pytest.mark.parametrize("taxid", [2759, 40674, 9606])
+def test_aggregate_of_one_clade_matches_the_clade(client, taxid):
+    """A clade's counts and stats, computed at build time, equal those the API
+    computes from the records for a set holding only that clade."""
+    body = _aggregate(client, [taxid])
+    assert _counts(body) == _counts(client.get(f"/taxons/{taxid}").json())
+    assert body["stats"] == client.get(f"/taxons/{taxid}/stats").json()["stats"]
 
 
 def test_aggregate_can_include_inside_an_excluded_clade(client):
     body = _aggregate(client, [7742, 40674], [32523])
-    summaries = {t: _counts(client.get(f"/clade/{t}/summary").json()) for t in (7742, 32523, 40674)}
+    summaries = {t: _counts(client.get(f"/taxons/{t}").json()) for t in (7742, 32523, 40674)}
     assert _counts(body) == [
         v - t + m for v, t, m in zip(summaries[7742], summaries[32523], summaries[40674])
     ]
@@ -319,7 +324,7 @@ def test_aggregate_can_include_inside_an_excluded_clade(client):
     ],
 )
 def test_aggregate_rejects_what_is_not_a_set(client, params, detail):
-    response = client.get("/aggregate", params=params)
+    response = client.get("/taxons/aggregates", params=params)
     assert response.status_code == 422
     assert detail in response.json()["detail"]
 
@@ -327,14 +332,14 @@ def test_aggregate_rejects_what_is_not_a_set(client, params, detail):
 @pytest.fixture
 def custom_groups_body(client, monkeypatch, tmp_path, caplog):
     caplog.set_level(logging.WARNING, logger="eukahub.api.clade_sets")
-    monkeypatch.setattr(main, "get_settings", lambda: _settings(tmp_path, ENDPOINT_GROUPS))
-    response = client.get("/custom-groups")
+    monkeypatch.setattr(config_resource, "get_settings", lambda: _settings(tmp_path, ENDPOINT_GROUPS))
+    response = client.get("/config")
     assert response.status_code == 200
-    return {g["id"]: g for g in response.json()["groups"]}
+    return {g["id"]: g for g in response.json()["custom_groups"]}
 
 
 def test_custom_groups_without_any(client):
-    assert client.get("/custom-groups").json() == {"groups": []}
+    assert client.get("/config").json()["custom_groups"] == []
 
 
 def test_custom_groups_keep_file_order_and_skip_what_does_not_fit(custom_groups_body, caplog):

@@ -21,11 +21,11 @@ eukaryotic tree of life. Pick any taxon and it answers two questions:
 1. **How much data is there?** Genome assemblies, functional annotations, and
    RNA-Seq (short and long read) for the clade, with assembly-quality and
    annotation-quality statistics (BUSCO completeness, contig N50, genome size,
-   gene counts). This is the "Genomic Resource Summary" dashboard.
+   gene counts). This is a group's Summary.
 2. **How is it distributed below that taxon?** Break any clade down at a lower
-   rank and compare its subgroups: as an interactive "data map", a radial Tree
-   of Life, or a side-by-side comparison, so the under-sequenced groups stand
-   out at a glance.
+   rank and compare its subgroups: as an interactive "data map", a Tree of
+   Life, or a side-by-side comparison, so the under-sequenced groups stand out
+   at a glance.
 
 The dataset is rebuilt offline on a schedule and served **read-only**, which
 shapes most of the design: reads are fast aggregate lookups over a precomputed
@@ -37,13 +37,21 @@ production-grade stack (PostgreSQL + FastAPI + a React/TypeScript SPA).
 ## Features
 
 - **Genomic Resource Summary**: assemblies, annotations, and short/long-read
-  RNA-Seq for any clade, with coverage meters over the full species count.
+  RNA-Seq for any clade, with coverage meters over the full species count, its
+  recommended genomes and where its biggest gaps are. A species with no data points
+  to the best-sequenced species of its genus (or family, or order).
+- **Records**: the genome assemblies and annotations of any clade, the best
+  assembly of each species or all of them, filtered by EBP standard, reference genome,
+  assembly level and contig N50, with a link to each record and a TSV of the list. A
+  size far from the median of its species' assemblies is marked.
 - **Quality dimension**: best BUSCO completeness and median contig N50, genome
   size and protein-coding gene counts for every clade, computed at build time from
   per-record tables.
-- **Interactive radial Tree of Life**: a lazily-expanded dendrogram where node
-  size scales with species count and colour encodes coverage for a chosen
-  resource, with search-to-locate and a keyboard/screen-reader outline fallback.
+- **Tree of Life**: the clade's tree drawn left to right and opened a branch at a
+  time, by the main ranks (kingdom to species) or every rank. Each group shows its
+  species and is coloured by its share of a chosen resource; its name opens its
+  Summary. It zooms, a search box finds a group inside it, and the whole tree reads
+  as a nested list for keyboards and screen readers.
 - **Data map**: a click-to-drill treemap of a clade's subgroups. Area encodes
   magnitude and colour encodes a chosen coverage or quality "lens", so a big
   pale tile immediately reads as a large but under-studied group.
@@ -52,8 +60,9 @@ production-grade stack (PostgreSQL + FastAPI + a React/TypeScript SPA).
   species and the least data, surfacing the project's core question directly.
 - **Per-record drill-down**: browse the actual assemblies and annotations behind
   the numbers, with deep links out to NCBI and the source GFF files.
-- **Wikipedia "About" cards**, a name/TaxID search scoped to Eukaryota, full
-  **light and dark themes**, and a responsive layout down to mobile.
+- **Wikipedia "About" cards**, a name/TaxID search scoped to Eukaryota that puts
+  the best-covered groups first and suggests close spellings, full **light and
+  dark themes**, and a responsive layout down to mobile.
 
 ## Data sources
 
@@ -119,8 +128,8 @@ install with `docker compose -f infra/docker-compose.prod.yml logs -f refresher`
 and tear everything down with `docker compose -f infra/docker-compose.prod.yml down -v`.
 
 Only the web port is published; Postgres and the API stay on the internal
-network. The API docs are at http://localhost:8080/api/docs and the OpenAPI
-schema at http://localhost:8080/api/openapi.json.
+network. The API docs are at http://localhost:8080/api/v1/docs and the OpenAPI
+schema at http://localhost:8080/api/v1/openapi.json.
 
 **Footprint.** The stack is sized for a small shared host: it has been tested
 with **1 GB of RAM in total and a single CPU core** shared by all containers,

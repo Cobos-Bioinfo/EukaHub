@@ -1,4 +1,4 @@
-import type { TaxonAbout } from "../api/types";
+import type { TaxonAbout } from "../api/queries";
 
 // Trim the extract to roughly one card's worth, cutting on a word boundary so
 // we never slice mid-word. Mirrors Euka-Survey's fixed-height blurb.

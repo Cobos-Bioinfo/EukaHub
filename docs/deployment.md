@@ -44,7 +44,7 @@ reinstalls itself) or run `ALTER USER` inside the `db` container.
 |---|---|---|---|
 | `db` | `postgres:17` | no | Serving database. Parallel workers and JIT disabled for a one-core host. |
 | `api` | built from `api/Dockerfile` | no | FastAPI on port 8000, reached only through `web`. |
-| `web` | built from `web/Dockerfile.prod` | `8080` | nginx: the SPA, the `/api` proxy and a response cache. |
+| `web` | built from `web/Dockerfile.prod` | `8080` | nginx: the SPA, the `/api/v1` proxy and a response cache. |
 | `refresher` | built from `infra/refresher.Dockerfile` | no | Installs and updates the dataset. |
 
 All services restart automatically (`restart: unless-stopped`) and rotate their logs
@@ -67,7 +67,7 @@ defined under [Data updates](#data-updates)) with no change to the compose file.
 | `DB_POOL_MAX` | `4` | api | Most database connections the API holds. Raise only with more CPU cores. |
 | `EXPORT_BATCH_ROWS` | `5000` | api | Rows per chunk of a TSV download, 1000 to 10000. Larger is slightly faster and costs about 1 MB of API memory per 1,000 rows, for each download running at once. An invalid value is logged and the default is used. |
 | `CACHE_MAX_AGE` | `3600` | api | Seconds that browsers and the nginx cache may reuse a response. |
-| `CORS_ALLOW_ORIGINS` | `http://localhost:8080` | api | Comma-separated origins allowed to call the API from another site. The bundled SPA calls it same-origin and does not need this. |
+| `CORS_ALLOW_ORIGINS` | `*` | api | Origins allowed to call the API from a browser on another site: `*` for any, or a comma-separated list. The bundled SPA calls it same-origin and does not need this. |
 | `LOG_LEVEL` | `INFO` | api | Python log level; logs are JSON lines on stdout. |
 
 ### Links, contact and Wikipedia
@@ -86,9 +86,7 @@ must be an `https://` URL.
 | `FEEDBACK_URL` | the EukaHub Google Form | "Send feedback" in the header menu. |
 | `SOURCE_CODE_URL` | `https://github.com/Cobos-Bioinfo/EukaHub` | The GitHub icon in the header. |
 | `PRIVACY_CONTACT_EMAIL` | `placeholder@crg.eu` | Data protection contact on the Privacy page. Set it to the address of whoever runs the server. |
-| `WIKIPEDIA_SUMMARY_URL` | `https://en.wikipedia.org/api/rest_v1/page/summary/{title}` | Where the "About" summaries come from. Must contain `{title}`. |
-| `WIKIPEDIA_USER_AGENT` | `EukaHub/1.0 (<SOURCE_CODE_URL>)` | Sent with every Wikipedia request. Wikipedia asks for one that says how to reach the operator. |
-| `WIKIPEDIA_TIMEOUT_SECONDS` | `6` | How long a summary lookup may take, 1 to 30 seconds. |
+| `WIKIPEDIA_SUMMARY_URL` | `https://en.wikipedia.org/api/rest_v1/page/summary/{title}` | Where visitors' browsers fetch the "About" summaries from. Must contain `{title}`. |
 
 ### Curated groups
 
@@ -123,10 +121,10 @@ of these rules, the API logs a warning that says why and uses the built-in list.
 ### Custom groups
 
 Groups that are not a single clade, such as fish (vertebrates without tetrapods), go
-in the same file under `custom_groups`. `/api/custom-groups` lists them with the
-clades each is made of, and `/api/aggregate?include=7742&exclude=32523` gives the
-species count, coverage and quality stats of any such set of clades. There are none
-by default, and the web app does not show them yet.
+in the same file under `custom_groups`. `/api/v1/config` lists them with the clades each
+is made of, and `/api/v1/taxons/aggregates?include=7742&exclude=32523` gives the species
+count, coverage and quality stats of any such set of clades. There are none by
+default, and the web app does not show them yet.
 
 ```json
 {
@@ -172,11 +170,12 @@ of it (Traefik, nginx, Caddy, ...). Recommended:
 
 - Do not expose 8080 to the internet directly: attach `web` to the proxy's Docker
   network and remove its `ports:` mapping, or bind it to `127.0.0.1:8080:80`.
-- Route all paths (`/` and `/api/`) to `web`; it proxies the API itself.
-- Add at the proxy: HSTS, and a Content-Security-Policy. The dashboard shows
-  Wikipedia thumbnails, so `img-src` must allow `https://thumb.wikimedia.org`
-  (and `https://upload.wikimedia.org`). A starting point:
-  `default-src 'self'; img-src 'self' https://thumb.wikimedia.org https://upload.wikimedia.org; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'`.
+- Route all paths (`/` and `/api/v1/`) to `web`; it proxies the API itself.
+- Add at the proxy: HSTS, and a Content-Security-Policy. The Summary fetches its
+  Wikipedia summary in the browser and shows Wikipedia thumbnails, so `connect-src`
+  must allow the `WIKIPEDIA_SUMMARY_URL` host and `img-src`
+  `https://thumb.wikimedia.org` (and `https://upload.wikimedia.org`). A starting point:
+  `default-src 'self'; connect-src 'self' https://en.wikipedia.org; img-src 'self' https://thumb.wikimedia.org https://upload.wikimedia.org; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'`.
 - Rate limiting is built in: `web` allows each client about 10 API requests per
   second. Bursts of up to 20 pass at once, larger ones are slowed down, and past 60
   they are refused with 429. The client address comes from `X-Forwarded-For` when
@@ -206,8 +205,8 @@ The refresher checks once a day for the newest `dataset-YYYYMMDD` Release of
 - `finishing an interrupted install` or `... rollback`: the server stopped in the
   middle of a swap; the refresher completed it before anything else.
 
-`GET /api/meta` returns the build date of the data being served (also shown in the
-site footer).
+`GET /api/v1/config` returns the build date of the data being served under `dataset`
+(also shown in the site footer).
 
 Useful commands (run from the repository root; `C` is shorthand):
 
@@ -295,8 +294,10 @@ fixes over time; rebuild with `$C build --pull && $C up -d` every few months.
 
 ## Health checks and troubleshooting
 
-- `GET /healthz` (nginx), `GET /api/health` (API process), `GET /api/health/ready`
+- `GET /healthz` (nginx), `GET /api/v1/health` (API process), `GET /api/v1/health/ready`
   (API can reach the database). Compose uses these for container health.
+- Every error, from the API or from nginx, is problem details (RFC 9457,
+  `application/problem+json`): its `detail` says what went wrong and what to change.
 - Data pages say "not found" right after the first start: the dataset is still
   installing; see the refresher logs.
 - A request returns 504 "needs more work than the server allows": a very large
@@ -304,6 +305,8 @@ fixes over time; rebuild with `$C build --pull && $C up -d` every few months.
   rank works.
 - 503 "The server is busy": all database connections were busy; clients should
   retry after the `Retry-After` delay.
+- 429 "Too many requests from this address": one client sent more than nginx's rate
+  limit allows; it should retry after the `Retry-After` delay (one second).
 
 ## Testing under the production budget
 

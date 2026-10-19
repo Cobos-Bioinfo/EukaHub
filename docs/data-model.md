@@ -38,29 +38,32 @@ taxonomy, both NCBI filing errors); its data still counts toward the clades abov
 
 ## Sources
 
-| Resource (API key) | Source | Unit | Stored as |
+| Resource (API name, column key) | Source | Unit | Stored as |
 |---|---|---|---|
-| Assemblies (`ass`) | NCBI Datasets: `datasets summary genome taxon 2759` | One genome assembly. A GenBank assembly and its RefSeq copy count once (the GenBank record is kept), and only the latest version of an assembly is kept. | One row per assembly (`assembly`) |
-| Annotations (`ann`) | [Annotrieve](https://genome.crg.es/annotrieve/) `/annotations/report` | One genome annotation (GFF), with BUSCO completeness and gene counts. Includes community-contributed annotations as well as those from GenBank, RefSeq and Ensembl, for example TOGA2 gene projections from the Hiller Lab. | One row per annotation (`annotation`) |
-| RNA-Seq (`rna`) | ENA read runs | Sequencing runs on any platform. | Counts per taxon only |
-| Long-read RNA-Seq (`lng`) | ENA read runs | Runs on Oxford Nanopore or PacBio SMRT. | Counts per taxon only |
+| Assemblies (`assemblies`, `ass`) | NCBI Datasets: `datasets summary genome taxon 2759` | One genome assembly. A GenBank assembly and its RefSeq copy count once (the GenBank record is kept), and only the latest version of an assembly is kept. | One row per assembly (`assembly`) |
+| Annotations (`annotations`, `ann`) | [Annotrieve](https://genome.crg.es/annotrieve/) `/annotations/report` | One genome annotation (GFF), with BUSCO completeness and gene counts. Includes community-contributed annotations as well as those from GenBank, RefSeq and Ensembl, for example TOGA2 gene projections from the Hiller Lab. | One row per annotation (`annotation`) |
+| RNA-Seq (`rna_seq`, `rna`) | ENA read runs | Sequencing runs on any platform. | Counts per taxon only |
+| Long-read RNA-Seq (`long_read_rna_seq`, `lng`) | ENA read runs | Runs on Oxford Nanopore or PacBio SMRT. | Counts per taxon only |
 
 RNA-Seq is kept as counts because there are millions of runs; assemblies and
 annotations are small enough (tens of thousands) to keep per record, which is what
 powers the record lists and the quality statistics.
 
-## What the dashboard numbers mean
+## What the Summary numbers mean
 
-For a clade and a resource:
+For a clade and a resource (the API's name first, then the `clade_features`
+column):
 
-- **Species** (`n_rows`): taxa of rank `species` in the clade, with or without data.
-  Informal species and below-species taxa are not counted.
-- **Species with data** (`c_<key>`): species with at least one record of that
-  resource, attached to the species itself or to a taxon below it (a subspecies,
-  variety or strain). **Coverage** is this divided by the species count.
-- **Total** (`s_<key>`): every record in the clade, whatever taxon it is attached
-  to: a species, a subspecies, an informal species, or a higher rank such as a genus
-  (some RNA-Seq runs). It equals the length of the clade's record list.
+- **Species** (`species`, `n_rows`): taxa of rank `species` in the clade, with or
+  without data. Informal species and below-species taxa are not counted.
+- **Species with data** (`resources.<name>.covered`, `c_<key>`): species with at
+  least one record of that resource, attached to the species itself or to a taxon
+  below it (a subspecies, variety or strain). **Coverage** (`percent`) is this
+  divided by the species count, and the species without it are `missing`.
+- **Total** (`resources.<name>.total`, `s_<key>`): every record in the clade,
+  whatever taxon it is attached to: a species, a subspecies, an informal species, or
+  a higher rank such as a genus (some RNA-Seq runs). It equals the length of the
+  clade's record list.
 - **Assembly composition**: the clade's assemblies by level (complete genome,
   chromosome, scaffold, contig) and how many are NCBI reference or representative
   genomes.
@@ -74,7 +77,7 @@ For a clade and a resource:
 A species, an informal species or a below-species taxon is a single unit: its row
 has `n_rows = 1`, and `c_<key> = 1` when it has that resource. Its page lists the
 taxa below it and splits each total into the records attached to the taxon itself
-and those on finer taxa (`direct` in the summary API).
+and those on finer taxa (`direct` in `/api/v1/taxons/{taxid}`).
 
 ## Tables
 
@@ -100,8 +103,14 @@ come from independent sources, and the build drops what doesn't match instead of
 - **Breakdown** (the data map and the gaps leaderboard): the clade's descendants at
   a rank, `taxon.path <@ <clade path> AND rank = ...`, joined to `clade_features`.
 - **Lineage / breadcrumb:** ancestors via `path @> ...`.
-- **Tree of Life:** direct children via `parent_id`.
-- **Name search:** trigram index on `taxon.name`.
+- **Tree of Life:** direct children via `parent_id`; by major ranks, a recursive
+  walk down `parent_id` through the children of other ranks, stopping at each taxon
+  of a major rank.
+- **Name search:** trigram index on `taxon.name`. Names starting with the query are
+  ranked by their records, then species; names containing it fill the remaining
+  slots, shortest first (ranking every mid-word match by data is too slow for short
+  queries). When nothing matches, close spellings come from trigram similarity. Each
+  hit's nearest class, phylum or kingdom is read from its path labels.
 - **Record lists:** records whose taxon lies in the clade's subtree.
 - **Quality statistics of a set of clades:** the records in the set, one subtree
   filter per included clade.

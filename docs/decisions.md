@@ -99,17 +99,22 @@ Streamlit app that answered the same questions but was slow to build and to serv
 - **React + TypeScript SPA built with Vite**, no server-side rendering: every page
   is a view over API data.
 - **No user accounts.** The API serves public, read-only data derived from public
-  sources. Abuse is handled with rate limiting at the reverse proxy, not logins.
+  sources, to any client: CORS allows every origin. Abuse is handled with rate
+  limiting per client at the reverse proxy, not with logins or an origin list.
 - **Sized for one CPU core and about 1 GB of RAM.** A 15 s per-query limit, a
   four-connection pool, no parallel query workers, and an nginx response cache keep
-  one expensive request from taking the server down.
+  one expensive request from taking the server down. The TSV report streams in
+  batches, so the API's memory stays flat whatever its size, and it has no size
+  limit: it grows only with the taxonomy (about 45 MB for every taxon today). It is
+  not cached (`no-store`), which keeps nginx's cache for the small JSON responses
+  the interface repeats.
 - **Deployment settings are configuration, not code.** Links, the privacy contact,
-  the Wikipedia lookup and the curated groups are read by the API at startup (from
-  `infra/.env` and an optional `infra/config/groups.json`), and the web app gets them
-  from `/api/site-config`, so changing one needs a restart, not a new image. Only the
-  API container reads the groups file, which also feeds the landing-page numbers.
-  Every setting has a default, and an invalid one is logged and replaced by its
-  default, because a typo should not take an unattended site down. The pipeline's
+  the Wikipedia summary endpoint and the curated groups are read by the API at
+  startup (from `infra/.env` and an optional `infra/config/groups.json`), and the web
+  app gets them from `/api/v1/config`, so changing one needs a restart, not a new image.
+  Only the API container reads the groups file, which also feeds the landing-page
+  numbers. Every setting has a default, and an invalid one is logged and replaced by
+  its default, because a typo should not take an unattended site down. The pipeline's
   source addresses are GitHub Actions repository variables instead, since the
   pipeline runs there; there an invalid value stops the build, because a build
   against a source nobody chose must not publish.
@@ -117,25 +122,164 @@ Streamlit app that answered the same questions but was slow to build and to serv
   included, minus clades inside them excluded, so its counts are sums and differences
   of `clade_features` rows. Its quality stats are medians and maxima, which cannot be
   subtracted, so they come from the records in the set. The API keeps the two
-  concerns apart: `/custom-groups` lists the deployment's groups and their clades,
-  and `/aggregate` computes any set. Nothing is precomputed, so a deployment changes
-  its groups with a restart, not a rebuild. Groups under one parent may not overlap,
-  so that they and the parent's "rest" group always add up to the parent.
+  concerns apart: `/config` lists the deployment's groups and their clades, and
+  `/taxons/aggregates` computes any set. Nothing is precomputed, so a deployment
+  changes its groups with a restart, not a rebuild. Groups under one parent may not
+  overlap, so that they and the parent's "rest" group always add up to the parent.
+- **The API has one main resource, taxons, named like Annotrieve's.** A taxon is
+  one object everywhere: `/taxons/{taxid}` returns it, `/taxons` lists it, and
+  `/taxons/{taxid}/ancestors` gives the whole lineage as a plain list of the same
+  objects, root first (a few dozen taxa at most, so it is not paged).
+  `/taxons` lists taxa by name, parent (or a parent's nearest descendants of a major
+  rank), rank under a taxon or taxid, sorted by any
+  count or by the species still missing a resource. Search, the tree's
+  children, the data map, the gaps list, compare and the landing numbers are that
+  one list with different filters, so each page's request is cached on its own and
+  nothing is computed twice. Quality stats are a resource of their own,
+  `/taxons/{taxid}/stats` and `/taxons/stats` (paged with the same parameters and
+  cursors as `/taxons`), so a list that does not show them never reads them and no
+  parameter changes a response's shape. Records are their own
+  collections (`/assemblies`, `/annotations`), filtered by `within`. Each list has a
+  `/report` (`/taxons/report`, `/assemblies/report`, `/annotations/report`): the
+  whole list, same filters and order, as a streamed TSV. Names follow Annotrieve's API
+  (`/taxons`, `/ancestors`, `sort_by`, `sort_order`, `results`, `/report`), which the
+  same people maintain and use.
+- **A count is named after its place in a taxon.** `sort_by` takes the name of a
+  number in the response: `species`, `assemblies_covered` for
+  `resources.assemblies.covered` (also `_missing` and `_total`), `chromosome` for
+  `composition.chromosome`. A taxon has few numbers, so flat names are simpler to
+  write than Annotrieve's field paths, which suit its large nested records. Each
+  resource has one name (`assemblies`, `annotations`, `rna_seq`,
+  `long_read_rna_seq`) in `resources`, `filter`, `sort_by`, `/config` and the TSV
+  report's columns. Quality stats are an object keyed by stat, like `resources`. The
+  database's short column names (`n_rows`, `c_ass`, `s_ass`) never reach a client.
+- **The recommended assembly is a fixed order, not a score.** "Which genome
+  should I use?" is answered by `sort_by=recommended`: NCBI reference genomes first,
+  then the most complete level (complete genome, chromosome, scaffold, contig), then
+  the longest contig N50. Each rule is one a user can check against the record,
+  which a weighted score would hide. Size is not one of them: a species' median
+  length can be inflated by contaminated assemblies, and a rule putting assemblies
+  under half that median last changed the pick of only 8 of 28,485 species, all
+  unnamed `sp.` taxa whose median mixes several organisms. A client compares
+  `total_sequence_length` with the species' median genome size (`/taxons/stats`)
+  instead, to flag a "Complete Genome" that is one chromosome (Ovis canadensis
+  GCA_042859625.1: 145 Mb, against 2.7 Gb for the species). `best_per_species`
+  keeps the first assembly of each species in this order among those the filters
+  keep, so it is chosen per request: a flag stored at build time would be wrong as
+  soon as a filter drops the species' best assembly. `species_taxid` is NCBI's:
+  subspecies and strains count with their species, and informal species (hybrids,
+  unnamed `sp.`) as species of their own, so the list can hold a few more species
+  than a taxon's `covered`.
+  `ebp_standard` is the contiguity part of the Earth BioGenome Project's reference
+  standard (contig N50 of 1 Mb or more, scaffold N50 of 10 Mb or more); the dataset
+  has nothing to check its other criteria with. An assembly's `annotations` match
+  it by assembly number, so annotations of its RefSeq copy or of an older version
+  count: by exact accession, 3,400 of 19,500 annotations would match no assembly.
+- **The API is served under `/api/v1`.** Clients of a public API can't be asked to
+  change their URLs, so the version is in the path from the first deployment, as
+  Annotrieve serves `/api/v0`. It is a mount point: the proxy (nginx, or Vite in
+  development) strips it, and the routes in the code carry no version. A breaking
+  change would be served as `/api/v2` next to it.
+- **Every error is problem details (RFC 9457).** One shape for every error, whoever
+  raises it (a resource, FastAPI's parameter checks, Starlette's routing, nginx's rate
+  limit): `type`, `title` (the HTTP status phrase), `status` and a `detail` sentence
+  saying what to change, sent as `application/problem+json`. A 422 also lists each
+  parameter at fault in `errors`. The OpenAPI document gives every operation this
+  `Problem` as its default response.
+- **An unknown query parameter is a 422.** A typo such as `rnak=species` would
+  otherwise return an unfiltered list that looks like an answer. The error names the
+  parameter and lists those the endpoint takes. Enumerated values are lower case
+  (`sort_order=asc`, `logic=or`).
+- **Lists page with a cursor, not an offset.** Each list sorts on keys that end in
+  a unique one (the taxid or the record's accession), and a page's `next` and
+  `previous` cursors hold the key values of its last and first rows. The next query
+  filters on those values instead of skipping `offset` rows, which Postgres reads
+  and throws away, so a deep page costs what the first does and an indexed sort
+  can start where the cursor points. The cursor is opaque base64url JSON naming its
+  sort order; one from another order is refused with a 422. Records missing the
+  sort field come last in either direction. Lists still report `total`; each filter
+  set is counted once per dataset build and kept in a small in-process cache (about
+  2 MB at most), since the data only changes when a new build is installed.
 - **The root taxids stay in code**, in one constant per side
   (`eukahub_core.taxonomy` and `web/src/lib/taxonomy.ts`). The dataset is built and
   validated for Eukaryota, so another root needs a rebuild and new checks anyway.
-- **Wikipedia summaries go through the API**, not the browser: Wikipedia asks for a
-  descriptive User-Agent, which browsers cannot set, and the API can cache each
-  summary. A failure just hides the card.
+- **The browser fetches Wikipedia summaries itself**, from the endpoint `/api/v1/config`
+  names. Wikipedia allows cross-origin requests and asks browsers to identify the tool
+  with an `Api-User-Agent` header. Proxying them through the API held a database
+  connection while Wikipedia answered and put an external service in the request
+  path; the browser already loaded the thumbnails from Wikimedia anyway. A failure
+  just hides the card.
 
 ## Interface
 
-- **The Tree of Life is a radial tree in SVG**, using `d3-hierarchy` and `d3-shape`
-  for layout only. The radial form is the recognizable "tree of life"; SVG keeps it
-  accessible and themeable; lazy expansion keeps the node count manageable.
-- **The breakdown is a click-to-drill treemap (the "data map").** Tile area is the
-  number of species (or assemblies) and colour one chosen measure, so a large, pale
-  tile is a large group with little data. Clicking drills to the next taxonomic
-  rank, so no rank selector is needed.
-- **Colour follows one scheme:** one sequential ramp per measure, light to dark in
-  both themes, and text alternatives (lists, tables, outlines) for every chart.
+- **The current group is the app's state.** Every view of a group lives under
+  `/clade/:taxid`: its Summary, Data map (`/map`), Records (`/records`), Tree of Life
+  (`/tree`) and Gaps (`/gaps`), shown as tabs, with its lineage in the top bar
+  (the first two ranks, a "…" menu with the ones in between, and the last two).
+  Following the lineage, searching, clicking a tile on the Data map or looking inside
+  a group on Gaps changes the group and keeps the view, so the address always names
+  what is on screen and the browser's back button walks it. A species or a finer
+  taxon has no Data map or Gaps, and a group without records no Records tab. The old
+  addresses (`/map/:taxid`, `/tree/:taxid`, `/gaps?root=`) redirect. On a phone the
+  pinned top bar is one line (brand, search, menu), and Compare and the theme move
+  into the menu. Compare is the only page about several groups.
+- **The Summary summarises; the other views hold the detail.** A sentence (species,
+  how many have an assembly, how many one that meets the EBP standard), the
+  coverage cards, the first recommended genomes (linking to Records), the three
+  subgroups with the most species missing an assembly (linking to the Data map), the
+  quality stats, then the classification and Wikipedia's summary last. A species
+  with no data at all shows the best-sequenced species of its genus, or its family
+  or order when the genus has none, labelled by what they share ("same genus"):
+  taxonomy is not a phylogeny, so they are never called the closest.
+- **Records answer "which genome should I use, and where do I get it".** On a
+  group, the list starts as the best assembly of each species (see the API's
+  recommended order); filters (EBP standard, reference genomes, level, minimum
+  contig N50) sit beside it, folded above it on a phone, and the download is the
+  list as shown. A size under half or over twice the median of its species'
+  assemblies is marked with both sizes (one request to `/taxons/stats` per page):
+  the assembly may be one chromosome, or hold contamination or both haplotypes. It
+  is a mark the reader judges, not a rule that reorders the list. Reference genomes
+  are never marked: a median can come from a few partial assemblies (Myrmecobius
+  fasciatus: two of 2 Mb beside its 3.4 Gb reference genome). Filters and sort stay in the address (`?one=0`, `?ebp=1`, `?ref=1`,
+  `?level=`, `?n50=`, `?sort=`, `?show=annotations`), so a filtered list can be
+  linked to.
+- **The Tree of Life is drawn left to right and opened a branch at a time.** It
+  replaced a radial tree, in which drilling around the circle made it easy to get lost
+  (issues #36 and #52). Each group is an HTML card: a column per level, each open
+  group centred on its children, the links drawn in SVG behind. A click anywhere on a
+  card opens or closes its branch, its name links to its Summary, and its arrow is the
+  button keyboards use; a long list of children opens ten at a time, or all at once
+  when they fit. The cards are nested lists of real links and buttons, so the drawing
+  is also its own outline for keyboards and screen readers, and it scrolls natively
+  (dragging also moves it). Zoom scales the drawing: Ctrl (or Cmd) with the wheel or a
+  trackpad pinch zooms around the pointer, and buttons in a corner zoom, reset and fit
+  the tree, so a plain wheel keeps scrolling. By default it skips the clades between
+  the main ranks (`/taxons?parent=` with `major_ranks`: the nearest descendants of
+  rank kingdom, phylum, class, order, family, genus or species, found by walking
+  `parent_id` down through the others), since taxonomy hides the real splits several
+  unranked clades deep (Mammalia, then Theria, Eutheria and Boreoeutheria before its
+  orders); "Every rank" shows every child. Wider than a phone, the page is exactly the
+  window's height and the tree takes what the bars leave, so only the tree scrolls;
+  its options sit in a card in the corner, which the scrolling keeps clear of. At most
+  600 groups are open at once. The measure and the ranks stay in the address
+  (`?colour=`, `?ranks=all`).
+- **The breakdown is a click-to-drill treemap (the "Data map"), with a list beside
+  it.** Tile area is the number of species (or assemblies) and colour one share, so a
+  large, pale tile is a large group with little data. Clicking a tile makes it the
+  current group, broken down by the next taxonomic rank; a "Show" menu picks a finer
+  rank. Groups under 1% of the total share one tile (when there are three or more),
+  which opens the list, since their own tiles would be too small to read or hit.
+  The List view is the same breakdown as a table and holds the TSV download. Only
+  shares colour the map (of species with each resource, of assemblies at chromosome
+  level); genome size, gene counts and BUSCO stay in the tooltip and on the Summary.
+  The view, measure, size and rank stay in the address (`?view=`, `?colour=`,
+  `?size=`, `?rank=`).
+- **Shares are coloured by six fixed ranges:** none (hatched grey, never the lightest
+  step), under 1%, 1 to 5%, 5 to 20%, 20 to 50% and 50% or more, on one blue ramp for
+  every measure, light to dark in both themes (the dark theme lifts its dark end so
+  it clears the surface). Most shares are small: of the orders by assemblies, 35% have
+  none, 6% under 1%, 19% 1 to 5%, 26% 5 to 20%, 8% 20 to 50% and 6% 50% or more, so a
+  continuous 0 to 100% ramp left most of the map pale. The Data map and the Tree of
+  Life use them. Any other
+  magnitude gets one sequential ramp, and every chart has a text alternative (a list,
+  a table or an outline).

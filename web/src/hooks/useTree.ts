@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useReducer, useRef } from "react";
 
-import { getChildren, getSummary } from "../api/queries";
-import type { TaxonChildren, TaxonNode } from "../api/types";
+import { getChildren, getTaxon } from "../api/queries";
+import type { TaxonNode, TaxonPage } from "../api/types";
 
 // How many children to load per expand / "load more" (matches the API default).
-const PAGE_SIZE = 10;
+export const PAGE_SIZE = 10;
 // Most nodes drawn at once (those under expanded parents), so the SVG stays
 // responsive. Collapsing a branch frees room.
-const MAX_VISIBLE_NODES = 600;
+export const MAX_VISIBLE_NODES = 600;
 // Reveal (search-to-locate): page each level in bigger chunks than a manual
 // expand to cut round-trips, but cap the pages per level so locating a node
 // buried deep in a huge, species-sorted sibling list can't page forever.
@@ -29,6 +29,7 @@ export interface TreeNode {
   depth: number; // 0 = root
   childIds: number[]; // loaded children, in load (species-sorted) order
   totalChildren: number; // total available (from the API), for "load more"
+  nextCursor: string | null; // where the next page of children starts
   expanded: boolean;
   loading: boolean;
   error?: string;
@@ -36,16 +37,18 @@ export interface TreeNode {
 
 export interface TreeState {
   rootId: number | null;
+  majorRanks: boolean; // what the tree was loaded with (see useTree)
   nodes: Record<number, TreeNode>;
+  visible: number; // nodes drawn: the root and the children of every open node
   atCapacity: boolean; // MAX_VISIBLE_NODES drawn; expanding is blocked until a collapse
   error?: string; // root-level load failure (bad taxid / network)
 }
 
 type Action =
-  | { type: "reset"; rootId: number }
+  | { type: "reset"; rootId: number; majorRanks: boolean }
   | { type: "seedRoot"; node: TaxonNode }
   | { type: "loadStart"; taxid: number }
-  | { type: "childrenLoaded"; taxid: number; page: TaxonChildren }
+  | { type: "childrenLoaded"; taxid: number; page: TaxonPage }
   | { type: "collapse"; taxid: number }
   | { type: "reexpand"; taxid: number }
   | { type: "error"; taxid: number; error: string };
@@ -57,6 +60,7 @@ function emptyNode(node: TaxonNode, parentId: number | null, depth: number): Tre
     depth,
     childIds: [],
     totalChildren: 0,
+    nextCursor: null,
     expanded: false,
     loading: false,
   };
@@ -76,13 +80,21 @@ function countVisible(nodes: Record<number, TreeNode>, rootId: number | null): n
 }
 
 function withCapacity(state: TreeState): TreeState {
-  return { ...state, atCapacity: countVisible(state.nodes, state.rootId) >= MAX_VISIBLE_NODES };
+  const visible = countVisible(state.nodes, state.rootId);
+  return { ...state, visible, atCapacity: visible >= MAX_VISIBLE_NODES };
 }
 
 function reducer(state: TreeState, action: Action): TreeState {
   switch (action.type) {
     case "reset":
-      return { rootId: action.rootId, nodes: {}, atCapacity: false, error: undefined };
+      return {
+        rootId: action.rootId,
+        majorRanks: action.majorRanks,
+        nodes: {},
+        visible: 0,
+        atCapacity: false,
+        error: undefined,
+      };
 
     case "seedRoot":
       return {
@@ -101,7 +113,7 @@ function reducer(state: TreeState, action: Action): TreeState {
       if (!parent) return state;
       const nodes = { ...state.nodes };
       const childIds = [...parent.childIds];
-      for (const child of action.page.items) {
+      for (const child of action.page.results) {
         if (!(child.taxid in nodes)) {
           nodes[child.taxid] = emptyNode(child, action.taxid, parent.depth + 1);
         }
@@ -111,6 +123,7 @@ function reducer(state: TreeState, action: Action): TreeState {
         ...parent,
         childIds,
         totalChildren: action.page.total,
+        nextCursor: action.page.next,
         expanded: true,
         loading: false,
       };
@@ -143,8 +156,9 @@ const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 export interface Tree extends TreeState {
   /** Expand a collapsed node (loading its first page if needed) or collapse it. */
   toggle: (taxid: number) => void;
-  /** Load the next page of a node's children (for nodes with more than shown). */
-  loadMore: (taxid: number) => void;
+  /** Load the next page of a node's children, or with `all` every one left (as
+   *  many as MAX_VISIBLE_NODES leaves room for). */
+  loadMore: (taxid: number, all?: boolean) => void;
   /** Open the tree down to a descendant so it can be highlighted. `pathTaxids`
    *  is the chain of taxids from the root's direct child down to the target;
    *  each level is expanded and paged until the next node on the path appears. */
@@ -152,45 +166,59 @@ export interface Tree extends TreeState {
 }
 
 /**
- * Load and lazily expand the taxonomy tree rooted at `rootTaxid`. Owns the
+ * Load and lazily expand the taxonomy tree rooted at `rootTaxid`: every child of
+ * a taxon, or with `majorRanks` its nearest descendants of a major rank. Owns the
  * loaded-hierarchy state and the async child fetches; the rendering layer stays
- * a pure function of the returned state. Changing `rootTaxid` resets the tree
- * and auto-loads the root plus its first ring of children.
+ * a pure function of the returned state. Changing either argument resets the
+ * tree and loads the root plus its first ring of children.
  */
-export function useTree(rootTaxid: number): Tree {
+export function useTree(rootTaxid: number, majorRanks: boolean): Tree {
   const [state, dispatch] = useReducer(reducer, {
     rootId: null,
+    majorRanks,
     nodes: {},
+    visible: 0,
     atCapacity: false,
     error: undefined,
   });
   // Latest state for the stable async callbacks (which read before dispatching).
   const stateRef = useRef(state);
   stateRef.current = state;
+  // Bumped on every reset, so an answer for an earlier tree is dropped.
+  const generation = useRef(0);
 
   useEffect(() => {
-    let active = true;
-    dispatch({ type: "reset", rootId: rootTaxid });
-    // Seed the centre node (metrics from the summary) and its first ring at once;
-    // has_children is known from whether the children page reports any total.
-    Promise.all([getSummary(rootTaxid), getChildren(rootTaxid, { limit: PAGE_SIZE })])
-      .then(([summary, page]) => {
-        if (!active) return;
-        dispatch({ type: "seedRoot", node: { ...summary, has_children: page.total > 0 } });
+    const gen = ++generation.current;
+    dispatch({ type: "reset", rootId: rootTaxid, majorRanks });
+    // Seed the root and its first ring at once.
+    Promise.all([
+      getTaxon(rootTaxid),
+      getChildren(rootTaxid, { limit: PAGE_SIZE, major_ranks: majorRanks }),
+    ])
+      .then(([taxon, page]) => {
+        if (gen !== generation.current) return;
+        dispatch({ type: "seedRoot", node: taxon });
         dispatch({ type: "childrenLoaded", taxid: rootTaxid, page });
       })
-      .catch((e) => active && dispatch({ type: "error", taxid: rootTaxid, error: errMsg(e) }));
-    return () => {
-      active = false;
-    };
-  }, [rootTaxid]);
+      .catch((e) => {
+        if (gen === generation.current) dispatch({ type: "error", taxid: rootTaxid, error: errMsg(e) });
+      });
+  }, [rootTaxid, majorRanks]);
 
-  const fetchPage = useCallback((taxid: number, offset: number) => {
-    dispatch({ type: "loadStart", taxid });
-    getChildren(taxid, { limit: PAGE_SIZE, offset })
-      .then((page) => dispatch({ type: "childrenLoaded", taxid, page }))
-      .catch((e) => dispatch({ type: "error", taxid, error: errMsg(e) }));
-  }, []);
+  const fetchPage = useCallback(
+    (taxid: number, cursor?: string, limit = PAGE_SIZE) => {
+      const gen = generation.current;
+      dispatch({ type: "loadStart", taxid });
+      getChildren(taxid, { limit, cursor, major_ranks: majorRanks })
+        .then((page) => {
+          if (gen === generation.current) dispatch({ type: "childrenLoaded", taxid, page });
+        })
+        .catch((e) => {
+          if (gen === generation.current) dispatch({ type: "error", taxid, error: errMsg(e) });
+        });
+    },
+    [majorRanks],
+  );
 
   const toggle = useCallback(
     (taxid: number) => {
@@ -203,17 +231,20 @@ export function useTree(rootTaxid: number): Tree {
       } else if (n.childIds.length > 0) {
         dispatch({ type: "reexpand", taxid });
       } else {
-        fetchPage(taxid, 0);
+        fetchPage(taxid);
       }
     },
     [fetchPage],
   );
 
   const loadMore = useCallback(
-    (taxid: number) => {
-      const n = stateRef.current.nodes[taxid];
-      if (!n || n.loading || stateRef.current.atCapacity) return;
-      if (n.childIds.length < n.totalChildren) fetchPage(taxid, n.childIds.length);
+    (taxid: number, all = false) => {
+      const { nodes, visible, atCapacity } = stateRef.current;
+      const n = nodes[taxid];
+      if (!n || n.loading || atCapacity || !n.nextCursor) return;
+      const left = n.totalChildren - n.childIds.length;
+      const room = MAX_VISIBLE_NODES - visible;
+      fetchPage(taxid, n.nextCursor, all ? Math.max(1, Math.min(left, room)) : PAGE_SIZE);
     },
     [fetchPage],
   );
@@ -221,34 +252,43 @@ export function useTree(rootTaxid: number): Tree {
   // Guards against a stale reveal (a second search started before the first
   // finished paging): each call bumps the token and bails if it's superseded.
   const revealSeq = useRef(0);
-  const reveal = useCallback(async (pathTaxids: number[]): Promise<RevealResult> => {
-    const seq = ++revealSeq.current;
-    const startId = stateRef.current.rootId;
-    if (startId == null) return { status: "buried", reached: -1 };
-    let parentId: number = startId;
-    for (const step of pathTaxids) {
-      const parent: TreeNode | undefined = stateRef.current.nodes[parentId];
-      // `loaded` mirrors the reducer's contiguous append, so `offset = loaded
-      // length` stays correct across pages. `total` is unknown (Infinity) until
-      // a node has been loaded at least once — a freshly-linked child reports 0.
-      const loaded: number[] = parent ? [...parent.childIds] : [];
-      const everLoaded = parent ? parent.expanded || parent.childIds.length > 0 : false;
-      let total = everLoaded && parent ? parent.totalChildren : Infinity;
-      let pages = 0;
-      while (!loaded.includes(step) && loaded.length < total && pages < REVEAL_MAX_PAGES) {
-        if (revealSeq.current !== seq) return { status: "superseded" };
-        const page = await getChildren(parentId, { limit: REVEAL_LIMIT, offset: loaded.length });
-        if (revealSeq.current !== seq) return { status: "superseded" };
-        dispatch({ type: "childrenLoaded", taxid: parentId, page });
-        total = page.total;
-        for (const c of page.items) if (!loaded.includes(c.taxid)) loaded.push(c.taxid);
-        pages++;
+  const reveal = useCallback(
+    async (pathTaxids: number[]): Promise<RevealResult> => {
+      const seq = ++revealSeq.current;
+      const gen = generation.current;
+      const startId = stateRef.current.rootId;
+      if (startId == null) return { status: "buried", reached: -1 };
+      let parentId: number = startId;
+      for (const step of pathTaxids) {
+        const parent: TreeNode | undefined = stateRef.current.nodes[parentId];
+        // `loaded` mirrors the reducer's contiguous append, and the parent's cursor
+        // says where its next page starts. A node never loaded starts at the top.
+        const loaded: number[] = parent ? [...parent.childIds] : [];
+        const everLoaded = parent ? parent.expanded || parent.childIds.length > 0 : false;
+        let cursor = everLoaded && parent ? parent.nextCursor : undefined;
+        let pages = 0;
+        while (!loaded.includes(step) && cursor !== null && pages < REVEAL_MAX_PAGES) {
+          if (revealSeq.current !== seq) return { status: "superseded" };
+          const page = await getChildren(parentId, {
+            limit: REVEAL_LIMIT,
+            cursor,
+            major_ranks: majorRanks,
+          });
+          if (revealSeq.current !== seq || gen !== generation.current) {
+            return { status: "superseded" };
+          }
+          dispatch({ type: "childrenLoaded", taxid: parentId, page });
+          cursor = page.next;
+          for (const c of page.results) if (!loaded.includes(c.taxid)) loaded.push(c.taxid);
+          pages++;
+        }
+        if (!loaded.includes(step)) return { status: "buried", reached: parentId };
+        parentId = step;
       }
-      if (!loaded.includes(step)) return { status: "buried", reached: parentId };
-      parentId = step;
-    }
-    return { status: "ok", taxid: parentId };
-  }, []);
+      return { status: "ok", taxid: parentId };
+    },
+    [majorRanks],
+  );
 
   return { ...state, toggle, loadMore, reveal };
 }

@@ -3,6 +3,7 @@ import { Link } from "react-router";
 import { getChildren } from "../api/queries";
 import type { MetricConfig } from "../api/types";
 import { useAsync } from "../hooks/useAsync";
+import { cladePath } from "../lib/clade";
 import { fmt } from "../lib/format";
 import { INFORMAL_SPECIES_RANK } from "../lib/taxonomy";
 
@@ -26,7 +27,7 @@ export default function SubspeciesSection({
   direct?: Record<string, number> | null;
   metrics: MetricConfig[];
 }) {
-  const children = useAsync(() => getChildren(taxid, { sort: "s_ass", limit: MAX }), [taxid]);
+  const children = useAsync(() => getChildren(taxid, { sort_by: "assemblies_total", limit: MAX }), [taxid]);
 
   const data = children.data;
   if (children.error) {
@@ -75,7 +76,7 @@ export default function SubspeciesSection({
             {direct && (
               <tr>
                 <td className="bd-name">{name} (directly)</td>
-                <td className="tree-outline__rank" data-label="Rank">
+                <td className="bd-rank" data-label="Rank">
                   {rank}
                 </td>
                 {metrics.map((m) => (
@@ -85,12 +86,12 @@ export default function SubspeciesSection({
                 ))}
               </tr>
             )}
-            {data.items.map((it) => (
+            {data.results.map((it) => (
               <tr key={it.taxid}>
                 <td className="bd-name">
                   <Link to={`/clade/${it.taxid}`}>{it.name}</Link>
                 </td>
-                <td className="tree-outline__rank" data-label="Rank">
+                <td className="bd-rank" data-label="Rank">
                   {it.rank}
                 </td>
                 {metrics.map((m) => (
@@ -104,10 +105,10 @@ export default function SubspeciesSection({
         </table>
       </div>
 
-      {data.total > data.items.length && (
+      {data.total > data.results.length && (
         <p className="bd__sub" style={{ marginTop: "0.6rem" }}>
-          Showing the {data.items.length} with the most data. See them all in the{" "}
-          <Link to={`/tree/${taxid}`}>Tree of Life</Link>.
+          Showing the {data.results.length} with the most data. See them all in the{" "}
+          <Link to={cladePath(taxid, "tree")}>Tree of Life</Link>.
         </p>
       )}
     </section>

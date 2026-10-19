@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { useLocation } from "react-router";
+import { API_BASE } from "../api/client";
 
 /** A short FAQ. Plain language, honest that the numbers are a periodic snapshot. */
 export default function Faq() {
@@ -80,16 +81,18 @@ export default function Faq() {
       <div className="faq__item">
         <h2 className="faq__q">How do I find a specific organism?</h2>
         <p className="faq__a">
-          Use the search box at the top. Type a name (like "Primates" or "Fungi") or an NCBI
-          TaxID (like 9606 for humans).
+          Use the search box at the top. Type a scientific name (like "Primates" or "Fungi"), part
+          of one, or an NCBI TaxID (like 9606 for humans). Common names such as "human" are not
+          searchable yet. If no name matches, the search suggests the closest spellings.
         </p>
       </div>
 
       <div className="faq__item">
         <h2 className="faq__q">Can I download the data?</h2>
         <p className="faq__a">
-          Yes. The breakdown on each dashboard has two downloads: the rows you're looking at,
-          and the full breakdown as a TSV file.
+          Yes. On a group's Data map, the List view's "Download this table (TSV)" saves one row
+          per group at the rank shown, with its species count and coverage for each resource.
+          Each assembly and annotation on a group's Records links to its files at the source.
         </p>
       </div>
 
@@ -106,7 +109,7 @@ export default function Faq() {
         <h2 className="faq__q">Is there an API?</h2>
         <p className="faq__a">
           Yes, the whole app runs on a public, read-only API.{" "}
-          <a href="/api/docs" target="_blank" rel="noreferrer">
+          <a href={`${API_BASE}/docs`} target="_blank" rel="noreferrer">
             Browse the API docs
           </a>
           .

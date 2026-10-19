@@ -32,8 +32,8 @@ def pool_max_size() -> int:
 
     Kept small on purpose: the deploy target has one CPU core, where parallel
     heavy queries only slow each other down. Extra requests queue for a free
-    connection instead (and the nginx cache absorbs repeat traffic). An export
-    holds two connections for its whole stream (the request's + the cursor's).
+    connection instead (and the nginx cache absorbs repeat traffic). A TSV
+    download holds one, its cursor's, for its whole stream.
     """
     return int(os.environ.get("DB_POOL_MAX", "4"))
 
@@ -65,10 +65,11 @@ async def lifespan(app: FastAPI):
 
 
 def get_conn(request: Request) -> Iterator[psycopg.Connection]:
-    """Per-request connection, returned to the pool when the request ends."""
+    """Per-request connection, returned to the pool as soon as the endpoint returns,
+    before the response is sent (so a streamed download doesn't keep it)."""
     with request.app.state.pool.connection() as conn:
         yield conn
 
 
 # Annotate endpoint params with this to receive a pooled connection.
-Conn = Annotated[psycopg.Connection, Depends(get_conn)]
+Conn = Annotated[psycopg.Connection, Depends(get_conn, scope="function")]

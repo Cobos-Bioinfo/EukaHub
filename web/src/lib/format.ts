@@ -41,6 +41,9 @@ export function fmtBp(bp: number): string {
   return `${fmt(bp)} bp`;
 }
 
+/** A round threshold without trailing zeros: 1000000 -> "1 Mb", 100000 -> "100 kb". */
+export const fmtBpRound = (bp: number): string => fmtBp(bp).replace(/\.0+ /, " ");
+
 /** Render a live quality stat by its declared format, or an em-space dash when
  *  the subtree carried no records with that field (value === null). */
 export function fmtQuality(value: number | null | undefined, fmtKind: string): string {

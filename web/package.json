@@ -9,11 +9,11 @@
     "preview": "vite preview",
     "gen:openapi": "cd .. && uv run --package eukahub-api python -m eukahub_api.export_openapi web/src/api/openapi.json",
     "gen:api": "openapi-typescript ./src/api/openapi.json -o ./src/api/schema.ts",
-    "gen": "npm run gen:openapi && npm run gen:api"
+    "gen": "npm run gen:openapi && npm run gen:api",
+    "smoke": "node scripts/smoke.mjs"
   },
   "dependencies": {
     "d3-hierarchy": "^3.1.2",
-    "d3-shape": "^3.2.0",
     "openapi-fetch": "^0.17.0",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
@@ -21,12 +21,12 @@
   },
   "devDependencies": {
     "@types/d3-hierarchy": "^3.1.7",
-    "@types/d3-shape": "^3.2.0",
     "@types/node": "^26.6.3",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.1",
     "openapi-typescript": "^7.13.0",
+    "puppeteer-core": "^25.12.0",
     "typescript": "^5.5.3",
     "vite": "^8.3.1"
   }

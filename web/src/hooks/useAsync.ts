@@ -1,8 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
 
+import { ApiError } from "../api/queries";
+
 export interface AsyncState<T> {
   data?: T;
   error?: string;
+  /** HTTP status of a failed API request, when there was one. */
+  status?: number;
   loading: boolean;
   /** Run the request again with the same inputs (e.g. after a 503/504). */
   reload: () => void;
@@ -31,6 +35,7 @@ export function useAsync<T>(fn: () => Promise<T>, deps: unknown[]): AsyncState<T
         active &&
         setState({
           error: err instanceof Error ? err.message : String(err),
+          status: err instanceof ApiError ? err.status : undefined,
           loading: false,
           key,
         }),

@@ -7,12 +7,15 @@ React frontend can reuse.
 
 The app and pipeline both reason about four genomic resources:
 
-| key | card_title        | what it means                                  |
+| key | name              | what it means                                  |
 |-----|-------------------|------------------------------------------------|
-| ass | Assemblies        | genome assemblies                              |
-| ann | Annotations       | functional annotations of assemblies           |
-| rna | RNA-Seq (Any)     | RNA-Seq runs, any sequencing platform          |
-| lng | Long-Read RNA-Seq | RNA-Seq runs on Oxford Nanopore or PacBio SMRT |
+| ass | assemblies        | genome assemblies                              |
+| ann | annotations       | functional annotations of assemblies           |
+| rna | rna_seq           | RNA-Seq runs, any sequencing platform          |
+| lng | long_read_rna_seq | RNA-Seq runs on Oxford Nanopore or PacBio SMRT |
+
+``key`` names the database columns below; ``name`` is the resource's name in
+the API and in the TSV report's columns.
 
 Each resource produces three columns in ``clade_features``:
 
@@ -37,6 +40,8 @@ class Metric:
     Fields cover four concerns:
 
     - data layer: ``key`` drives the ``c_``/``s_``/``p_`` column suffixes.
+    - public name: ``name`` keys the resource in API responses and parameters,
+      and names the TSV report's columns.
     - bar chart: ``color``, ``side``, ``overlay``, ``legend_label`` define
       the divergent bar (left half = assemblies/annotations, right half =
       RNA-Seq runs; ``overlay=True`` is the darker overlaid metric in each
@@ -44,14 +49,14 @@ class Metric:
     - filter / sort controls: ``filter_label``, ``sort_count_label``,
       ``sort_total_label``.
     - summary card: ``card_title``, ``card_title_help``, ``species_help``,
-      ``total_label``, ``total_help``, ``external_source_name``,
+      ``total_label``, ``total_help``, ``empty_text`` (shown instead of a zero),
+      ``external_source_name``,
       ``external_url_template`` (the default; a deployment can override it, see
       ``eukahub_api.settings``).
-    - TSV export: ``tsv_count_column``, ``tsv_total_column`` — the
-      snake_case names in the public TSV schema.
     """
 
     key: str
+    name: str
     color: str
     side: Side
     overlay: bool
@@ -65,8 +70,7 @@ class Metric:
     total_help: str
     external_source_name: str
     external_url_template: str
-    tsv_count_column: str
-    tsv_total_column: str
+    empty_text: str
     # Optional — only `lng` carries a tooltip on the card title today.
     card_title_help: str | None = None
 
@@ -82,10 +86,19 @@ class Metric:
     def percent_key(self) -> str:
         return f"p_{self.key}"
 
+    @property
+    def tsv_count_column(self) -> str:
+        return f"species_with_{self.name}"
+
+    @property
+    def tsv_total_column(self) -> str:
+        return f"total_{self.name}"
+
 
 METRICS: tuple[Metric, ...] = (
     Metric(
         key="ass",
+        name="assemblies",
         color="#a6cee3",  # light blue
         side="left",
         overlay=False,
@@ -99,11 +112,11 @@ METRICS: tuple[Metric, ...] = (
         total_help="Total number of genome assemblies in this group",
         external_source_name="NCBI",
         external_url_template="https://www.ncbi.nlm.nih.gov/datasets/genome/?taxon={taxid}",
-        tsv_count_column="species_with_assemblies",
-        tsv_total_column="total_assemblies",
+        empty_text="No genome assemblies yet",
     ),
     Metric(
         key="ann",
+        name="annotations",
         color="#1f78b4",  # dark blue
         side="left",
         overlay=True,
@@ -117,11 +130,11 @@ METRICS: tuple[Metric, ...] = (
         total_help="Total number of functional annotations in this group",
         external_source_name="Annotrieve",
         external_url_template="https://genome.crg.es/annotrieve/annotations/?taxids={taxid}",
-        tsv_count_column="species_with_annotations",
-        tsv_total_column="total_annotations",
+        empty_text="No functional annotations yet",
     ),
     Metric(
         key="rna",
+        name="rna_seq",
         color="#b2df8a",  # light green
         side="right",
         overlay=False,
@@ -140,11 +153,11 @@ METRICS: tuple[Metric, ...] = (
             "(library_strategy%3D%22rna-seq%22%20OR%20library_source%3D%22TRANSCRIPTOMIC%22)&"
             "fields=run_accession%2Cexperiment_title%2Ctax_id%2Clibrary_strategy&limit=0"
         ),
-        tsv_count_column="species_with_rna_seq",
-        tsv_total_column="total_rna_seq",
+        empty_text="No RNA-Seq runs yet",
     ),
     Metric(
         key="lng",
+        name="long_read_rna_seq",
         color="#33a02c",  # dark green
         side="right",
         overlay=True,
@@ -165,14 +178,14 @@ METRICS: tuple[Metric, ...] = (
             "(%20instrument_platform%3D%22oxford_nanopore%22%20OR%20instrument_platform%3D%22pacbio_smrt%22%20)&"
             "fields=run_accession%2Cexperiment_title%2Ctax_id%2Clibrary_strategy%2Cinstrument_platform&limit=0"
         ),
-        tsv_count_column="species_with_long_read_rna_seq",
-        tsv_total_column="total_long_read_rna_seq",
+        empty_text="No long-read RNA-Seq runs yet",
     ),
 )
 
 
 # Derived column tuples — most callers just want one of these.
 METRIC_KEYS: tuple[str, ...] = tuple(m.key for m in METRICS)
+METRIC_NAMES: tuple[str, ...] = tuple(m.name for m in METRICS)
 COVERAGE_KEYS: tuple[str, ...] = tuple(m.coverage_key for m in METRICS)
 TOTAL_KEYS: tuple[str, ...] = tuple(m.total_key for m in METRICS)
 PERCENT_KEYS: tuple[str, ...] = tuple(m.percent_key for m in METRICS)
@@ -187,6 +200,19 @@ PERCENT_KEYS: tuple[str, ...] = tuple(m.percent_key for m in METRICS)
 # roll-up together. Distribution stats (median N50 / genome size, BUSCO) are NOT
 # here — they are non-additive and served live from the per-record tables.
 # --------------------------------------------------------------------------- #
+
+# The API's name for each NCBI ``assembly_level`` value, most complete first.
+ASSEMBLY_LEVELS: dict[str, str] = {
+    "complete": "Complete Genome",
+    "chromosome": "Chromosome",
+    "scaffold": "Scaffold",
+    "contig": "Contig",
+}
+
+# The contiguity part of the Earth BioGenome Project's reference standard (6.C):
+# contig N50 of 1 Mb or more and scaffold N50 of 10 Mb or more.
+EBP_MIN_CONTIG_N50 = 1_000_000
+EBP_MIN_SCAFFOLD_N50 = 10_000_000
 
 # NCBI ``assembly_level`` value -> the additive column it feeds.
 ASSEMBLY_LEVEL_TO_COLUMN: dict[str, str] = {
@@ -236,8 +262,9 @@ class QualityStat:
     - ``source`` + ``column`` locate the value in a per-record table.
     - ``agg`` is how it is summarized across a clade's subtree records.
     - ``fmt`` tells the frontend how to render the number.
-    - ``headline`` marks the surfaced *annotation-quality* figures (BUSCO, gene
-      count) versus secondary assembly-quality figures (genome size, N50).
+    - ``headline`` marks the figures shown beside each group on the Gaps page:
+      medians, which compare across groups (the best BUSCO is 100% almost
+      everywhere).
     """
 
     key: str
@@ -259,9 +286,8 @@ QUALITY_STATS: tuple[QualityStat, ...] = (
         agg="max",  # the clade's best-annotated genome
         unit="%",
         fmt="percent",
-        card_title="BUSCO completeness",
+        card_title="Best BUSCO completeness",
         help="Best BUSCO complete % among this clade's functional annotations",
-        headline=True,
     ),
     QualityStat(
         key="genes",
@@ -270,7 +296,7 @@ QUALITY_STATS: tuple[QualityStat, ...] = (
         agg="median",
         unit="genes",
         fmt="integer",
-        card_title="Protein-coding genes",
+        card_title="Median protein-coding genes",
         help="Median protein-coding gene count across this clade's annotations",
         headline=True,
     ),
@@ -281,8 +307,9 @@ QUALITY_STATS: tuple[QualityStat, ...] = (
         agg="median",
         unit="bp",
         fmt="basepairs",
-        card_title="Genome size",
+        card_title="Median genome size",
         help="Median assembly length across this clade's genome assemblies",
+        headline=True,
     ),
     QualityStat(
         key="contig_n50",
@@ -291,7 +318,7 @@ QUALITY_STATS: tuple[QualityStat, ...] = (
         agg="median",
         unit="bp",
         fmt="basepairs",
-        card_title="Contig N50",
+        card_title="Median contig N50",
         help="Median contig N50 across this clade's genome assemblies",
     ),
 )

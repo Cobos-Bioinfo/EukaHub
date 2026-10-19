@@ -13,7 +13,7 @@ NCBI datasets ┐                                  refresher  (daily: is there a
 Annotrieve    ├─► pipeline ─► pg_dump ─► Release ─────► db   Postgres 17 + ltree + pg_trgm
 ENA           ┘   (rebuild.yml)          (public)          ▲
                                                            api  FastAPI, read-only
-                                                           ▲  /api
+                                                           ▲  /api/v1
                                               browsers ─► web  nginx: SPA, API proxy, cache
 ```
 
@@ -22,19 +22,19 @@ ENA           ┘   (rebuild.yml)          (public)          ▲
 | Pipeline | `pipeline/` | Downloads the NCBI taxonomy and every eukaryotic assembly (NCBI `datasets`), annotation (Annotrieve) and RNA-Seq run count (ENA); rolls counts up the tree; loads Postgres; checks invariants. Runs on GitHub Actions, never on the server. |
 | Rebuild workflow | `.github/workflows/rebuild.yml` | Monthly (and on demand): runs the pipeline, gates on the invariant checks, publishes a `pg_dump` as a GitHub Release. |
 | Database | `infra/postgres/init/001_schema.sql` | Postgres 17. See [data-model.md](data-model.md). |
-| API | `api/` | FastAPI, read-only, auto-generated OpenAPI at `/api/docs`. Endpoint SQL lives in `api/src/eukahub_api/queries.py`. |
-| Web | `web/` | React + TypeScript SPA built with Vite, served by nginx, which also proxies `/api` and caches API responses. |
+| API | `api/` | FastAPI, read-only, auto-generated OpenAPI at `/api/v1/docs`. One module per resource in `api/src/eukahub_api/resources/`, mapped together in `router.py`; endpoint SQL lives in `api/src/eukahub_api/queries.py`. |
+| Web | `web/` | React + TypeScript SPA built with Vite, served by nginx, which also proxies `/api/v1` and caches API responses. |
 | Refresher | `scripts/auto_refresh.py` + `scripts/restore_snapshot.py` | Sidecar container. Installs the latest dataset Release on first start, then checks daily for a newer one. |
 | Shared config | `core/src/eukahub_core/metrics.py`, `taxonomy.py` | The four resource metrics, the quality stats and the root taxids, shared by pipeline and API and exported to the web app through OpenAPI. |
-| Deployment settings | `api/src/eukahub_api/settings.py`, `infra/config/` | Links, privacy contact, Wikipedia lookup, curated groups and custom groups, read by the API at startup. The web app gets them from `/api/site-config`, the custom groups from `/api/custom-groups`, and the data of any set of clades from `/api/aggregate`. See [deployment.md](deployment.md#configuration). |
+| Deployment settings | `api/src/eukahub_api/settings.py`, `infra/config/` | Links, privacy contact, Wikipedia summary endpoint, curated groups and custom groups, read by the API at startup. The web app gets them, with the custom groups, from `/api/v1/config`, and the data of any set of clades from `/api/v1/taxons/aggregates`. See [deployment.md](deployment.md#configuration). |
 
 ## Request path
 
-Browser → nginx (static SPA; `/api/*` proxied, successful GETs cached for up to
-an hour) → FastAPI → Postgres. Successful API responses carry `Cache-Control`,
+Browser → nginx (static SPA; `/api/v1/*` proxied, successful GETs other than the TSV
+report cached for up to an hour) → FastAPI → Postgres. Successful API responses carry `Cache-Control`,
 and JSON responses an `ETag`. Nothing in the request path writes to the database or calls an external
-service, except the Wikipedia summary on the dashboard, which is fetched by the
-API and cached for 24 hours.
+service. The Wikipedia summary on a group's Summary is fetched by the browser from
+Wikipedia.
 
 ## Data updates
 
@@ -74,11 +74,12 @@ CPU core. It has been tested under exactly those limits (see
 - Postgres cancels any API query after 15 s (`DB_STATEMENT_TIMEOUT_MS`); the client
   gets a 504 and the CPU is freed.
 - The API holds at most 4 database connections (`DB_POOL_MAX`); excess requests
-  wait, then get a 503 with `Retry-After`.
+  wait, then get a 503 with `Retry-After`. A request gives its connection back as
+  soon as its endpoint returns, so a TSV download holds only its cursor's.
 - Parallel query workers and JIT are off in the production Postgres, since they
   only compete for the single core.
-- nginx caches API responses, so repeated views of popular clades never reach the
-  database.
+- nginx caches API responses (all but the TSV report), so repeated views of popular
+  clades never reach the database.
 
 ## Repository layout
 

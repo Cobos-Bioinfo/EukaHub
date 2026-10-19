@@ -15,6 +15,7 @@
   --ink-2: #4b5563; /* secondary text */
   --muted: #6b7280; /* labels / captions */
   --link: #1f6feb; /* interactive text/icons */
+  --link-strong: #1a5bc4; /* links on tinted surfaces (--track), 5.3:1 */
   --cta: #1f6feb; /* filled-button surface (white text sits on it — keep it dark enough) */
   /* Secondary filled-button surfaces — distinct hues, each dark enough for white
      text (contrast on par with --cta). Tree = green, Surprise = violet, Data map =
@@ -37,17 +38,38 @@
   /* "Missing data" magnitude bar on the gaps leaderboard — a warm amber that
      reads as attention/incompleteness and stays clear of the blue/green coverage
      hues (a single-series sequential bar, legible on the card surface). */
-  --gap: #c76a1c;
+  --gap: #a85412; /* 5.3:1 on white, so the missing counts read as text too */
   --bar-bg: rgba(252, 252, 251, 0.85); /* sticky app bar (translucent) */
-  --overlay-bg: rgba(255, 255, 255, 0.92); /* floating tree panels/legend/zoom */
-  --tree-center: #ffffff; /* radial-canvas gradient centre */
-  --dot-stroke: rgba(15, 23, 42, 0.28); /* tree node outline */
+  --overlay-bg: rgba(255, 255, 255, 0.92); /* floating panels (the tree's options) */
   /* Ordinal blue ramp for the assembly-contiguity bar (Complete → Contig),
      validated with the dataviz --ordinal check against the light surface. */
   --lvl-complete: #1c5cab;
   --lvl-chromosome: #2a78d6;
   --lvl-scaffold: #5598e7;
   --lvl-contig: #86b6ef;
+  /* Colour ranges for a share (lib/ranges.ts): none (hatched grey, never the
+     lightest step), then five steps of one blue ramp, light to dark, each with
+     the ink that reads on it at 4.5:1. Checked with the dataviz ordinal check:
+     monotone lightness, visible steps, the light end clears the surface. */
+  --range-0: repeating-linear-gradient(135deg, #eceef1 0 5px, #dde1e6 5px 10px);
+  --range-0-ink: #1a1d21;
+  --range-1: #8fb8ea;
+  --range-1-ink: #14171b;
+  --range-2: #5f97de;
+  --range-2-ink: #14171b;
+  --range-3: #3876cc;
+  --range-3-ink: #ffffff;
+  --range-4: #2558a6;
+  --range-4-ink: #ffffff;
+  --range-5: #183d78;
+  --range-5-ink: #ffffff;
+  /* Record badges: a tint and the ink that reads on it (7:1 or more). */
+  --badge-ref: #dcf2e3;
+  --badge-ref-ink: #14532d;
+  --badge-ebp: #e3eefc;
+  --badge-ebp-ink: #1b3d73;
+  --badge-warn: #fdecd6;
+  --badge-warn-ink: #7a3a08;
   --radius: 12px;
   --shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 1px 3px rgba(16, 24, 40, 0.06);
   --maxw: 1360px; /* content cap — wide enough for the dashboard two-column body */
@@ -80,8 +102,9 @@
   --ink-2: #b3b9c2;
   --muted: #8b929c;
   --link: #6ba5f7;
+  --link-strong: #6ba5f7;
   --cta: #2563eb;
-  --cta-tree: #2b8a3e;
+  --cta-tree: #237a35;
   --cta-surprise: #7048e8;
   --cta-map: #7c46b0;
   --cov-annotated: #37b24d;
@@ -96,8 +119,6 @@
   --gap: #e8963f; /* lighter amber so the gap bar pops on the dark card */
   --bar-bg: rgba(15, 18, 22, 0.85);
   --overlay-bg: rgba(23, 27, 33, 0.92);
-  --tree-center: #1b2029;
-  --dot-stroke: rgba(226, 232, 240, 0.35);
   --shadow: 0 1px 2px rgba(0, 0, 0, 0.35), 0 2px 6px rgba(0, 0, 0, 0.45);
   /* Ordinal ramp re-anchored for the dark surface (Complete brightest → Contig
      dimmest, dim end ≥ 2:1), same --ordinal validation against #171b21. */
@@ -105,6 +126,26 @@
   --lvl-chromosome: #3987e5;
   --lvl-scaffold: #256abf;
   --lvl-contig: #184f95;
+  /* Colour ranges re-stepped for the dark surface: still light to dark, the dark
+     end lifted so it clears the surface (2.4:1 on the card). */
+  --range-0: repeating-linear-gradient(135deg, #262b33 0 5px, #2f353e 5px 10px);
+  --range-0-ink: #e8eaed;
+  --range-1: #b3d0f4;
+  --range-1-ink: #14171b;
+  --range-2: #86b2ea;
+  --range-2-ink: #14171b;
+  --range-3: #5b93dd;
+  --range-3-ink: #14171b;
+  --range-4: #3a70c2;
+  --range-4-ink: #ffffff;
+  --range-5: #2a56a0;
+  --range-5-ink: #ffffff;
+  --badge-ref: #1b3a26;
+  --badge-ref-ink: #a7e3b9;
+  --badge-ebp: #1c2e4a;
+  --badge-ebp-ink: #b9d3f7;
+  --badge-warn: #3d2912;
+  --badge-warn-ink: #f3c991;
 }
 
 * {
@@ -143,49 +184,44 @@ a:hover {
   flex-direction: column;
 }
 
+/* The top bar: one pinned line with the brand, the current group's trail,
+   search, Compare, the theme and the "more" menu. The group's views (tabs) sit
+   below it and scroll with the page. */
 .app__bar {
   position: sticky;
   top: 0;
   z-index: 10;
-  display: flex;
-  align-items: center;
-  flex-wrap: nowrap;
-  gap: 0.6rem 1.35rem;
-  padding: 0.75rem clamp(1rem, 4vw, 2rem);
   background: var(--bar-bg);
   backdrop-filter: saturate(1.2) blur(8px);
   border-bottom: 1px solid var(--border);
 }
-/* Search sits to the right of the nav on wide screens; its auto margin also
-   pushes the action icons that follow it over to the right edge. */
-.app__bar > .picker {
-  margin-left: auto;
-  min-width: 0;
+.app__bar-inner {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem 1.25rem;
+  max-width: var(--maxw);
+  margin: 0 auto;
+  padding: 0.6rem clamp(1rem, 4vw, 2rem);
 }
-/* Narrow viewports: stack the bar into rows so nothing overflows off the right
-   edge — brand + action icons on the top row, the primary nav on its own row,
-   and the search full-width beneath. Every control stays reachable. */
-@media (max-width: 920px) {
-  .app__bar {
-    flex-wrap: wrap;
-  }
-  .app__brand {
-    order: 1;
-  }
-  .app__actions {
-    order: 2;
-    margin-left: auto;
-  }
-  .app__nav-group {
-    order: 3;
-    flex-basis: 100%;
-  }
-  .app__bar > .picker {
-    order: 4;
-    flex-basis: 100%;
-    width: 100%;
-    margin-left: 0;
-  }
+.app__bar .picker {
+  flex: 0 1 300px;
+  width: auto;
+  min-width: 160px;
+  margin-left: auto;
+}
+.app__compare {
+  padding: 0.4rem 0.3rem;
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: var(--ink);
+  white-space: nowrap;
+}
+.app__compare:hover {
+  color: var(--link);
+  text-decoration: none;
+}
+.app__actions .app__search-toggle {
+  display: none;
 }
 
 .app__brand {
@@ -292,59 +328,252 @@ a:hover {
   z-index: 40;
 }
 
+.picker__menu[hidden] {
+  display: none;
+}
+.picker__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.picker__note {
+  margin: 0;
+  padding: 0.45rem 0.65rem;
+  font-size: 0.82rem;
+  color: var(--ink-2);
+}
 .picker__item {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   gap: 0.75rem;
-  width: 100%;
   padding: 0.5rem 0.65rem;
-  background: none;
-  border: none;
   border-radius: 7px;
-  text-align: left;
   cursor: pointer;
-  font: inherit;
   color: var(--ink);
 }
-.picker__item:hover {
+.picker__item--active {
   background: var(--track);
+}
+.picker__main {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.45rem;
+  min-width: 0;
+}
+.picker__dot {
+  flex: none;
+  width: 0.5rem;
+  height: 0.5rem;
+  border: 1.5px solid var(--muted);
+  border-radius: 50%;
+}
+.picker__dot--data {
+  background: var(--link);
+  border-color: var(--link);
 }
 .picker__name {
   font-weight: 500;
 }
 .picker__rank {
+  flex: none;
   font-size: 0.78rem;
-  color: var(--muted);
-  text-transform: lowercase;
+  color: var(--ink-2);
+  text-align: right;
 }
 
-/* ---- Dashboard ------------------------------------------------------- */
-.breadcrumb {
+/* ---- Summary --------------------------------------------------------- */
+/* One column: the header, the coverage cards, then rows of panels that sit side
+   by side when there is room. */
+.summary {
   display: flex;
-  flex-wrap: wrap; /* long lineages wrap to new lines instead of overflowing */
+  flex-direction: column;
+  gap: 1.75rem;
+}
+.summary__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem 1.5rem;
+}
+.summary__id {
+  min-width: 0;
+}
+.summary__headline {
+  max-width: var(--measure);
+  margin: 0.6rem 0 0;
+  font-size: 1.05rem;
+  color: var(--ink-2);
+}
+.summary__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 1.25rem;
+}
+.summary__wide {
+  flex: 2 1 560px;
+  min-width: 0;
+}
+.summary__narrow {
+  flex: 1 1 320px;
+  min-width: 0;
+}
+.summary__row:empty {
+  display: none;
+}
+.summary .about-card,
+.summary .quality {
+  margin: 0;
+}
+.summary__wide > .about-card,
+.summary__narrow > .species-links {
+  height: 100%;
+}
+@media (min-width: 1040px) {
+  .summary .card-grid,
+  .summary .quality__tiles {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  padding: 1.1rem 1.25rem 1.2rem;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+.panel__head {
+  display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
-  row-gap: 3px;
-  font-size: 0.85rem;
-  color: var(--muted);
-  margin-bottom: 1rem;
+  justify-content: space-between;
+  gap: 0.25rem 1rem;
 }
-.breadcrumb__label {
-  font-weight: 600;
+.panel__title {
+  margin: 0;
+  font-size: 1.15rem;
+  letter-spacing: -0.01em;
+}
+.panel__sub {
+  margin: 0;
+  font-size: 0.86rem;
   color: var(--ink-2);
-  margin-right: 0.4rem;
 }
-.breadcrumb__sep {
-  margin: 0 0.4rem;
-  color: var(--border);
+.sum-table {
+  min-width: 0;
 }
-.breadcrumb__current {
+.sum-table th,
+.sum-table td {
+  padding-inline: 0.5rem;
+}
+.sum-table th:first-child,
+.sum-table td:first-child {
+  padding-left: 0;
+}
+.sum-table td.bd-name {
+  white-space: normal;
+}
+.sum-gaps {
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+  margin: 0.2rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+.sum-gaps__line {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.25rem 0.75rem;
+  font-size: 0.92rem;
+}
+.sum-gaps__count {
   color: var(--ink-2);
-  font-weight: 600;
+  font-variant-numeric: tabular-nums;
 }
-
-.dashboard__head {
-  margin-bottom: 1.5rem;
+.sum-gaps__bar {
+  display: block;
+  height: 8px;
+  margin-top: 0.35rem;
+  background: var(--track);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.sum-gaps__bar > span {
+  display: block;
+  height: 100%;
+  background: var(--range-3);
+}
+.sum-class {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin: 0;
+}
+.sum-class__row {
+  display: flex;
+  gap: 0.75rem;
+  font-size: 0.92rem;
+}
+.sum-class dt {
+  flex: 0 0 7.5rem;
+  color: var(--ink-2);
+}
+.sum-class dd {
+  margin: 0;
+  min-width: 0;
+}
+.sum-ranks summary {
+  font-size: 0.88rem;
+  color: var(--link);
+  cursor: pointer;
+}
+.sum-ranks .sum-class {
+  margin-top: 0.6rem;
+}
+.see-also__list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.9rem;
+  margin: 0.2rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+.see-also__card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  padding: 0.85rem 0.95rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.see-also__name {
+  font-size: 1rem;
+}
+.see-also__facts {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin: 0;
+  font-size: 0.86rem;
+}
+.see-also__facts > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+.see-also__facts dt {
+  color: var(--ink-2);
+}
+.see-also__facts dd {
+  margin: 0;
+  text-align: right;
 }
 .dashboard__title {
   display: flex;
@@ -368,12 +597,33 @@ a:hover {
   padding: 0.15rem 0.55rem;
   border-radius: 999px;
 }
-.dashboard__species {
-  margin: 0.5rem 0 0;
-  color: var(--ink-2);
+.dashboard__compare {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-top: 0.5rem;
+  font-size: 0.88rem;
+  font-weight: 600;
 }
-.dashboard__species strong {
-  color: var(--ink);
+
+/* ---- Records page ------------------------------------------------------ */
+.records-page__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 0.75rem 1.5rem;
+  margin-bottom: 1.25rem;
+}
+.records-page__title {
+  margin: 0;
+  font-size: clamp(1.6rem, 4vw, 2.2rem);
+  letter-spacing: -0.02em;
+}
+.records-page__sub {
+  margin: 0.4rem 0 0;
+  max-width: var(--measure);
+  color: var(--ink-2);
 }
 /* Leaf-detail note for an infraspecific taxon (subspecies/strain/...): a quiet
    callout stating its data is its own and not counted upward. */
@@ -390,51 +640,8 @@ a:hover {
 .dashboard__note a {
   font-weight: 600;
   white-space: nowrap;
-}
-
-/* Two-column body: a context rail (About + tree CTA) beside the metrics +
-   breakdown. Collapses to a single stack below 960px. */
-.dashboard__body {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 1.5rem;
-  margin-top: 1.5rem;
-}
-.dashboard__side {
-  display: flex;
-  flex-direction: column;
-  gap: 1.25rem;
-  min-width: 0;
-}
-.dashboard__content {
-  min-width: 0; /* let wide tables/charts scroll instead of stretching the grid */
-}
-@media (min-width: 960px) {
-  .dashboard__body {
-    grid-template-columns: 320px minmax(0, 1fr);
-    gap: 2rem;
-    align-items: start;
-  }
-  .dashboard__side {
-    position: sticky;
-    top: 68px; /* clear the sticky app bar */
-  }
-}
-/* The identity header (name, rank, species count) lives at the top of the rail
-   so it stays pinned with the About card while the content scrolls. The flex
-   gap handles spacing, so drop its own margin. */
-.dashboard__side .dashboard__head {
-  margin-bottom: 0;
-}
-/* About card, when it lives in the rail: stack vertically, banner thumbnail,
-   no trailing margin (the flex gap handles spacing). */
-.dashboard__side .about-card {
-  flex-direction: column;
-  margin-bottom: 0;
-}
-.dashboard__side .about-card__thumb {
-  width: 100%;
-  height: 160px;
+  color: var(--link-strong);
+  text-decoration: underline;
 }
 
 /* ---- About card (Wikipedia) ----------------------------------------- */
@@ -757,6 +964,9 @@ a:hover {
   gap: 0.4rem;
 }
 .comp__key[data-zero="true"] {
+  color: var(--muted);
+}
+.comp__key[data-zero="true"] .comp__dot {
   opacity: 0.45;
 }
 .comp__dot {
@@ -781,26 +991,7 @@ a:hover {
   font-variant-numeric: tabular-nums;
 }
 
-/* ---- Record browser (per-record drill-down) -------------------------- */
-.rec {
-  margin-top: 2.75rem;
-}
-.rec__head {
-  display: flex;
-  align-items: baseline;
-  gap: 0.75rem;
-  flex-wrap: wrap;
-}
-.rec__title {
-  margin: 0;
-  font-size: 1.3rem;
-  letter-spacing: -0.02em;
-}
-.rec__sub {
-  margin: 0;
-  color: var(--muted);
-  font-size: 0.9rem;
-}
+/* ---- Record browser (the Records view) -------------------------------- */
 .rec__controls {
   display: flex;
   align-items: flex-start;
@@ -837,6 +1028,17 @@ a:hover {
 .rec-table {
   min-width: 760px;
 }
+.rec-table th,
+.rec-table td {
+  padding-inline: 0.6rem;
+}
+.rec-table td.bd-name {
+  min-width: 9rem;
+  white-space: normal;
+}
+.rec-table abbr {
+  text-decoration: none;
+}
 .rec-org {
   font-style: italic;
   font-weight: 500;
@@ -852,7 +1054,7 @@ a:hover {
   padding: 0.05rem 0.4rem;
   font-size: 0.7rem;
   font-weight: 600;
-  color: var(--muted);
+  color: var(--ink-2);
   background: var(--track);
   border-radius: 999px;
 }
@@ -891,6 +1093,176 @@ a:hover {
 .dl:disabled {
   opacity: 0.6;
   cursor: default;
+}
+
+/* Filters beside the list on a wide screen, folded above it on a phone. */
+.records {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 1.5rem;
+}
+.records__results {
+  flex: 999 1 640px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+.rec-filters {
+  flex: 1 1 220px;
+  max-width: 280px;
+  padding: 1rem 1.1rem 1.15rem;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.rec-filters__title {
+  font-size: 0.95rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.rec-filters__body {
+  display: flex;
+  flex-direction: column;
+  gap: 1.1rem;
+  margin-top: 0.85rem;
+}
+.rec-filters__group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-inline-size: 0;
+}
+.rec-filters__group legend {
+  padding: 0;
+  margin-bottom: 0.35rem;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+.rec-filters__note {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--ink-2);
+}
+.rec-filters__clear {
+  align-self: flex-start;
+  font-size: 0.88rem;
+}
+.rec-check {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+.rec-check input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--link);
+}
+.rec-check > span:first-of-type {
+  flex: 1;
+}
+.rec-check__count {
+  font-size: 0.82rem;
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+@media (max-width: 640px) {
+  .rec-filters {
+    flex-basis: 100%;
+    max-width: none;
+  }
+}
+.records__bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 0.75rem 1.25rem;
+}
+.records__count {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 700;
+}
+.records__note {
+  max-width: var(--measure);
+  margin: 0.15rem 0 0;
+  font-size: 0.82rem;
+  color: var(--ink-2);
+}
+.records__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.75rem;
+}
+.records__foot-note {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--ink-2);
+}
+.dl.dl--primary {
+  padding: 0.5rem 0.9rem;
+  font-size: 0.85rem;
+  color: #fff;
+  background: var(--cta);
+  border-color: var(--cta);
+}
+.dl.dl--primary:hover {
+  color: #fff;
+  background: var(--cta);
+  border-color: var(--cta);
+  filter: brightness(1.1);
+}
+.rec__pages {
+  display: flex;
+  gap: 0.5rem;
+}
+.rec-sub {
+  display: block;
+  font-size: 0.78rem;
+  color: var(--ink-2);
+}
+a.rec-sub {
+  color: var(--link);
+}
+.rec-acc + .rec-dl {
+  margin-left: 0.5rem;
+}
+.rec-badges {
+  display: flex;
+  gap: 0.3rem;
+  margin-top: 0.3rem;
+}
+.rec-badge {
+  padding: 0.05rem 0.4rem;
+  font-size: 0.7rem;
+  font-weight: 700;
+  border-radius: 4px;
+}
+.rec-badge--ref {
+  color: var(--badge-ref-ink);
+  background: var(--badge-ref);
+}
+.rec-badge--ebp {
+  color: var(--badge-ebp-ink);
+  background: var(--badge-ebp);
+}
+.rec-badge--warn {
+  color: var(--badge-warn-ink);
+  background: var(--badge-warn);
+}
+.rec-size-flag {
+  display: block;
+  font-size: 0.78rem;
+  color: var(--badge-warn-ink);
 }
 
 /* ---- Breakdown (Q2) -------------------------------------------------- */
@@ -1086,7 +1458,14 @@ a:hover {
 .bd-name {
   font-weight: 500;
 }
-.bd-num {
+.bd-rank {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--muted);
+}
+.bd-num,
+.bd-table .bd-num {
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
@@ -1345,399 +1724,375 @@ a:hover {
   cursor: pointer;
 }
 
-/* ---- Tree: nav + cross-links ----------------------------------------- */
-.app__nav-group {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 0.5rem 1.35rem;
-  /* Keep the nav one line on wide screens: let the search shrink first, not the
-     nav (which would wrap to two lines). On mobile it becomes its own full row. */
-  flex-shrink: 0;
-}
-.app__nav {
-  font-size: 0.9rem;
-  font-weight: 600;
-  color: var(--ink-2);
-  white-space: nowrap;
-}
-.app__nav:hover {
-  text-decoration: none;
-  color: var(--link);
-}
-.app__nav--active {
-  color: var(--link);
-}
-/* ---- Clade cross-navigation (CTA buttons in the sticky rail) --------- */
-.viewsw {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-.viewsw__label {
-  font-size: 0.78rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--muted);
-}
-.viewsw__label em {
-  font-style: normal;
-  text-transform: none;
-  letter-spacing: 0;
-  color: var(--ink-2);
-}
-.viewsw__btn {
-  display: flex;
-  align-items: center;
-  gap: 0.55rem;
-  padding: 0.6rem 0.9rem;
-  font-size: 0.95rem;
-  font-weight: 600;
-  color: #fff;
-  background: var(--cta);
-  border-radius: 999px;
-  box-shadow: var(--shadow);
-}
-.viewsw__btn:hover {
-  text-decoration: none;
-  filter: brightness(1.06);
-}
-/* Each view keeps a distinct identity hue: Tree of Life green (matches the
-   landing CTA + app-wide green), Data map purple (its quality-lens hue); Dashboard
-   uses the accent blue. */
-.viewsw__btn--tree {
-  background: var(--cta-tree);
-}
-.viewsw__btn--map {
-  background: var(--cta-map);
-}
-.viewsw__compare {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  margin-top: 0.15rem;
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: var(--link);
-}
-.viewsw__compare:hover {
-  text-decoration: none;
-  filter: brightness(1.05);
-}
-
-/* Horizontal variant for the full-bleed Tree / Data map headers (no rail):
-   a compact inline row instead of a full-width stack. */
-.viewsw--row {
-  flex-direction: row;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.5rem 0.65rem;
-  margin-bottom: 1rem;
-}
-.viewsw--row .viewsw__label {
-  margin-right: 0.15rem;
-}
-.viewsw--row .viewsw__btn {
-  padding: 0.45rem 0.85rem;
-  font-size: 0.88rem;
-}
-.viewsw--row .viewsw__compare {
-  margin-top: 0;
-  margin-left: 0.1rem;
-}
-
-/* ---- Tree page ------------------------------------------------------- */
-.tree-page__head {
-  margin-bottom: 1rem;
-}
-/* Title on the left, search on the right; the description drops to its own row
-   below and spans the full (full-bleed) width, since the tree page trades a
-   narrow reading measure for room to explore. */
-.tree-page__topline {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 1rem;
-  flex-wrap: wrap;
-}
-.tree-page__title {
-  margin: 0;
-  font-size: clamp(1.5rem, 3.5vw, 2rem);
-  letter-spacing: -0.02em;
-}
-.tree-page__title em {
-  font-style: italic;
-  color: var(--ink-2);
-}
-.tree-page__sub {
-  margin: 0.5rem 0 0;
-  max-width: none; /* full width on the full-bleed tree page */
-  color: var(--muted);
-  font-size: 0.9rem;
-  text-wrap: pretty;
-}
-/* Search-to-locate box in the tree header: find a group and pan/highlight it. */
-.tree-search {
-  flex: none;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 0.4rem;
-  width: min(360px, 48vw);
-}
-.tree-search__status {
-  font-size: 0.82rem;
-  color: var(--muted);
-  text-align: right;
-  max-width: 44ch;
-}
-.tree-search__status--warn {
-  color: var(--ink-2);
-}
-.tree-search__jump {
-  font: inherit;
-  font-size: 0.82rem;
-  font-weight: 600;
-  color: var(--link);
-  background: none;
-  border: none;
-  padding: 0;
-  cursor: pointer;
-}
-.tree-search__jump:hover {
-  text-decoration: underline;
-}
-
-/* ---- Radial tree ----------------------------------------------------- */
-.tree {
+/* ---- Tree of Life ---------------------------------------------------- */
+/* The canvas fills the window below the pinned top bar; the options float in
+   its top-right corner, and sit above it on a narrow screen. --ctree-cover is
+   the width they cover: the tree gets that much more room to scroll, and the
+   script keeps what it brings into view clear of it. */
+.ctree {
+  --ctree-cover: 21rem;
   position: relative;
-  overflow: hidden;
-  background: var(--card);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  box-shadow: var(--shadow);
-  /* Near-fullscreen on the full-bleed tree page; RadialTree measures this box
-     and matches its viewBox to it, so the radial layout uses the whole canvas. */
-  height: min(80vh, 920px);
-  min-height: 460px;
+  background: var(--card);
+  overflow: hidden;
 }
-.tree__svg {
-  display: block;
-  width: 100%;
-  height: 100%;
-  cursor: grab;
-  touch-action: none;
-  user-select: none;
-  background: radial-gradient(circle at 50% 50%, var(--tree-center) 0%, var(--surface) 78%);
+.ctree--bare {
+  --ctree-cover: 0px;
 }
-.tree__svg:active {
+.ctree__scroller {
+  position: absolute;
+  inset: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scroll-padding-right: var(--ctree-cover);
+}
+.ctree__scroller--drag {
   cursor: grabbing;
+  user-select: none;
 }
-.tree__links path {
-  stroke: var(--grid);
-  stroke-width: 1.8;
+.ctree__sizer {
+  position: relative;
+  box-sizing: content-box;
+  padding-right: var(--ctree-cover);
 }
-.tree__dot {
-  stroke: var(--dot-stroke);
-  stroke-width: 1;
-  transition: stroke-width 0.1s ease;
+.ctree__plane {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: 0 0;
 }
-.tree__dot--expandable {
-  cursor: pointer;
-}
-.tree__dot--expandable:hover {
-  stroke: var(--ink);
-  stroke-width: 2;
-}
-.tree__dot--expanded {
-  stroke: var(--ink);
-}
-.tree__dot--loading {
-  opacity: 0.5;
-}
-.tree__label {
-  font-size: 14px;
-  fill: var(--ink-2);
-  cursor: pointer;
-  paint-order: stroke; /* draw the halo behind the glyphs */
-  stroke: var(--card);
-  stroke-width: 3.5px; /* halo so labels stay legible over links */
-  stroke-linejoin: round;
-}
-.tree__label:hover {
-  fill: var(--link);
-}
-.tree__label--root {
-  font-size: 18px;
-  font-weight: 700;
-  fill: var(--ink);
-  text-anchor: middle;
-}
-.tree__more {
-  cursor: pointer;
-}
-.tree__more-dot {
-  fill: var(--track);
-  stroke: var(--muted);
-  stroke-width: 1;
-  stroke-dasharray: 2 2;
-}
-.tree__more:hover .tree__more-dot {
-  stroke: var(--link);
-}
-.tree__more-label {
-  font-size: 11px;
-  font-weight: 600;
-  fill: var(--ink-2);
+.ctree__links {
+  position: absolute;
+  inset: 0;
   pointer-events: none;
 }
-
-/* ---- Tree legend ----------------------------------------------------- */
-.tree-legend {
-  position: absolute;
-  left: 12px;
-  bottom: 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 0.5rem 0.65rem;
-  font-size: 0.72rem;
-  color: var(--ink-2);
-  background: var(--overlay-bg);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  backdrop-filter: blur(4px);
+.ctree__links path {
+  fill: none;
+  stroke: var(--grid);
+  stroke-width: 1.5;
 }
-.tree-legend__title {
-  font-weight: 600;
+.ctree__list,
+.ctree__list ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.ctree__card {
+  position: absolute;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0 0.7rem 0 0.3rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--card);
+  box-shadow: var(--shadow);
+}
+.ctree__card--opens {
+  cursor: pointer;
+}
+.ctree__card--opens:hover {
+  border-color: var(--link);
+}
+.ctree__card--root {
+  border: 2px solid var(--ink);
+}
+.ctree__card--found {
+  outline: 3px solid var(--link);
+  outline-offset: 2px;
+}
+.ctree__toggle {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink-2);
+  cursor: pointer;
+}
+.ctree__toggle:hover {
+  background: var(--track);
   color: var(--ink);
 }
-.tree-legend__ramp {
-  display: flex;
-  align-items: center;
-  gap: 3px;
+.ctree__toggle svg {
+  transition: transform 0.15s ease;
 }
-.tree-legend__step {
+.ctree__toggle--open svg {
+  transform: rotate(90deg);
+}
+.ctree__toggle[aria-disabled="true"] {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+.ctree__toggle--leaf,
+.ctree__toggle--leaf:hover {
+  background: none;
+  cursor: default;
+}
+.ctree__swatch {
+  flex: none;
   width: 16px;
-  height: 10px;
-  border-radius: 2px;
-  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.08);
+  height: 16px;
+  border-radius: 4px;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.14);
 }
-.tree-legend__bar {
-  width: 92px;
-  height: 10px;
-  border-radius: 3px;
-  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.08);
-}
-.tree-legend__cap {
-  color: var(--muted);
-}
-.tree-legend__item {
+.ctree__text {
+  flex: 1;
+  min-width: 0;
   display: flex;
-  align-items: center;
-  gap: 5px;
+  flex-direction: column;
+  gap: 1px;
 }
-.tree-legend__hint {
-  color: var(--muted);
-}
-
-/* ---- Tree outline (accessible fallback) ------------------------------ */
-.tree-details {
-  margin-top: 1rem;
-  padding: 0.5rem 0.9rem;
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-}
-.tree-details > summary {
-  padding: 0.25rem 0;
-  cursor: pointer;
-  font-weight: 600;
-  font-size: 0.9rem;
-  color: var(--ink-2);
-}
-.tree-outline,
-.tree-outline ul {
-  list-style: none;
-  margin: 0;
-  padding-left: 1.1rem;
-}
-.tree-outline {
-  padding-left: 0;
-  padding-top: 0.4rem;
-}
-.tree-outline__row {
+.ctree__line {
   display: flex;
   align-items: baseline;
   gap: 0.5rem;
-  padding: 2px 0;
+  min-width: 0;
 }
-.tree-outline__toggle {
-  flex: none;
-  width: 1.4rem;
-  border: none;
-  background: none;
-  cursor: pointer;
-  color: var(--ink-2);
-  font-size: 0.8rem;
-}
-.tree-outline__leaf {
-  flex: none;
-  width: 1.4rem;
-  text-align: center;
-  color: var(--border);
-}
-.tree-outline__name {
+.ctree__name {
+  min-width: 0;
+  overflow: hidden;
   font-weight: 600;
+  color: var(--ink);
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
-/* Expandable taxa are buttons (click expands here + in the radial view). */
-button.tree-outline__name {
-  font: inherit;
-  font-weight: 600;
-  padding: 0;
-  border: none;
-  background: none;
+.ctree__name:hover {
   color: var(--link);
-  cursor: pointer;
-  text-align: left;
 }
-button.tree-outline__name:hover {
-  text-decoration: underline;
-}
-.tree-outline__rank {
+.ctree__rank {
+  flex: none;
+  margin-left: auto;
   font-size: 0.7rem;
-  text-transform: uppercase;
   letter-spacing: 0.03em;
+  text-transform: uppercase;
   color: var(--muted);
 }
-.tree-outline__meta {
-  font-size: 0.78rem;
-  color: var(--muted);
+.ctree__note {
+  overflow: hidden;
+  font-size: 0.8rem;
+  color: var(--ink-2);
+  white-space: nowrap;
+  text-overflow: ellipsis;
   font-variant-numeric: tabular-nums;
 }
-.tree-outline__more {
-  padding: 2px 0;
-  border: none;
-  background: none;
-  cursor: pointer;
-  color: var(--link);
-  font-size: 0.82rem;
+.ctree__note--error {
+  color: var(--danger);
 }
-
-/* ---- Tree: controls, zoom, selection, details panel ------------------ */
-.tree-controls {
+.ctree__note--error .link-btn {
+  font-size: inherit;
+}
+.ctree__more {
+  position: absolute;
+  box-sizing: border-box;
   display: flex;
   align-items: center;
-  gap: 0.6rem;
-  flex-wrap: wrap;
-  margin-bottom: 0.6rem;
+  gap: 1.25rem;
+  padding: 0 0.9rem;
+  border: 1px dashed var(--grid);
+  border-radius: 10px;
+  background: var(--surface);
+  font-size: 0.88rem;
 }
-.tree-controls__label {
-  font-size: 0.82rem;
-  font-weight: 600;
+.ctree__more .link-btn:disabled {
+  color: var(--muted);
+  text-decoration: none;
+  cursor: default;
+}
+.ctree__more-note {
   color: var(--muted);
 }
+.ctree__spinner {
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--grid);
+  border-top-color: var(--link);
+  border-radius: 50%;
+  animation: ctree-spin 0.8s linear infinite;
+}
+@keyframes ctree-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ctree__spinner {
+    animation-duration: 2.4s;
+  }
+  .ctree__toggle svg {
+    transition: none;
+  }
+}
+.ctree__loading {
+  margin: 1.5rem;
+}
+.ctree__zoom {
+  position: absolute;
+  bottom: 0.75rem;
+  left: 0.75rem;
+  z-index: 2;
+  display: flex;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--overlay-bg);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+.ctree__zoom button {
+  min-width: 2.25rem;
+  height: 2.25rem;
+  padding: 0 0.6rem;
+  border: 0;
+  border-left: 1px solid var(--border);
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+.ctree__zoom button:first-child {
+  border-left: 0;
+}
+.ctree__zoom button:hover:not(:disabled) {
+  background: var(--track);
+}
+.ctree__zoom button:disabled {
+  color: var(--muted);
+  cursor: default;
+}
+.ctree__zoom-level {
+  font-variant-numeric: tabular-nums;
+}
+.ctree__panel {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  z-index: 2;
+  box-sizing: border-box;
+  width: min(20rem, calc(100% - 1.5rem));
+  max-height: calc(100% - 1.5rem);
+  overflow: auto;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--overlay-bg);
+  backdrop-filter: blur(6px);
+  box-shadow: var(--shadow);
+}
+.ctree--bare .ctree__panel {
+  width: auto;
+}
+.ctree__panel-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+.ctree__title {
+  margin: 0;
+  font-size: 1.1rem;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+}
+.ctree__title em {
+  font-style: italic;
+  color: var(--ink-2);
+}
+.ctree__hide {
+  flex: none;
+  font-size: 0.85rem;
+}
+.ctree__options {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-top: 0.6rem;
+}
+.ctree__hint {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--ink-2);
+  text-wrap: pretty;
+}
+.ctree__control {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+.ctree__ranks-note {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--muted);
+  text-wrap: pretty;
+}
+.ctree__panel .ranges {
+  margin: 0;
+}
+.ctree__panel .picker {
+  width: 100%;
+}
+.ctree__status {
+  margin: 0.6rem 0 0;
+  font-size: 0.85rem;
+  color: var(--ink-2);
+}
+.ctree__status:empty {
+  margin: 0;
+}
+/* Wider than a phone, the app is exactly the window's height and the tree takes
+   what the bars and the footer leave, so only the tree scrolls. */
+@media (min-width: 641px) {
+  .app--fill {
+    height: 100dvh;
+    min-height: 30rem;
+  }
+  .app--fill .app__main {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+  .app--fill .ctree {
+    flex: 1;
+    min-height: 0;
+  }
+  .app--fill .app__foot {
+    padding-block: 0 0.75rem;
+  }
+}
+@media (max-width: 640px) {
+  .ctree {
+    --ctree-cover: 0px;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    border: 0;
+    background: none;
+    overflow: visible;
+  }
+  .ctree__panel {
+    position: static;
+    width: auto;
+    max-height: none;
+    backdrop-filter: none;
+  }
+  .ctree__scroller {
+    position: relative;
+    height: calc(100dvh - 4.25rem);
+    min-height: 20rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--card);
+  }
+}
+
+/* ---- Segmented buttons ------------------------------------------------ */
 .tree-controls__seg {
   display: inline-flex;
   border: 1px solid var(--border);
@@ -1792,207 +2147,6 @@ button.tree-outline__name:hover {
   }
 }
 
-.tree-notice {
-  position: absolute;
-  left: 50%;
-  bottom: 12px;
-  transform: translateX(-50%);
-  max-width: min(90%, 36rem);
-  margin: 0;
-  padding: 0.5rem 0.85rem;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--surface);
-  color: var(--ink);
-  font-size: 0.85rem;
-  text-align: center;
-}
-.tree-panel__error,
-.tree-outline__error {
-  color: var(--danger);
-  font-size: 0.8rem;
-}
-.tree-panel__error,
-.tree-panel__hint {
-  margin: 0.5rem 0 0;
-}
-.tree-panel__hint {
-  color: var(--muted);
-  font-size: 0.8rem;
-}
-.tree-outline__error {
-  margin-left: 0.5rem;
-}
-.tree-zoom {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.tree-zoom button {
-  width: 32px;
-  height: 32px;
-  font-size: 1.1rem;
-  line-height: 1;
-  color: var(--ink-2);
-  background: var(--overlay-bg);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  cursor: pointer;
-  backdrop-filter: blur(4px);
-}
-.tree-zoom button:hover {
-  border-color: var(--link);
-  color: var(--link);
-}
-
-.tree__dot--selected {
-  stroke: var(--link);
-  stroke-width: 2.5;
-}
-
-/* Attention pulse over a node located via search. Two quick rings that expand
-   and fade; the located node stays `--selected` afterwards. Invisible at rest
-   (stroke-opacity 0), so once the animation ends the ring leaves no mark. */
-.tree__focus-ring {
-  fill: none;
-  stroke: var(--link);
-  stroke-width: 3;
-  stroke-opacity: 0;
-  pointer-events: none;
-  transform-box: fill-box;
-  transform-origin: center;
-  animation: focus-pulse 1.3s ease-out 2 forwards;
-}
-@keyframes focus-pulse {
-  0% {
-    transform: scale(0.65);
-    stroke-opacity: 0.9;
-  }
-  70%,
-  100% {
-    transform: scale(1.6);
-    stroke-opacity: 0;
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .tree__focus-ring {
-    animation: none;
-  }
-}
-
-/* Details panel for the clicked node. */
-.tree-panel {
-  position: absolute;
-  top: 12px;
-  left: 12px;
-  width: min(280px, 70vw);
-  padding: 0.85rem 0.95rem 0.95rem;
-  background: var(--overlay-bg);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  box-shadow: 0 6px 20px rgba(16, 24, 40, 0.16);
-  backdrop-filter: blur(6px);
-}
-.tree-panel__close {
-  position: absolute;
-  top: 6px;
-  right: 8px;
-  border: none;
-  background: none;
-  font-size: 1.2rem;
-  line-height: 1;
-  color: var(--muted);
-  cursor: pointer;
-}
-.tree-panel__close:hover {
-  color: var(--ink);
-}
-.tree-panel__name {
-  margin: 0 1rem 0.35rem 0;
-  font-size: 1.05rem;
-  letter-spacing: -0.01em;
-}
-.tree-panel__sub {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  margin: 0 0 0.65rem;
-  font-size: 0.82rem;
-  color: var(--ink-2);
-}
-.tree-panel__metrics {
-  display: flex;
-  flex-direction: column;
-  gap: 0.4rem;
-  margin-bottom: 0.8rem;
-}
-.tree-panel__metric {
-  display: grid;
-  grid-template-columns: 1fr 70px 34px;
-  align-items: center;
-  gap: 0.5rem;
-  font-size: 0.78rem;
-  color: var(--ink-2);
-}
-.tree-panel__mlabel {
-  display: flex;
-  align-items: center;
-  gap: 0.35rem;
-}
-.tree-panel__dot {
-  width: 9px;
-  height: 9px;
-  border-radius: 2px;
-  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.12);
-}
-.tree-panel__bar {
-  height: 7px;
-  background: var(--track);
-  border-radius: 999px;
-  overflow: hidden;
-}
-.tree-panel__fill {
-  display: block;
-  height: 100%;
-  border-radius: 999px;
-}
-.tree-panel__mval {
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-  color: var(--ink);
-}
-.tree-panel__actions {
-  display: flex;
-  gap: 0.5rem;
-}
-.tree-panel__btn {
-  flex: 1;
-  padding: 0.45rem 0.6rem;
-  font-size: 0.82rem;
-  font-weight: 600;
-  color: var(--ink-2);
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  cursor: pointer;
-}
-.tree-panel__btn:hover {
-  border-color: var(--link);
-  color: var(--link);
-}
-.tree-panel__btn--primary {
-  color: #fff;
-  background: var(--cta);
-  border-color: var(--cta);
-}
-.tree-panel__btn--primary:hover {
-  color: #fff;
-  filter: brightness(1.06);
-}
-
 /* ---- Header actions: search + GitHub + menu -------------------------- */
 .app__actions {
   display: flex;
@@ -2013,6 +2167,175 @@ button.tree-outline__name:hover {
 .app__icon-btn:hover {
   color: var(--ink);
   border-color: var(--muted);
+}
+
+/* The current group's lineage. In the top bar on wide screens; below it, in its
+   compact form, on narrower ones. */
+.trail {
+  min-width: 0;
+  font-size: 0.9rem;
+}
+.trail__list {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.trail__item {
+  display: inline-flex;
+  align-items: center;
+}
+.trail__item + .trail__item::before {
+  content: "›" / "";
+  margin: 0 0.45rem;
+  color: var(--muted);
+}
+.trail__current {
+  font-weight: 700;
+  color: var(--ink);
+}
+.trail__more {
+  position: relative;
+}
+.trail__more-btn {
+  min-width: 34px;
+  height: 26px;
+  padding: 0 0.5rem;
+  font: inherit;
+  line-height: 1;
+  color: var(--ink);
+  background: var(--track);
+  border: 1px solid var(--grid);
+  border-radius: 6px;
+  cursor: pointer;
+}
+.trail__more-btn:hover {
+  border-color: var(--muted);
+}
+.trail__pop {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 30;
+  min-width: 220px;
+  max-height: 60vh;
+  overflow-y: auto;
+  margin: 0;
+  padding: 0.25rem;
+  list-style: none;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+}
+.trail__pop[hidden] {
+  display: none;
+}
+.trail__pop-link {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1rem;
+  padding: 0.45rem 0.6rem;
+  border-radius: 7px;
+  color: var(--ink);
+}
+.trail__pop-link:hover {
+  text-decoration: none;
+  background: var(--track);
+}
+.trail__pop-rank {
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+.trail--compact {
+  display: none;
+}
+
+/* The current group's views, as tabs under the top bar. */
+.app__context {
+  border-bottom: 1px solid var(--border);
+}
+.app__context-inner {
+  max-width: var(--maxw);
+  margin: 0 auto;
+  padding: 0 clamp(1rem, 4vw, 2rem);
+}
+.tabs {
+  display: flex;
+  gap: 0.25rem;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.tabs__tab {
+  padding: 0.65rem 0.85rem;
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: var(--ink-2);
+  white-space: nowrap;
+  border-bottom: 3px solid transparent;
+}
+.tabs__tab:hover {
+  color: var(--ink);
+  text-decoration: none;
+}
+.tabs__tab--on {
+  font-weight: 700;
+  color: var(--ink);
+  border-bottom-color: var(--link);
+}
+
+@media (max-width: 900px) {
+  .app__bar .trail {
+    display: none;
+  }
+  .trail--compact {
+    display: block;
+    padding-top: 0.6rem;
+  }
+}
+
+/* Phones: the pinned bar is one line (brand, search button, menu); the search
+   opens on a row of its own, and Compare and the theme move into the menu. */
+@media (max-width: 640px) {
+  .app__bar-inner {
+    flex-wrap: wrap;
+    gap: 0.25rem 0.5rem;
+    padding: 0.35rem 0.5rem 0.35rem 1rem;
+  }
+  .app__bar .picker {
+    display: none;
+    order: 5;
+    flex: 1 0 100%;
+    margin: 0 0 0.4rem;
+  }
+  .app__bar--search .picker {
+    display: block;
+  }
+  .app__actions {
+    margin-left: auto;
+    gap: 0.25rem;
+  }
+  .app__wide {
+    display: none;
+  }
+  .app__actions .app__search-toggle {
+    display: inline-flex;
+  }
+  .app__actions .app__icon-btn,
+  .app__actions .menu__button {
+    width: 44px;
+    height: 44px;
+    border-color: transparent;
+    background: transparent;
+  }
+  .tabs__tab {
+    padding: 0.6rem 0.65rem;
+    font-size: 0.9rem;
+  }
 }
 
 /* Header "more" dropdown */
@@ -2058,6 +2381,23 @@ button.tree-outline__name:hover {
 .menu__item:hover {
   text-decoration: none;
   background: var(--track);
+}
+button.menu__item {
+  width: 100%;
+  font: inherit;
+  font-size: 0.9rem;
+  text-align: left;
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+.menu__phone {
+  display: none;
+}
+@media (max-width: 640px) {
+  .menu__phone {
+    display: block;
+  }
 }
 
 /* ---- Species-level external data links ------------------------------- */
@@ -2715,27 +3055,12 @@ button.tree-outline__name:hover {
 }
 
 /* ---- Breakdown "data map" -------------------------------------------- */
-.bmap-block {
-  margin-top: 2.75rem;
-}
-/* On the dashboard the map is one section among others; on its own page it is
-   the whole thing, so it needs no top gap. */
-.bmap-page .bmap-block--page {
-  margin-top: 0;
-}
 .bmap-block__head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 1rem;
-  flex-wrap: wrap;
+  margin-bottom: 0.25rem;
 }
 .bmap-block__title {
   margin: 0;
   letter-spacing: -0.02em;
-}
-.bmap-block--embed .bmap-block__title {
-  font-size: 1.3rem;
 }
 .bmap-block--page .bmap-block__title {
   font-size: clamp(1.6rem, 4vw, 2.2rem);
@@ -2747,123 +3072,15 @@ button.tree-outline__name:hover {
   font-size: 0.9rem;
   text-wrap: pretty;
 }
-.bmap-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem;
-  /* Shrinkable (not flex:none) so that when the head wraps this onto its own
-     row on narrow screens, it can shrink and let its buttons wrap instead of
-     forcing a one-line max-content width that overflows the viewport. */
-  flex: 0 1 auto;
-  min-width: 0;
-}
-
-.bmap-crumbs {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 0.15rem;
-  margin: 1rem 0 0.5rem;
-  font-size: 0.95rem;
-}
-.bmap-crumb {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 0.15rem;
-}
-.bmap-crumb__sep {
-  margin: 0 0.35rem;
-  color: var(--muted);
-}
-.bmap-crumb__link {
-  font: inherit;
-  padding: 0;
-  border: none;
-  background: none;
-  color: var(--link);
-  cursor: pointer;
-  font-weight: 600;
-}
-.bmap-crumb__link:hover {
-  text-decoration: underline;
-}
-.bmap-crumb__here {
-  font-weight: 700;
-  color: var(--ink);
-}
-.bmap-crumb__rank {
-  margin-left: 0.35rem;
-  font-size: 0.7rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-  color: var(--muted);
-}
-
-/* The "level" bar: always states which rank you're viewing and which rank the
-   tiles are, as two rank badges, so the position isn't buried in the trail and
-   the tile rank isn't hover-only. */
-.bmap-level {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.35rem 0.7rem;
-  margin: 0.9rem 0;
-  padding: 0.5rem 0.75rem;
-  background: var(--track);
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  font-size: 0.92rem;
-  width: fit-content;
-  max-width: 100%;
-}
-.bmap-level__part {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 0.4rem;
-}
-/* The rank in the level bar reads as inline uppercase text (not a pill), so it
-   sits on the same baseline as the surrounding words — a bordered badge floats
-   optically high against mixed-case text next to it. The "now" rank (what the
-   tiles are) takes the accent colour to stand out. */
-.bmap-level__rank {
-  font-size: 0.75rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--ink-2);
-}
-.bmap-level__rank--now {
-  color: var(--link);
-}
-.bmap-level__cap {
-  color: var(--muted);
-}
-.bmap-level__name {
-  color: var(--ink);
-}
-.bmap-level__count {
-  color: var(--ink-2);
-  font-variant-numeric: tabular-nums;
-}
-
 .bmap-controls {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.75rem 1.5rem;
-  margin-bottom: 0.85rem;
+  align-items: flex-end;
+  gap: 0.75rem 1.25rem;
+  margin: 1rem 0 0.85rem;
 }
-.bmap-ctl {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 0.5rem 0.6rem;
-}
-/* Fixed-width label column so the shorter "Size by" toggle group lines up under
-   the wider "Colour by" one when the two control rows stack. */
-.bmap-ctl > .tree-controls__label {
-  flex: none;
-  width: 4.75rem;
+.bmap-controls__end {
+  margin-left: auto;
 }
 
 .bmap {
@@ -2878,9 +3095,6 @@ button.tree-outline__name:hover {
 .bmap--page {
   height: min(66vh, 720px);
   min-height: 420px;
-}
-.bmap--embed {
-  height: clamp(360px, 46vh, 520px);
 }
 .bmap .notice {
   padding: 2rem;
@@ -2927,134 +3141,18 @@ button.tree-outline__name:hover {
   white-space: nowrap;
   max-width: 100%;
 }
-.bmap-tile__stat {
+.bmap-tile__stat,
+.bmap-tile__share {
   font-size: 0.72rem;
-  opacity: 0.85;
   font-variant-numeric: tabular-nums;
 }
-.bmap-tile__dive {
-  position: absolute;
-  top: 3px;
-  right: 5px;
-  font-size: 0.72rem;
-  opacity: 0;
-  transition: opacity 0.08s ease;
+.bmap-tile__share {
+  font-weight: 600;
 }
-.bmap-tile:hover .bmap-tile__dive {
-  opacity: 0.7;
-}
-
-.bmap-legend {
-  position: absolute;
-  left: 12px;
-  bottom: 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 0.5rem 0.65rem;
-  font-size: 0.72rem;
-  color: var(--ink-2);
-  background: var(--overlay-bg);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  backdrop-filter: blur(4px);
-}
-.bmap-legend__title {
-  font-weight: 700;
-  color: var(--ink);
-}
-.bmap-legend__ramp {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-}
-.bmap-legend__bar {
-  width: 110px;
-  height: 10px;
-  border-radius: 3px;
-  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.08);
-}
-.bmap-legend__cap {
-  color: var(--muted);
-}
-.bmap-legend__hint {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  color: var(--muted);
-}
-.bmap-legend__chip {
-  width: 11px;
-  height: 11px;
-  border-radius: 3px;
-  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.1);
-}
-
 .bmap-foot {
   margin: 0.75rem 0 0;
   font-size: 0.82rem;
   color: var(--muted);
-}
-
-/* List view: the keyboard / screen-reader path to the same subgroups. */
-.bmap-listwrap {
-  margin-top: 0.5rem;
-}
-.bmap-listwrap > summary {
-  cursor: pointer;
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: var(--ink-2);
-  padding: 0.25rem 0;
-}
-.bmap-list {
-  list-style: none;
-  margin: 0.5rem 0 0;
-  padding: 0;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  overflow: hidden;
-}
-.bmap-list__row {
-  display: flex;
-  align-items: baseline;
-  gap: 0.5rem 0.75rem;
-  flex-wrap: wrap;
-  padding: 0.5rem 0.85rem;
-  border-bottom: 1px solid var(--border);
-}
-.bmap-list__row:last-child {
-  border-bottom: none;
-}
-.bmap-list__name {
-  font: inherit;
-  font-weight: 600;
-  padding: 0;
-  border: none;
-  background: none;
-  color: var(--link);
-  cursor: pointer;
-  text-align: left;
-}
-.bmap-list__name:hover {
-  text-decoration: underline;
-}
-.bmap-list__rank {
-  font-size: 0.7rem;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-  color: var(--muted);
-}
-.bmap-list__meta {
-  font-size: 0.82rem;
-  color: var(--ink-2);
-  font-variant-numeric: tabular-nums;
-}
-.bmap-list__open {
-  margin-left: auto;
-  font-size: 0.8rem;
-  font-weight: 600;
-  white-space: nowrap;
 }
 
 .bmap-tip {
@@ -3069,14 +3167,48 @@ button.tree-outline__name:hover {
   letter-spacing: 0.05em;
   color: var(--muted);
 }
-.bmap-legend__loading {
-  font-weight: 400;
-  font-style: italic;
-  color: var(--muted);
+
+/* The key to the colour ranges (RangeLegend). */
+.ranges {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 1rem;
+  margin: 0 0 0.85rem;
+  font-size: 0.82rem;
+  color: var(--ink-2);
 }
-.bmap-legend__error {
-  color: var(--danger);
-  font-weight: 400;
+.ranges__title {
+  font-weight: 600;
+  color: var(--ink);
+}
+.ranges__list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 0.9rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.ranges__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.ranges__swatch {
+  display: inline-block;
+  width: 22px;
+  height: 14px;
+  margin-right: 0.45rem;
+  border-radius: 3px;
+  vertical-align: -2px;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.14);
+}
+.ranges__item .ranges__swatch {
+  margin-right: 0;
+}
+.ranges__hint {
+  color: var(--muted);
 }
 
 /* ---- FAQ page -------------------------------------------------------- */
@@ -3583,4 +3715,116 @@ button.tree-outline__name:hover {
   .gaps-teaser__bar {
     display: none;
   }
+}
+
+/* ---- Accessibility helpers -------------------------------------------- */
+.skip-link {
+  position: absolute;
+  left: 1rem;
+  top: -3rem;
+  z-index: 100;
+  padding: 0.5rem 0.9rem;
+  border-radius: 8px;
+  background: var(--card);
+  color: var(--link);
+  font-weight: 600;
+  box-shadow: var(--shadow);
+}
+.skip-link:focus {
+  top: 0.75rem;
+}
+.app__main:focus {
+  outline: none;
+}
+/* Links inside running text are underlined, so colour is not the only cue. */
+.faq__a a,
+.legal a,
+.nodata__text a,
+.records-page__sub a,
+.errpage__text a {
+  text-decoration: underline;
+}
+
+/* ---- No data yet ------------------------------------------------------- */
+.card__empty {
+  margin: 0.35rem 0 0;
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--ink-2);
+}
+.nodata {
+  display: grid;
+  gap: 0.5rem;
+  padding: 1.25rem 1.4rem;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--link);
+  border-radius: var(--radius);
+}
+.nodata__title {
+  margin: 0;
+  font-size: 1.2rem;
+}
+.nodata__text {
+  margin: 0;
+  max-width: var(--measure);
+  color: var(--ink-2);
+}
+.nodata__link {
+  font-weight: 600;
+  justify-self: start;
+}
+.nodata__list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr));
+  gap: 0.4rem 1.5rem;
+  margin: 0.75rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+.nodata__meta,
+.nodata__more {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+.nodata__more {
+  margin: 0.75rem 0 0;
+}
+
+/* ---- Error pages -------------------------------------------------------- */
+.errpage {
+  display: grid;
+  gap: 0.9rem;
+  max-width: 40rem;
+  margin: 3rem auto;
+}
+.errpage__title {
+  margin: 0;
+  font-size: 1.8rem;
+}
+.errpage__text {
+  margin: 0;
+  color: var(--ink-2);
+}
+.errpage__text p {
+  margin: 0;
+}
+.errpage__search .picker {
+  width: 100%;
+  margin: 0;
+}
+.errpage__home {
+  justify-self: start;
+  font-weight: 600;
+}
+.errpage__retry {
+  justify-self: start;
+  padding: 0.5rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--card);
+  color: var(--ink);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
 }

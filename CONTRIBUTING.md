@@ -30,7 +30,7 @@ uv run --package eukahub-pipeline python -m eukahub_pipeline.build --refresh-sou
 # 4. API on http://localhost:8000 (OpenAPI UI at /docs)
 uv run --package eukahub-api uvicorn eukahub_api.main:app --reload
 
-# 5. Web app on http://localhost:5173 (proxies /api to the API)
+# 5. Web app on http://localhost:5173 (proxies /api/v1 to the API)
 cd web && npm install && npm run dev
 ```
 
@@ -45,7 +45,12 @@ uv run pytest             # Python tests (need the dataset loaded, step 3)
 cd web && npm run build   # TypeScript typecheck + production build
 ```
 
-CI runs the same checks plus a secret scan and dependency audits
+To open every page in headless Chrome, as CI does, serve the build (the API running,
+then `VITE_API_URL=http://localhost:8000 node_modules/.bin/vite preview` in `web/`) and
+run `npm run smoke -- http://localhost:4173` in `web/` (`CHROME_PATH` if Chrome is not
+at `/usr/bin/google-chrome`).
+
+CI runs the same checks plus the page check, a secret scan and dependency audits
 (`.github/workflows/ci.yml`). In CI the API tests run against a small, consistent
 slice of the real dataset (`api/tests/seed.sql`) instead of the full one, so tests
 must hold on both: assert relationships (a clade's species count equals the count
@@ -61,6 +66,16 @@ DATABASE_URL=postgresql://eukahub:eukahub@localhost:5432/eukahub_ci uv run pytes
 
 `scripts/generate_ci_seed.py` regenerates the slice from a full database; only
 needed when the schema or the taxa the tests rely on change.
+
+The memory tests run every API query on a synthetic dataset about twice the real
+taxonomy and 30 to 50 times its records, and fail if the API process passes 256 MB.
+They are left out of a plain `uv run pytest`; CI runs them. The first run builds the
+dataset into a database named `eukahub_huge` (about 1.5 minutes, 2 GB) and later runs
+reuse it:
+
+```bash
+uv run pytest -m ram -rP api/tests/test_memory.py
+```
 
 ## Changing the API
 

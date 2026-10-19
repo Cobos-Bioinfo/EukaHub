@@ -11,13 +11,13 @@ minus its outside clades' rows.
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 
 from eukahub_core.metrics import COMPOSITION_COLUMNS, COVERAGE_KEYS, TOTAL_KEYS, CladeMetadata
 from eukahub_core.taxonomy import INFORMAL_SPECIES_RANK, SPINE_TAXIDS
 
-from eukahub_api.schemas import CustomGroup
+from eukahub_api.schemas import CustomGroup, TaxonRef
 
 log = logging.getLogger("eukahub.api.clade_sets")
 
@@ -176,3 +176,7 @@ def set_metadata(marks: Marks, taxa: Mapping[int, SetTaxon]) -> CladeMetadata:
         for column in _ADDITIVE_COLUMNS:
             totals[column] += sign * getattr(taxa[taxid].features, column)
     return CladeMetadata(taxid=0, **totals)
+
+
+def taxon_refs(taxids: Iterable[int], taxa: Mapping[int, SetTaxon]) -> list[TaxonRef]:
+    return [TaxonRef(taxid=t, name=taxa[t].name, rank=taxa[t].rank) for t in taxids]

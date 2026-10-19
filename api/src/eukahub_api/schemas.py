@@ -1,10 +1,10 @@
 """API response models — derived from the metric config so they can't drift.
 
 The static card chrome (titles, help text, colors, external URLs) lives in
-``eukahub_core.metrics.METRICS`` and is served once via ``/metrics-config``.
-These per-clade payloads carry only the numbers, keyed by metric key
-("ass", "ann", "rna", "lng"), so the frontend loops the metric config to
-render one card per resource.
+``eukahub_core.metrics.METRICS`` and is served once in ``/config``.
+These per-clade payloads carry only the numbers, keyed by resource name
+("assemblies", "annotations", "rna_seq", "long_read_rna_seq"), so the frontend
+loops the metric config to render one card per resource.
 """
 
 from __future__ import annotations
@@ -13,9 +13,10 @@ from datetime import date, datetime
 from typing import Annotated
 
 from eukahub_core.metrics import (
-    METRIC_KEYS,
+    METRICS,
     CladeMetadata,
     Metric,
+    QualityAgg,
     QualityStat,
 )
 from pydantic import (
@@ -30,25 +31,25 @@ from pydantic import (
 
 
 class MetricConfig(BaseModel):
-    """Static per-resource card chrome — served once by ``/metrics-config`` and
-    joined client-side to the numbers in each per-clade payload (by ``key``)."""
+    """Static per-resource card chrome — served once in ``/config`` and joined
+    client-side to the numbers in each per-clade payload (by ``key``)."""
 
-    key: str
+    key: str = Field(description="The resource's name: its key in `resources`, its value for "
+        "`filter`, and the start of its `sort_by` values (`assemblies_covered`).")
     card_title: str
     card_title_help: str | None
     species_help: str
     total_label: str
     total_help: str
+    empty_text: str  # shown instead of a zero count
     color: str
     external_source_name: str
     external_url_template: str  # contains "{taxid}"; the client substitutes
-    coverage_column: str
-    total_column: str
     # Labels for the breakdown (Q2) filter/sort controls — the metric config's
     # single source of truth so the frontend's control copy can't drift.
     filter_label: str  # resource-presence checkbox label
-    sort_count_label: str  # label for sorting by c_<key> (species covered)
-    sort_total_label: str  # label for sorting by s_<key> (summed total)
+    sort_count_label: str  # label for sorting by resources.<key>.covered
+    sort_total_label: str  # label for sorting by resources.<key>.total
     # Divergent bar-chart layout (Q2 chart): which half of the mirrored bar the
     # metric occupies, whether it's the darker overlaid (subset) metric in its
     # pair, and the short label used in the chart legend.
@@ -59,17 +60,16 @@ class MetricConfig(BaseModel):
     @classmethod
     def from_metric(cls, m: Metric, external_url_template: str) -> MetricConfig:
         return cls(
-            key=m.key,
+            key=m.name,
             card_title=m.card_title,
             card_title_help=m.card_title_help,
             species_help=m.species_help,
             total_label=m.total_label,
             total_help=m.total_help,
+            empty_text=m.empty_text,
             color=m.color,
             external_source_name=m.external_source_name,
             external_url_template=external_url_template,
-            coverage_column=m.coverage_key,
-            total_column=m.total_key,
             filter_label=m.filter_label,
             sort_count_label=m.sort_count_label,
             sort_total_label=m.sort_total_label,
@@ -80,45 +80,54 @@ class MetricConfig(BaseModel):
 
 
 class ResourceSummary(BaseModel):
-    """Per-resource rollup for one clade."""
+    """One resource's counts for a taxon, summed over the taxon and everything
+    below it when the dataset is built."""
 
-    covered: int  # c_<key>: species in the subtree with >=1 of this resource
-    total: int  # s_<key>: resource count summed across the subtree
-    percent: float  # covered / n_rows * 100 (0.0 when n_rows == 0)
+    covered: int = Field(description="Species on or below the taxon with at least one record.")
+    missing: int = Field(description="Species on or below the taxon without any: species - covered.")
+    total: int = Field(description="Records on or below the taxon, at any rank.")
+    percent: float = Field(description="covered / species * 100, or 0 when species is 0.")
 
     @classmethod
     def by_metric(cls, meta: CladeMetadata) -> dict[str, ResourceSummary]:
-        """One summary per metric key, in METRICS order."""
-        return {
-            key: cls(
-                covered=getattr(meta, f"c_{key}"),
-                total=getattr(meta, f"s_{key}"),
-                percent=round(meta.percent(key), 2),
-            )
-            for key in METRIC_KEYS
-        }
+        """One summary per resource, keyed by its name, in METRICS order."""
+        return {m.name: cls.of(meta, m) for m in METRICS}
+
+    @classmethod
+    def of(cls, meta: CladeMetadata, m: Metric) -> ResourceSummary:
+        covered = getattr(meta, m.coverage_key)
+        return cls(
+            covered=covered,
+            missing=meta.n_rows - covered,
+            total=getattr(meta, m.total_key),
+            percent=round(meta.percent(m.key), 2),
+        )
+
+
+# The clade_features column behind each field of AssemblyComposition.
+COMPOSITION_FIELDS: dict[str, str] = {
+    "complete": "n_ass_complete",
+    "chromosome": "n_ass_chromosome",
+    "scaffold": "n_ass_scaffold",
+    "contig": "n_ass_contig",
+    "reference": "n_reference",
+}
 
 
 class AssemblyComposition(BaseModel):
-    """Additive assembly-composition counts for a clade (from ``clade_features``):
-    genome assemblies split by level, plus the reference/representative count.
-    Summed up the lineage like the s_* totals."""
+    """The genome assemblies on or below a taxon by assembly level, and how many
+    are NCBI reference or representative genomes; summed when the dataset is
+    built, like the resource totals."""
 
     complete: int
     chromosome: int
     scaffold: int
     contig: int
-    reference: int  # assemblies with a refseq_category set
+    reference: int = Field(description="Assemblies NCBI marks as reference or representative.")
 
     @classmethod
     def from_metadata(cls, meta: CladeMetadata) -> AssemblyComposition:
-        return cls(
-            complete=meta.n_ass_complete,
-            chromosome=meta.n_ass_chromosome,
-            scaffold=meta.n_ass_scaffold,
-            contig=meta.n_ass_contig,
-            reference=meta.n_reference,
-        )
+        return cls(**{field: getattr(meta, column) for field, column in COMPOSITION_FIELDS.items()})
 
 
 class CladeSummary(BaseModel):
@@ -127,17 +136,23 @@ class CladeSummary(BaseModel):
     taxid: int
     name: str
     rank: str
-    n_rows: int  # species in the subtree
-    # True for below-species taxa (subspecies/strains/varietas/...): a single
-    # unit (n_rows == 1) whose data also counts for its species. The frontend
-    # renders these as leaf detail (resource counts + source links), not a clade
-    # coverage summary.
-    is_infraspecific: bool = False
-    resources: dict[str, ResourceSummary]  # keyed by metric key, in METRICS order
-    composition: AssemblyComposition  # assembly-level split + reference count
-    # Species and finer taxa only: records attached to this taxon itself, keyed by
-    # metric key; the rest of each total sits on the finer taxa below it.
-    direct: dict[str, int] | None = None
+    species: int = Field(
+        description="Species on or below the taxon (1 for a species or a finer taxon)."
+    )
+    is_infraspecific: bool = Field(
+        False,
+        description="Below a species (subspecies, strain, ...): one unit whose data also "
+        "counts for its species.",
+    )
+    resources: dict[str, ResourceSummary] = Field(
+        description="Per resource, keyed by the resource names in /config."
+    )
+    composition: AssemblyComposition
+    direct: dict[str, int] | None = Field(
+        None,
+        description="Species and finer taxa only: per resource, the records on the taxon "
+        "itself; the rest of each total is on the taxa below it.",
+    )
 
     @classmethod
     def from_metadata(
@@ -147,44 +162,11 @@ class CladeSummary(BaseModel):
             taxid=meta.taxid,
             name=name,
             rank=rank,
-            n_rows=meta.n_rows,
+            species=meta.n_rows,
             is_infraspecific=is_infraspecific,
             resources=ResourceSummary.by_metric(meta),
             composition=AssemblyComposition.from_metadata(meta),
         )
-
-
-class OverviewTotals(BaseModel):
-    """Global "at a glance" totals across the eukaryotic tree (Eukaryota's
-    rollup) — the live headline numbers on the landing page."""
-
-    species: int  # eukaryotic species surveyed
-    assemblies: int  # genome assemblies
-    annotations: int  # functional annotations
-    rna_seq: int  # RNA-Seq runs (any platform)
-    long_read: int  # long-read RNA-Seq runs
-    reference_genomes: int  # assemblies flagged reference/representative
-
-
-class FeaturedClade(BaseModel):
-    """One featured group on the landing page: its species count and how much of
-    it is assembled/annotated. The frontend supplies the friendly display label
-    (by taxid); ``name`` is the scientific name as a fallback."""
-
-    taxid: int
-    name: str
-    species: int  # species in the subtree
-    assemblies: int  # total genome assemblies in the subtree
-    assembly_percent: float  # % of species with >=1 assembly
-    annotation_percent: float  # % of species with >=1 annotation
-
-
-class Overview(BaseModel):
-    """Landing-page payload: global totals + a handful of featured groups, in one
-    cacheable request (served by ``/overview``)."""
-
-    totals: OverviewTotals
-    featured: list[FeaturedClade]
 
 
 MAX_CLADES_PER_GROUP = 20
@@ -236,16 +218,6 @@ class CustomGroup(BaseModel):
         return self
 
 
-class SiteConfig(BaseModel):
-    """Deployment settings the web app reads once per page load (served by
-    ``/site-config``)."""
-
-    feedback_url: str
-    source_code_url: str
-    privacy_contact_email: str
-    groups: list[CladeGroup]
-
-
 class DatasetMeta(BaseModel):
     """Dataset provenance for the "Data updated" stamp — when the served dataset
     was built and how many records it holds. ``built_at`` is ``null`` before the
@@ -266,142 +238,32 @@ class TaxonRef(BaseModel):
     rank: str
 
 
-class TaxonLineage(BaseModel):
-    """A taxon plus its root→node lineage (for the header breadcrumb)."""
-
-    taxid: int
-    name: str
-    rank: str
-    lineage: list[TaxonRef]  # root first, this taxon last (inclusive)
-
-
-class TaxonNode(CladeSummary):
-    """One node in the interactive tree: a taxon's summary metrics plus a
-    ``has_children`` hint, so the UI can show an expand affordance for a node
-    without a second round-trip to discover it's a leaf."""
-
-    has_children: bool
-
-    @classmethod
-    def from_child(
-        cls,
-        name: str,
-        rank: str,
-        meta: CladeMetadata,
-        has_children: bool,
-        is_infraspecific: bool = False,
-    ) -> TaxonNode:
-        s = CladeSummary.from_metadata(name, rank, meta, is_infraspecific)
-        return cls(
-            taxid=s.taxid,
-            name=s.name,
-            rank=s.rank,
-            n_rows=s.n_rows,
-            is_infraspecific=s.is_infraspecific,
-            resources=s.resources,
-            composition=s.composition,
-            has_children=has_children,
-        )
-
-
-class TaxonChildren(BaseModel):
-    """A taxon's direct children (adjacency) for lazy-expanding the tree."""
-
-    parent: TaxonRef
-    total: int  # total children before limit/offset (for "load more")
-    returned: int  # rows actually returned (== len(items) <= limit)
-    items: list[TaxonNode]  # sorted by species count desc
-
-
-class TaxonAbout(BaseModel):
-    """Wikipedia summary for a taxon's "About" card (decorative, non-load-bearing).
-
-    Sourced live from Wikipedia's REST summary endpoint and cached server-side.
-    The endpoint returns ``null`` instead of this model when the taxon has no
-    usable article, in which case the frontend simply omits the card.
-    """
-
-    title: str  # article title (may differ from the NCBI name via redirect)
-    description: str  # short one-line descriptor ("" when Wikipedia has none)
-    extract: str  # first-paragraph plain-text summary
-    thumbnail: str | None  # image URL (upload.wikimedia.org), if any
-    url: str  # canonical desktop article URL
-
-
-class Breakdown(BaseModel):
-    """The breakdown (Q2) payload: a root's descendants at a target rank."""
-
-    root: TaxonRef
-    rank: str  # the target rank the root was broken down by
-    total_matches: int  # taxa matching the filter, before `limit`
-    returned: int  # rows actually included (== len(items) <= limit)
-    items: list[CladeSummary]  # sorted, limited
-
-
-class QualityStatValue(BaseModel):
-    """A quality stat over a taxon's subtree records (median or max per
-    QUALITY_STATS), computed at build time. ``value`` is ``null`` when the subtree has no records
-    carrying that field."""
-
-    key: str
-    value: float | None
-
-
-class GapItem(BaseModel):
-    """One under-sequenced group in the "Where are the gaps?" leaderboard: its
-    species count, its coverage for the chosen resource, and the ``gap`` = species
-    with no such data (``n_rows - covered``). The frontend ranks/visualizes by
-    ``gap`` (biggest hole first)."""
-
-    taxid: int
-    name: str
-    rank: str
-    n_rows: int  # species in the clade
-    covered: int  # species with >=1 of the chosen resource (c_<resource>)
-    percent: float  # covered / n_rows * 100 — the coverage %
-    gap: int  # n_rows - covered — species missing the resource (the "gap")
-    # Quality of the data that *does* exist in this clade (best BUSCO / median
-    # coding genes / median genome size / N50), keyed like QUALITY_STATS. A value
-    # is null when no record in the clade carries that field. Empty when the
-    # quality dimension isn't computed.
-    stats: list[QualityStatValue] = []
-
-
-class Gaps(BaseModel):
-    """The "Where are the gaps?" payload: the biggest under-sequenced groups at a
-    rank under a root, ranked by missing species for one resource (served by
-    ``/gaps``)."""
-
-    root: TaxonRef
-    rank: str  # the rank the root was broken down by
-    resource: str  # the metric key the gap is measured for ("ass"/"ann"/...)
-    total_matches: int  # clades with any gap, before `limit`
-    returned: int  # rows actually included (== len(items) <= limit)
-    items: list[GapItem]  # sorted by gap desc, limited
-
-
 # --- Quality dimension (per-record drill-down + distribution stats) ----------
 
 
 class QualityStatConfig(BaseModel):
-    """Static chrome for one quality stat — served once by ``/quality-config``
-    and joined client-side to the per-taxon ``QualityStatValue`` by ``key``.
+    """Static chrome for one quality stat — served once in ``/config`` and
+    joined client-side to a taxon's ``stats`` by ``key``.
     The analogue of ``MetricConfig`` for the annotation/assembly-quality
     dimension (BUSCO %, gene count, genome size, N50)."""
 
     key: str
     source: str  # "assembly" | "annotation" — which per-record table it comes from
+    aggregation: QualityAgg = Field(
+        description="How the records' values are summarized: their median or their maximum."
+    )
     card_title: str
     help: str
     unit: str | None  # "%", "bp", "genes", ...
     fmt: str  # "percent" | "integer" | "basepairs" — how the frontend renders it
-    headline: bool  # True for the surfaced annotation-quality figures
+    headline: bool  # True for the figures shown beside each group on the Gaps page
 
     @classmethod
     def from_stat(cls, q: QualityStat) -> QualityStatConfig:
         return cls(
             key=q.key,
             source=q.source,
+            aggregation=q.agg,
             card_title=q.card_title,
             help=q.help,
             unit=q.unit,
@@ -416,7 +278,7 @@ class AssemblyRecord(BaseModel):
 
     assembly_accession: str
     taxid: int
-    organism: str  # scientific name at the record's taxid
+    organism_name: str  # scientific name at the record's taxid
     assembly_level: str | None
     contig_n50: int | None
     scaffold_n50: int | None
@@ -428,6 +290,28 @@ class AssemblyRecord(BaseModel):
     source_database: str | None
     bioprojects: list[str]
     download_url: str | None
+    species_taxid: int = Field(
+        description="The species the assembly belongs to, as in NCBI's assembly summaries: "
+        "`taxid` itself when the organism is a species, else the species above it (a "
+        "subspecies, strain or isolate). An organism without a formal species (a hybrid, an "
+        "unnamed `sp.`) is a species of its own, so this is never null."
+    )
+    ebp_standard: bool = Field(
+        description="Meets the contiguity of the Earth BioGenome Project's reference standard "
+        "(thresholds in /config)."
+    )
+    annotations: int = Field(
+        description="Annotations of this assembly, of any version of its GenBank or RefSeq "
+        "accession."
+    )
+    best_busco: float | None = Field(
+        description="The best BUSCO completeness (%) among those annotations; null when "
+        "none is scored."
+    )
+    species_assemblies: int | None = Field(
+        description="With `best_per_species`: how many assemblies of its species the list "
+        "would hold without it. Otherwise null."
+    )
 
 
 class AnnotationRecord(BaseModel):
@@ -437,7 +321,7 @@ class AnnotationRecord(BaseModel):
     annotation_id: str
     assembly_accession: str | None
     taxid: int
-    organism: str
+    organism_name: str
     source_database: str | None
     provider: str | None
     release_date: date | None
@@ -450,74 +334,79 @@ class AnnotationRecord(BaseModel):
     busco_lineage: str | None
 
 
-class BucketQuality(BaseModel):
-    """Per-bucket quality stats for a rank breakdown — one entry per breakdown
-    tile that carries records, keyed by its ``taxid``. Lets the "data map" colour
-    tiles by BUSCO / median genes / median genome size / N50 (the frontend merges
-    these into the breakdown by taxid). ``stats`` are keyed like ``QUALITY_STATS``;
-    a value is ``null`` when that bucket has no record carrying the field."""
+class Page(BaseModel):
+    """One page of a list. Pass ``next`` or ``previous`` back as ``cursor`` (with
+    the same sort) for the page after or before this one."""
 
-    taxid: int
-    stats: list[QualityStatValue]
-
-
-class AssemblyList(BaseModel):
-    """Assemblies under a taxon: assembly-quality stats + a paginated list."""
-
-    root: TaxonRef
-    total: int  # records in the subtree, before limit/offset
-    returned: int
-    stats: list[QualityStatValue]  # median genome size / contig N50
-    items: list[AssemblyRecord]
+    total: int  # matching rows across all pages
+    limit: int
+    next: str | None  # null on the last page
+    previous: str | None  # null on the first page
 
 
-class AnnotationList(BaseModel):
-    """Annotations under a taxon: annotation-quality stats + a paginated list."""
-
-    root: TaxonRef
-    total: int
-    returned: int
-    stats: list[QualityStatValue]  # best BUSCO, median protein-coding gene count
-    items: list[AnnotationRecord]
+class AssemblyPage(Page):
+    results: list[AssemblyRecord]
 
 
-class CompareGroup(BaseModel):
-    """One group in the compare view: its species count, per-resource coverage,
-    and quality stats — enough to line several groups up side by side."""
+class AnnotationPage(Page):
+    results: list[AnnotationRecord]
+
+
+class Taxon(CladeSummary):
+    """One taxon: the object ``/taxons/{taxid}`` returns and ``/taxons`` lists. Its
+    ancestors are in ``/taxons/{taxid}/ancestors`` and its quality stats in
+    ``/taxons/{taxid}/stats``."""
+
+    context: str | None = Field(
+        description="Nearest class, phylum or kingdom above the taxon, to tell homonyms apart."
+    )
+    has_children: bool
+
+
+class TaxonPage(Page):
+    results: list[Taxon]
+
+
+class TaxonStats(BaseModel):
+    """The quality stats of one taxon: the object ``/taxons/{taxid}/stats`` returns
+    and ``/taxons/stats`` lists."""
 
     taxid: int
     name: str
-    rank: str
-    n_rows: int  # species in the subtree
-    resources: dict[str, ResourceSummary]  # keyed by metric key, in METRICS order
-    quality: list[QualityStatValue]  # BUSCO / genes / genome size / N50, QUALITY_STATS order
+    stats: dict[str, float | None] = Field(
+        description="Per quality stat, keyed by the keys in /config: the median or the best "
+        "(see `aggregation` there) of one field over the records on or below the taxon, "
+        "computed at build time. Null when no such record has the field."
+    )
 
 
-class Compare(BaseModel):
-    """The compare payload: several groups' summaries lined up (served by
-    ``/compare``). Unknown taxids are dropped, so ``groups`` may be shorter than
-    the requested set."""
-
-    groups: list[CompareGroup]
+class TaxonStatsPage(Page):
+    results: list[TaxonStats]
 
 
 class Aggregate(BaseModel):
     """Species count, per-resource coverage and quality stats for a set of clades
-    (served by ``/aggregate``): a taxon is in the set when the nearest listed
+    (served by ``/taxons/aggregates``): a taxon is in the set when the nearest listed
     clade above it (or the taxon itself) is in ``include``."""
 
     include: list[TaxonRef]
     exclude: list[TaxonRef]
-    n_rows: int  # species in the set
-    resources: dict[str, ResourceSummary]  # keyed by metric key, in METRICS order
+    species: int  # species in the set
+    resources: dict[str, ResourceSummary]  # keyed by resource name, in METRICS order
     composition: AssemblyComposition
-    quality: list[QualityStatValue]  # BUSCO / genes / genome size / N50, QUALITY_STATS order
+    stats: dict[str, float | None] = Field(
+        description="As for a taxon, over the records in the set."
+    )
+
+
+class AggregatePage(Page):
+    results: list[Aggregate]
 
 
 class CustomGroupItem(BaseModel):
     """One custom group from the groups file. ``include`` and ``exclude`` are the
     clades it is made of, worked out from the parent's other groups for a
-    ``rest`` group, so they can be passed to ``/aggregate`` as they are. A rest
+    ``rest`` group, so they can be passed to ``/taxons/aggregates`` as they are. A rest
     group with nothing left lists no clades."""
 
     id: str
@@ -528,8 +417,45 @@ class CustomGroupItem(BaseModel):
     exclude: list[TaxonRef]
 
 
-class CustomGroups(BaseModel):
-    """The deployment's custom groups, in groups-file order (served by
-    ``/custom-groups``). A group that doesn't fit the current taxonomy is left out."""
+class AssemblyChecks(BaseModel):
+    """The thresholds behind an assembly's ``ebp_standard``."""
 
-    groups: list[CustomGroupItem]
+    ebp_min_contig_n50: int
+    ebp_min_scaffold_n50: int
+
+
+class AppConfig(BaseModel):
+    """What a client reads once before showing any data (served by ``/config``):
+    the dataset it is looking at, how to present each measure, and the
+    deployment's links and groups."""
+
+    dataset: DatasetMeta
+    metrics: list[MetricConfig]  # in METRICS order
+    quality_stats: list[QualityStatConfig]  # in QUALITY_STATS order
+    feedback_url: str
+    source_code_url: str
+    privacy_contact_email: str
+    # Wikipedia REST summary URL with {title}; clients fetch the "About" text themselves.
+    wikipedia_summary_url: str
+    assembly_checks: AssemblyChecks
+    groups: list[CladeGroup]  # curated groups; ``featured`` ones are the landing-page cards
+    # In groups-file order; a group that doesn't fit the current taxonomy is left out.
+    custom_groups: list[CustomGroupItem]
+
+
+class ParameterError(BaseModel):
+    """One parameter a request got wrong."""
+
+    parameter: str
+    detail: str
+
+
+class Problem(BaseModel):
+    """Every error response: problem details (RFC 9457), sent as
+    ``application/problem+json``."""
+
+    type: str = "about:blank"  # no error types of our own: the status says it all
+    title: str  # the HTTP status phrase, e.g. "Not Found"
+    status: int
+    detail: str  # what went wrong, and what to change, in a sentence
+    errors: list[ParameterError] | None = None  # on a 422, each parameter at fault
