@@ -8,7 +8,7 @@ import { EUKARYOTA_TAXID } from "../lib/taxonomy";
 
 /** A result row: a search hit, or the taxon a typed TaxID points to (which has
  *  no data flag, since the lineage lookup does not carry one). */
-type Hit = TaxonRef & Partial<Pick<SearchHit, "context" | "has_data">>;
+type Hit = TaxonRef & Partial<Pick<SearchHit, "context" | "has_data" | "common_name">>;
 
 const CONTEXT_RANKS = ["class", "phylum", "kingdom"];
 
@@ -61,6 +61,7 @@ export default function RootPicker({
               {
                 taxid: t.taxid,
                 name: t.name,
+                common_name: t.common_name,
                 rank: t.rank,
                 context: above.at(-1)?.name,
               },
@@ -156,7 +157,7 @@ export default function RootPicker({
       <div className="picker__menu" hidden={!expanded && !noMatch}>
         {noMatch && (
           <p className="picker__note">
-            No matches for “{searched}”. Try a scientific name, part of one, or a TaxID.
+            No matches for “{searched}”. Try a scientific or common name, part of one, or a TaxID.
           </p>
         )}
         {expanded && similar && (
@@ -181,7 +182,10 @@ export default function RootPicker({
                     title={r.has_data ? "Has data" : "No data yet"}
                   />
                 )}
-                <span className="picker__name">{r.name}</span>
+                <span className="picker__name">
+                  {r.name}
+                  {r.common_name && <span className="picker__common"> ({r.common_name})</span>}
+                </span>
                 {r.has_data === false && <span className="sr-only">, no data yet</span>}
               </span>
               <span className="picker__rank">

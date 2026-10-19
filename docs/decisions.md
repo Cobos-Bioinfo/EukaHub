@@ -58,11 +58,12 @@ Streamlit app that answered the same questions but was slow to build and to serv
   using them. The API answers a merged taxid, in a path or as `within` or `parent`,
   for the current taxon, whose own taxid the response carries, rather than
   redirecting: one more primary-key lookup on a miss, and nothing for the proxy to
-  handle. The build also moves source records filed under a merged taxid to the
-  current taxon instead of dropping them.
+  handle. The web app then moves the address to the current taxid. The build also
+  moves source records filed under a merged taxid to the current taxon instead of
+  dropping them.
 - **Common names are NCBI's GenBank common names.** NCBI gives at most one per
-  taxon ("human", "fruit fly"), which search matches like a scientific name. NCBI's
-  other common names (several per taxon) and synonyms
+  taxon ("human", "fruit fly"), which search matches like a scientific name and the
+  Summary shows under it. NCBI's other common names (several per taxon) and synonyms
   are left out: the GenBank one is the name NCBI displays, and one name per taxon
   keeps search ranking simple.
 - **A species is a taxon with a formal species name.** More than half of NCBI's

@@ -209,6 +209,11 @@ a:hover {
   min-width: 160px;
   margin-left: auto;
 }
+/* Wider than the box, growing leftwards, so a name and its common name fit. */
+.app__bar .picker__menu {
+  left: auto;
+  min-width: min(420px, calc(100vw - 2rem));
+}
 .app__compare {
   padding: 0.4rem 0.3rem;
   font-size: 0.92rem;
@@ -374,6 +379,10 @@ a:hover {
 }
 .picker__name {
   font-weight: 500;
+}
+.picker__common {
+  font-weight: 400;
+  color: var(--ink-2);
 }
 .picker__rank {
   flex: none;
@@ -585,6 +594,11 @@ a:hover {
   margin: 0;
   font-size: clamp(1.6rem, 4vw, 2.2rem);
   letter-spacing: -0.02em;
+}
+.dashboard__common {
+  margin: 0.15rem 0 0;
+  font-size: 1.05rem;
+  color: var(--ink-2);
 }
 .rank-badge {
   font-size: 0.72rem;
